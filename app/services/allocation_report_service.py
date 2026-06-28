@@ -145,7 +145,14 @@ def get_allocation_report() -> list[dict]:
     timesheets = adapter.get_timesheets()
     projects = adapter.get_projects()
 
-    active = allocations[allocations["is_allocation_active"] == 1].copy()
+    # An allocation row can still carry is_allocation_active=1 even after the employee
+    # has genuinely departed (their resignation date has passed) -- the allocation was
+    # never formally closed out. Without this filter, departed people keep showing up
+    # as "available" in the free pool and elsewhere downstream of this report.
+    currently_active_ids = set(employees[employees["account_status"] == 1]["employee_id"])
+    active = allocations[
+        (allocations["is_allocation_active"] == 1) & (allocations["employee_id"].isin(currently_active_ids))
+    ].copy()
 
     active = active.merge(
         projects[["project_code", "type_of_project", "tech_coe"]].rename(columns={"project_code": "project_id"}),

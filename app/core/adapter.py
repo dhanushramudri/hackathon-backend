@@ -53,7 +53,19 @@ class LocalAdapter(DataSourceAdapter):
         return _cached_query(table).copy()
 
     def get_employees(self) -> pd.DataFrame:
-        return self._query("employees")
+        df = self._query("employees")
+        # account_status=1 alone isn't enough: it's a static HR-record flag (all 377
+        # account_status=0 rows have no date_of_resignation at all, so it's tracking
+        # something else entirely, not departure) -- but it's also never revised as
+        # time passes, so someone whose date_of_resignation has already gone by can
+        # still carry account_status=1, silently leaking departed people into every
+        # "active employees" candidate pool (recommendations, redeployment, semantic
+        # match, free pool, search). Combine both signals instead of trusting either
+        # one alone.
+        today = pd.Timestamp.now().normalize()
+        not_yet_departed = df["date_of_resignation"].isna() | (df["date_of_resignation"] > today)
+        df["account_status"] = ((df["account_status"] == 1) & not_yet_departed).astype(int)
+        return df
 
     def get_projects(self) -> pd.DataFrame:
         return self._query("projects")
