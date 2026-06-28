@@ -39,6 +39,11 @@ def find_employees(query: str, limit: int = 10) -> list[dict]:
         for _, r in matches.iterrows()
     ]
 
+def list_designations() -> list[str]:
+    employees = get_adapter().get_employees()
+    active = employees[employees["account_status"] == 1]
+    return sorted(active["job_name"].dropna().astype(str).str.strip().unique().tolist())
+
 def list_employees() -> list[dict]:
     employees = get_adapter().get_employees()
     today = pd.Timestamp.now().normalize()
