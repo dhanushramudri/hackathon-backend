@@ -1,0 +1,18 @@
+# Secrets
+.env
+.env.local
+
+# Python
+__pycache__/
+*.pyc
+*.duckdb
+*.duckdb.wal
+.venv/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Scratch/debug output
+*.log

@@ -1,0 +1,9 @@
+fastapi==0.136.1
+uvicorn[standard]==0.47.0
+duckdb==1.5.2
+pydantic==2.13.4
+pandas
+openpyxl
+anthropic
+google-genai
+python-dotenv
