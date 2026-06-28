@@ -1,8 +1,17 @@
 from fastapi import APIRouter, HTTPException
 
-from app.services.employee_profile_service import EmployeeNotFound, get_employee_headcount_summary, get_employee_profile
+from app.services.employee_profile_service import (
+    EmployeeNotFound,
+    get_employee_headcount_summary,
+    get_employee_profile,
+    list_employees,
+)
 
 router = APIRouter(prefix="/employees", tags=["employees"])
+
+@router.get("")
+def list_all() -> list[dict]:
+    return list_employees()
 
 @router.get("/headcount-summary")
 def headcount_summary() -> dict:

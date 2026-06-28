@@ -1,6 +1,7 @@
 import pandas as pd
 
 from app.core.adapter import get_adapter
+from app.engines.employee_coe import get_employee_primary_coe_map
 from app.services.allocation_report_service import OVER_ALLOCATED_THRESHOLD, UNDER_UTILIZED_THRESHOLD, get_allocation_report
 from app.services.timesheet_insights_service import (
     OVERTIME_DAILY_HOURS_THRESHOLD,
@@ -37,6 +38,38 @@ def find_employees(query: str, limit: int = 10) -> list[dict]:
         }
         for _, r in matches.iterrows()
     ]
+
+def list_employees() -> list[dict]:
+    employees = get_adapter().get_employees()
+    today = pd.Timestamp.now().normalize()
+    coe_map = get_employee_primary_coe_map()
+    alloc_pct_by_emp = {r["employee_id"]: r["employee_total_allocation_pct"] for r in get_allocation_report()}
+
+    out = []
+    for _, r in employees.iterrows():
+        resignation = r.get("date_of_resignation")
+        if pd.notna(resignation) and resignation <= today:
+            status = "departed"
+        elif pd.notna(resignation):
+            status = "notice_period"
+        else:
+            status = "active"
+        emp_id = r["employee_id"]
+        out.append(
+            {
+                "employee_id": emp_id,
+                "job_name": r.get("job_name") if pd.notna(r.get("job_name")) else None,
+                "department_name": r.get("department_name") if pd.notna(r.get("department_name")) else None,
+                "location": r.get("location") if pd.notna(r.get("location")) else None,
+                "manager_employee_id": r.get("manager_employee_id") if pd.notna(r.get("manager_employee_id")) else None,
+                "date_of_join": r["date_of_join"].strftime("%Y-%m-%d") if pd.notna(r.get("date_of_join")) else None,
+                "date_of_resignation": r["date_of_resignation"].strftime("%Y-%m-%d") if pd.notna(r.get("date_of_resignation")) else None,
+                "status": status,
+                "coe": coe_map.get(emp_id),
+                "current_allocation_pct": alloc_pct_by_emp.get(emp_id),
+            }
+        )
+    return out
 
 def get_employee_headcount_summary() -> dict:
     employees = get_adapter().get_employees()
