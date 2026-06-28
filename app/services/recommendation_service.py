@@ -105,10 +105,18 @@ def get_recommendations(
 
     ranked = sorted(results, key=lambda r: r["composite_score"], reverse=True)
     candidates_meeting_capacity = [r for r in ranked if r["meets_requested_capacity"]]
-    top = (candidates_meeting_capacity or ranked)[:top_n]
+    pool = candidates_meeting_capacity or ranked
+    top = pool[:top_n]
 
     top_signal = top[0]["staffing_signal"] if top else "hire"
     hire_vs_redeploy = top_signal == "hire"
+    has_skillset = bool(required_phrases)
+    # top_n is a fixed display cap (TOP_N), not a measure of how many people genuinely
+    # match -- without these, "Candidates (15/15)" looks identical whether 15 people
+    # skill-matched at 100% or zero phrases were ever specified and every "candidate" is
+    # really just the most available, unranked-by-skill person (bucket="not_assessed").
+    # Surfacing the real pool size and match count lets the UI say so honestly.
+    real_match_count = sum(1 for r in top if r["bucket"] != "not_assessed")
 
     return {
         "request": {
@@ -120,6 +128,9 @@ def get_recommendations(
         "candidates": top,
         "hire_vs_redeploy_flag": hire_vs_redeploy,
         "top_candidate_signal": top_signal,
+        "has_skillset": has_skillset,
+        "total_employees_considered": int(len(active_employees)),
+        "candidates_with_real_skill_match": real_match_count,
     }
 
 def get_recommendations_for_pipeline_row(row_index: int, pipeline: pd.DataFrame | None = None, **prefetched) -> dict:
