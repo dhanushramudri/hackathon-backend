@@ -174,7 +174,17 @@ def get_new_project_forecast(specs: list[dict]) -> dict:
         _score_candidates(candidates, all_required_skills, skill_index, common_tokens)
         _tag_coe(candidates, employee_coe_map)
 
-        shortfall_at_level = max(0, needed_headcount - len(candidates))
+        # Holding the exact designation only means availability, not skill fit -- without this
+        # gate, asking for a skill nobody has still reports every free person in that title as
+        # "covered" (shortfall 0), because shortfall_at_level used to come from raw headcount.
+        # The adjacent-level fallback below already requires ELIGIBLE_THRESHOLD; same-level
+        # candidates need the identical check for the same reason.
+        if skill_index is not None:
+            qualifying_candidates = [c for c in candidates if c.get("skill_score", 0) >= scoring.ELIGIBLE_THRESHOLD]
+        else:
+            qualifying_candidates = candidates
+
+        shortfall_at_level = max(0, needed_headcount - len(qualifying_candidates))
         adjacent_level_candidates: list[dict] = []
         adjacent_fill_count = 0
         if shortfall_at_level > 0:
@@ -221,6 +231,7 @@ def get_new_project_forecast(specs: list[dict]) -> dict:
                 "needed_fte": round(needed_fte, 2),
                 "needed_headcount": needed_headcount,
                 "available_for_redeploy": len(candidates),
+                "qualifying_for_redeploy": len(qualifying_candidates),
                 "redeploy_candidates": candidates,
                 "adjacent_level_candidates": adjacent_level_candidates,
                 "adjacent_fill_count": adjacent_fill_count,
