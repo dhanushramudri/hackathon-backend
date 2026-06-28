@@ -91,14 +91,26 @@ def get_employee_headcount_summary() -> dict:
 
 def get_overtime_risk_summary() -> dict:
     employees = get_adapter().get_employees()
-    active_ids = set(employees[employees["account_status"] == 1]["employee_id"])
+    active = employees[employees["account_status"] == 1]
+    job_name_by_id = active.set_index("employee_id")["job_name"].to_dict()
     risk = get_employee_overtime_risk()
-    at_risk_ids = [emp_id for emp_id, r in risk.items() if r["is_sustained_overtime"] and emp_id in active_ids]
+    at_risk = [
+        {
+            "employee_id": emp_id,
+            "job_name": job_name_by_id.get(emp_id) if pd.notna(job_name_by_id.get(emp_id)) else None,
+            "overtime_days_recent": r["overtime_days_recent"],
+            "max_daily_hours_recent": r["max_daily_hours_recent"],
+        }
+        for emp_id, r in risk.items()
+        if r["is_sustained_overtime"] and emp_id in job_name_by_id
+    ]
+    at_risk.sort(key=lambda r: -r["overtime_days_recent"])
     return {
-        "employees_at_risk": len(at_risk_ids),
+        "employees_at_risk": len(at_risk),
         "threshold_days": SUSTAINED_OVERTIME_MIN_DAYS,
         "window_days": SUSTAINED_OVERTIME_WINDOW_DAYS,
         "daily_hours_threshold": OVERTIME_DAILY_HOURS_THRESHOLD,
+        "employees": at_risk,
     }
 
 def skills_for(employee_id: str, skills: pd.DataFrame) -> list[dict]:
