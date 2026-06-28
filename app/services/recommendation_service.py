@@ -17,13 +17,25 @@ class RowIndexOutOfRange(Exception):
 def _fmt_date(value) -> str | None:
     return value.strftime("%Y-%m-%d") if pd.notna(value) else None
 
+INTERNAL_PROJECT_TYPE = "Internal Project"
+
 def availability_as_of(allocations: pd.DataFrame, as_of_date: pd.Timestamp) -> pd.Series:
     active_then = allocations[
         (allocations["is_allocation_active"] == 1)
         & (allocations["allocated_start_date"] <= as_of_date)
         & (allocations["allocated_end_date"] >= as_of_date)
     ]
-    busy_pct = active_then.groupby("employee_id")["allocation_by_percentage"].sum()
+    # Internal-project work is discretionary ("contribute when you have time"), not a
+    # hard commitment -- it must never count as "busy" when checking real capacity for
+    # a new client engagement, redeployment, or AI semantic match. Every caller of this
+    # function (get_recommendations, get_redeploy_candidates_as_of, semantic match) goes
+    # through here, so the fix is centralized.
+    projects = get_adapter().get_projects()[["project_code", "type_of_project"]].rename(
+        columns={"project_code": "project_id"}
+    )
+    active_then = active_then.merge(projects, on="project_id", how="left")
+    client_only = active_then[active_then["type_of_project"] != INTERNAL_PROJECT_TYPE]
+    busy_pct = client_only.groupby("employee_id")["allocation_by_percentage"].sum()
     return busy_pct
 
 def get_recommendations(

@@ -9,11 +9,17 @@ OVER_ALLOCATED_THRESHOLD = 100
 UNDER_UTILIZED_THRESHOLD = 70
 STANDARD_HOURS_PER_DAY = 8
 UNPLANNED_ABSENCE_WINDOW_DAYS = 14
+INTERNAL_PROJECT_TYPE = "Internal Project"
 
-def _utilization_band(pct: float) -> str:
-    if pct > OVER_ALLOCATED_THRESHOLD:
+def _utilization_band(total_pct: float, client_pct: float) -> str:
+    # Over-allocation is judged on client_pct (Client Project/Managed Services/BAU/Sales),
+    # never on internal-project work -- internal projects are discretionary ("contribute
+    # when you have time"), not a hard commitment, so they shouldn't make someone look
+    # over capacity. Under-utilization still looks at the real total, since spare time
+    # spent on internal work is still spare time from a staffing perspective.
+    if client_pct > OVER_ALLOCATED_THRESHOLD:
         return "over_allocated"
-    if pct < UNDER_UTILIZED_THRESHOLD:
+    if total_pct < UNDER_UTILIZED_THRESHOLD:
         return "under_utilized"
     return "normal"
 
@@ -141,11 +147,31 @@ def get_allocation_report() -> list[dict]:
 
     active = allocations[allocations["is_allocation_active"] == 1].copy()
 
+    active = active.merge(
+        projects[["project_code", "type_of_project", "tech_coe"]].rename(columns={"project_code": "project_id"}),
+        on="project_id", how="left",
+    )
+
     employee_total_pct = (
         active.groupby("employee_id")["allocation_by_percentage"].sum().rename("employee_total_allocation_pct")
     )
+    client_rows = active[active["type_of_project"] != INTERNAL_PROJECT_TYPE]
+    employee_client_pct = (
+        client_rows.groupby("employee_id")["allocation_by_percentage"].sum().rename("employee_client_allocation_pct")
+    )
     active = active.merge(employee_total_pct, on="employee_id", how="left")
-    active["utilization_band"] = active["employee_total_allocation_pct"].apply(_utilization_band)
+    active = active.merge(employee_client_pct, on="employee_id", how="left")
+    active["employee_client_allocation_pct"] = active["employee_client_allocation_pct"].fillna(0.0)
+    active["employee_internal_allocation_pct"] = (
+        active["employee_total_allocation_pct"] - active["employee_client_allocation_pct"]
+    ).round(2)
+    active["over_allocated_due_to_internal"] = (active["employee_total_allocation_pct"] > OVER_ALLOCATED_THRESHOLD) & (
+        active["employee_client_allocation_pct"] <= OVER_ALLOCATED_THRESHOLD
+    )
+    active["utilization_band"] = [
+        _utilization_band(t, c)
+        for t, c in zip(active["employee_total_allocation_pct"], active["employee_client_allocation_pct"])
+    ]
 
     today = pd.Timestamp.now().normalize()
     active = _hours_metrics(active, timesheets, today)
@@ -154,10 +180,6 @@ def get_allocation_report() -> list[dict]:
         employees[["employee_id", "job_name", "department_name", "location"]],
         on="employee_id", how="left",
     )
-    active = active.merge(
-        projects[["project_code", "type_of_project", "tech_coe"]].rename(columns={"project_code": "project_id"}),
-        on="project_id", how="left",
-    )
 
     active["days_to_end"] = (active["allocated_end_date"] - today).dt.days
     active["ending_soon"] = active["days_to_end"].between(0, ENDING_SOON_DAYS)
@@ -165,7 +187,8 @@ def get_allocation_report() -> list[dict]:
     cols = [
         "employee_id", "job_name", "department_name", "location", "project_id", "type_of_project",
         "resourcing_status", "allocation_by_percentage", "allocated_start_date",
-        "allocated_end_date", "employee_total_allocation_pct", "utilization_band",
+        "allocated_end_date", "employee_total_allocation_pct", "employee_client_allocation_pct",
+        "employee_internal_allocation_pct", "over_allocated_due_to_internal", "utilization_band",
         "actual_hours_logged", "expected_hours", "hours_utilization_pct", "hours_data_available",
         "possible_unplanned_absence", "days_to_end", "ending_soon",
     ]

@@ -176,13 +176,19 @@ def get_employee_profile(employee_id: str) -> dict:
 
     current_allocations = [r for r in get_allocation_report() if r["employee_id"] == employee_id]
     employee_total_allocation_pct = current_allocations[0]["employee_total_allocation_pct"] if current_allocations else None
+    employee_client_allocation_pct = current_allocations[0]["employee_client_allocation_pct"] if current_allocations else None
+    employee_internal_allocation_pct = current_allocations[0]["employee_internal_allocation_pct"] if current_allocations else None
     overtime_risk = get_employee_overtime_risk().get(
         employee_id, {"overtime_days_recent": 0, "max_daily_hours_recent": 0.0, "is_sustained_overtime": False}
     )
 
     signals = {
-        "over_allocated": bool(employee_total_allocation_pct is not None and employee_total_allocation_pct > OVER_ALLOCATED_THRESHOLD),
+        # Judged on client-only allocation -- internal-project work is discretionary
+        # ("contribute when you have time"), not a hard commitment, so it never makes
+        # someone look over capacity on its own.
+        "over_allocated": bool(employee_client_allocation_pct is not None and employee_client_allocation_pct > OVER_ALLOCATED_THRESHOLD),
         "over_allocated_threshold": OVER_ALLOCATED_THRESHOLD,
+        "over_allocated_due_to_internal": bool(current_allocations[0]["over_allocated_due_to_internal"]) if current_allocations else False,
         "under_utilized": bool(employee_total_allocation_pct is not None and employee_total_allocation_pct < UNDER_UTILIZED_THRESHOLD),
         "under_utilized_threshold": UNDER_UTILIZED_THRESHOLD,
         "sustained_overtime": bool(overtime_risk["is_sustained_overtime"]),
@@ -200,6 +206,8 @@ def get_employee_profile(employee_id: str) -> dict:
         "date_of_join": employee_row["date_of_join"].strftime("%Y-%m-%d") if pd.notna(employee_row.get("date_of_join")) else None,
         "account_status": bool(employee_row["account_status"]) if pd.notna(employee_row.get("account_status")) else None,
         "employee_total_allocation_pct": employee_total_allocation_pct,
+        "employee_client_allocation_pct": employee_client_allocation_pct,
+        "employee_internal_allocation_pct": employee_internal_allocation_pct,
         "skills": skills_for(employee_id, adapter.get_skills()),
         "competencies": _competencies_for(employee_id, adapter.get_competencies()),
         "allocations": _allocations_for(employee_id, adapter.get_allocations(), adapter.get_projects()),

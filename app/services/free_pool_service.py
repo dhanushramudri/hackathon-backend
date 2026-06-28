@@ -2,7 +2,7 @@ import pandas as pd
 
 from app.core.adapter import get_adapter
 from app.engines.employee_coe import get_employee_primary_coe_map
-from app.services.allocation_report_service import get_allocation_report
+from app.services.allocation_report_service import INTERNAL_PROJECT_TYPE, UNDER_UTILIZED_THRESHOLD, get_allocation_report
 from app.services.rate_card_service import get_hourly_rate
 
 STANDARD_MONTHLY_HOURS = 160
@@ -26,7 +26,9 @@ def get_free_pool() -> list[dict]:
 
     ending_rows_by_emp: dict[str, list[dict]] = {}
     for r in report:
-        if r["ending_soon"]:
+        # An ending internal-project allocation doesn't free up "capacity" in any real
+        # sense -- it was never blocking client work to begin with.
+        if r["ending_soon"] and r["type_of_project"] != INTERNAL_PROJECT_TYPE:
             ending_rows_by_emp.setdefault(r["employee_id"], []).append(r)
 
     pool: dict[str, dict] = {}
@@ -48,11 +50,14 @@ def get_free_pool() -> list[dict]:
         emp_id = r["employee_id"]
         if emp_id in pool:
             continue
-        if r["utilization_band"] == "under_utilized" and emp_id not in pool:
+        # Judged on client-only allocation, not utilization_band's total-based check --
+        # someone fully loaded with internal work but with no/low client allocation is
+        # genuinely available for new client work, even though their total looks busy.
+        if r["employee_client_allocation_pct"] < UNDER_UTILIZED_THRESHOLD:
             pool[emp_id] = {
                 "employee_id": emp_id, "job_name": r["job_name"], "department_name": r["department_name"],
                 "location": r["location"], "reason": "under_utilized", "project_id": r["project_id"],
-                "current_allocation_pct": r["employee_total_allocation_pct"],
+                "current_allocation_pct": r["employee_client_allocation_pct"],
             }
 
     allocated_ids = {r["employee_id"] for r in report}
