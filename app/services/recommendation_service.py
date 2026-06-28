@@ -130,10 +130,13 @@ def get_recommendations(
         "top_candidate_signal": top_signal,
         "has_skillset": has_skillset,
         "total_employees_considered": int(len(active_employees)),
+        "candidate_pool_size": int(len(pool)),
         "candidates_with_real_skill_match": real_match_count,
     }
 
-def get_recommendations_for_pipeline_row(row_index: int, pipeline: pd.DataFrame | None = None, **prefetched) -> dict:
+def get_recommendations_for_pipeline_row(
+    row_index: int, pipeline: pd.DataFrame | None = None, top_n: int = TOP_N, **prefetched
+) -> dict:
     adapter = get_adapter()
     pipeline = adapter.get_pipeline_forecast() if pipeline is None else pipeline
     if row_index < 0 or row_index >= len(pipeline):
@@ -144,6 +147,7 @@ def get_recommendations_for_pipeline_row(row_index: int, pipeline: pd.DataFrame 
         skillset_text=row.get("skillset", ""),
         likely_start_date=str(row.get("likely_start_date")),
         requested_pct_raw=row.get("requested_pct", "100"),
+        top_n=top_n,
         **prefetched,
     )
     cluster = row.get("cluster")
