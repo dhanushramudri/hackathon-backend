@@ -4,6 +4,7 @@ from app.services.employee_profile_service import (
     EmployeeNotFound,
     get_employee_headcount_summary,
     get_employee_profile,
+    get_overtime_risk_summary,
     list_designations,
     list_employees,
 )
@@ -21,6 +22,10 @@ def designations() -> list[str]:
 @router.get("/headcount-summary")
 def headcount_summary() -> dict:
     return get_employee_headcount_summary()
+
+@router.get("/overtime-risk-summary")
+def overtime_risk_summary() -> dict:
+    return get_overtime_risk_summary()
 
 @router.get("/{employee_id}/profile")
 def profile(employee_id: str) -> dict:

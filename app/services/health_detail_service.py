@@ -83,7 +83,10 @@ def get_project_health_detail(project_code: str) -> dict:
         ],
     }
 
-    shadow_rows = proj_allocs[proj_allocs["resourcing_status"].isin(["SHADOW", "UNBILLED"])].copy()
+    # Active allocations only -- monthly_unbilled_value_usd is a CURRENT, ongoing cost
+    # figure, so its proof rows must match (a historical/ended shadow allocation isn't
+    # costing anything right now, even though the row still exists in the data).
+    shadow_rows = active_allocs[active_allocs["resourcing_status"].isin(["SHADOW", "UNBILLED"])].copy()
     if shadow_rows.empty:
         shadow_rows["hourly_rate_usd"] = pd.Series(dtype=float)
         shadow_rows["monthly_unbilled_value_usd"] = pd.Series(dtype=float)

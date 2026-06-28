@@ -89,6 +89,18 @@ def get_employee_headcount_summary() -> dict:
         "in_notice_period": int(in_notice_period.sum()),
     }
 
+def get_overtime_risk_summary() -> dict:
+    employees = get_adapter().get_employees()
+    active_ids = set(employees[employees["account_status"] == 1]["employee_id"])
+    risk = get_employee_overtime_risk()
+    at_risk_ids = [emp_id for emp_id, r in risk.items() if r["is_sustained_overtime"] and emp_id in active_ids]
+    return {
+        "employees_at_risk": len(at_risk_ids),
+        "threshold_days": SUSTAINED_OVERTIME_MIN_DAYS,
+        "window_days": SUSTAINED_OVERTIME_WINDOW_DAYS,
+        "daily_hours_threshold": OVERTIME_DAILY_HOURS_THRESHOLD,
+    }
+
 def skills_for(employee_id: str, skills: pd.DataFrame) -> list[dict]:
     rows = skills[skills["employee_id"] == employee_id].copy()
     rows["_source_rank"] = rows["skill_source"].map(_SKILL_SOURCE_RANK).fillna(9)

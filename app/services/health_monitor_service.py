@@ -118,7 +118,16 @@ def get_health_report() -> list[dict]:
         .mean()
         .rename("shadow_unbilled_share")
     )
-    unbilled_value = alloc_with_rate.groupby("project_id")["unbilled_monthly_value"].sum().rename("monthly_unbilled_value_usd")
+    # monthly_unbilled_value_usd is a CURRENT, ongoing monthly cost figure -- it must
+    # only count allocations that are actually active today. Without this filter it
+    # sums every SHADOW/UNBILLED allocation ever recorded for the project, including
+    # ones that ended months ago, inflating the real figure by ~5-6x.
+    unbilled_value = (
+        alloc_with_rate[alloc_with_rate["is_allocation_active"] == 1]
+        .groupby("project_id")["unbilled_monthly_value"]
+        .sum()
+        .rename("monthly_unbilled_value_usd")
+    )
 
     active = active.merge(n_employees, left_on="project_code", right_index=True, how="left")
     active = active.merge(max_alloc_end, left_on="project_code", right_index=True, how="left")
