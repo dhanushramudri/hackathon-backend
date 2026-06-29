@@ -223,6 +223,8 @@ def get_new_project_forecast(specs: list[dict]) -> dict:
 
         hourly_rate = get_hourly_rate(designation)
         shortfall_value_usd = round(shortfall * (hourly_rate or 0) * STANDARD_MONTHLY_HOURS, 0)
+        full_role_monthly_value_usd = round(needed_headcount * (hourly_rate or 0) * STANDARD_MONTHLY_HOURS, 0)
+        achievable_monthly_value_usd = full_role_monthly_value_usd - shortfall_value_usd
         breakdown.append(
             {
                 "designation": designation,
@@ -237,12 +239,22 @@ def get_new_project_forecast(specs: list[dict]) -> dict:
                 "adjacent_fill_count": adjacent_fill_count,
                 "shortfall": shortfall,
                 "shortfall_value_usd": shortfall_value_usd,
+                "full_role_monthly_value_usd": full_role_monthly_value_usd,
+                "achievable_monthly_value_usd": achievable_monthly_value_usd,
                 "hire_signal": shortfall > 0,
                 "recommended_start_date": recommended_start_date,
                 "recommended_start_date_proof": recommended_start_date_proof,
                 "recommended_available_then": recommended_available_then,
             }
         )
+
+    total_full_role_value_usd = sum(b["full_role_monthly_value_usd"] for b in breakdown)
+    total_achievable_value_usd = sum(b["achievable_monthly_value_usd"] for b in breakdown)
+    pct_achievable_with_current_headcount = (
+        round(100 * total_achievable_value_usd / total_full_role_value_usd, 1)
+        if total_full_role_value_usd > 0
+        else None
+    )
 
     return {
         "specs": specs,
@@ -251,4 +263,7 @@ def get_new_project_forecast(specs: list[dict]) -> dict:
         "breakdown": breakdown,
         "total_shortfall_headcount": sum(b["shortfall"] for b in breakdown),
         "total_shortfall_value_usd": sum(b["shortfall_value_usd"] for b in breakdown),
+        "total_full_role_value_usd": total_full_role_value_usd,
+        "total_achievable_value_usd": total_achievable_value_usd,
+        "pct_achievable_with_current_headcount": pct_achievable_with_current_headcount,
     }

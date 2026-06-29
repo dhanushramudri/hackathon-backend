@@ -2,10 +2,13 @@ import pandas as pd
 
 from app.core.adapter import get_adapter
 from app.engines import scoring
+from app.engines.designation_ladder import adjacent_designations
 from app.engines.employee_coe import get_employee_primary_coe_map
+from app.engines.resource_code_decoder import decode_resource_code
 from app.engines.skillset_classifier import classify_skillset
 
 TOP_N = 15
+MAX_FALLBACK_CANDIDATES = 5
 
 class RowIndexOutOfRange(Exception):
 
@@ -38,12 +41,86 @@ def availability_as_of(allocations: pd.DataFrame, as_of_date: pd.Timestamp) -> p
     busy_pct = client_only.groupby("employee_id")["allocation_by_percentage"].sum()
     return busy_pct
 
+def _match_tier(candidate: dict, requested_designations: list[str] | None) -> str | None:
+    if not requested_designations:
+        return None
+    if candidate["skill_confidence"] not in ("no_match", "no_requirement"):
+        return "skill_match"
+    if candidate["job_name"] in requested_designations:
+        return "same_grade_fallback"
+    adjacent = {
+        d for req in requested_designations for d, _offset in adjacent_designations(req)
+    }
+    if candidate["job_name"] in adjacent:
+        return "adjacent_level_fallback"
+    return None
+
+def _build_fallback_candidates(ranked: list[dict], requested_designations: list[str], requested_coe_categories: list[str]) -> dict:
+    coe_wanted = {c.strip().lower() for c in requested_coe_categories}
+
+    def _sort_key(c: dict) -> tuple:
+        coe_match = 1 if (c.get("coe") or "").strip().lower() in coe_wanted else 0
+        return (-c["skill_score"], -coe_match, -c["available_pct"], -c["competency_score"])
+
+    adjacent = {
+        d for req in requested_designations for d, _offset in adjacent_designations(req)
+    } - set(requested_designations)
+
+    same_grade = sorted(
+        [c for c in ranked if c["job_name"] in requested_designations], key=_sort_key
+    )[:MAX_FALLBACK_CANDIDATES]
+    adjacent_level = sorted(
+        [c for c in ranked if c["job_name"] in adjacent], key=_sort_key
+    )[:MAX_FALLBACK_CANDIDATES]
+
+    for c in same_grade:
+        c["match_tier"] = "same_grade_fallback"
+    for c in adjacent_level:
+        c["match_tier"] = "adjacent_level_fallback"
+
+    return {
+        "requested_designations": requested_designations,
+        "same_grade": same_grade,
+        "adjacent_level": adjacent_level,
+    }
+
+EARLIEST_AVAILABILITY_SEARCH_DAYS = 180
+
+def find_earliest_availability(
+    employee_id: str, allocations: pd.DataFrame, after_date: pd.Timestamp, requested_pct: float
+) -> dict | None:
+    window_end = after_date + pd.Timedelta(days=EARLIEST_AVAILABILITY_SEARCH_DAYS)
+    own_active = allocations[
+        (allocations["employee_id"] == employee_id)
+        & (allocations["is_allocation_active"] == 1)
+        & (allocations["allocated_end_date"] > after_date)
+        & (allocations["allocated_end_date"] <= window_end)
+    ]
+    candidate_end_dates = sorted(own_active["allocated_end_date"].dropna().unique())
+
+    for end_date in candidate_end_dates:
+        check_date = pd.Timestamp(end_date) + pd.Timedelta(days=1)
+        busy = float(availability_as_of(allocations, check_date).get(employee_id, 0.0))
+        available_pct = max(0.0, 100.0 - busy)
+        if available_pct >= requested_pct:
+            return {
+                "earliest_available_date": check_date.strftime("%Y-%m-%d"),
+                "proof": (
+                    f"Current allocation ends {pd.Timestamp(end_date).strftime('%Y-%m-%d')}, "
+                    f"freeing up {round(available_pct, 1)}% capacity from {check_date.strftime('%Y-%m-%d')}."
+                ),
+            }
+    return None
+
 def get_recommendations(
     skillset_text: str,
     likely_start_date: str,
     requested_pct_raw: str = "100",
     top_n: int = TOP_N,
     *,
+    requested_designations: list[str] | None = None,
+    requested_coe_categories: list[str] | None = None,
+    compute_earliest_availability: bool = True,
     employees: pd.DataFrame | None = None,
     competencies: pd.DataFrame | None = None,
     allocations: pd.DataFrame | None = None,
@@ -120,6 +197,30 @@ def get_recommendations(
     pool = candidates_meeting_capacity or ranked
     top = pool[:top_n]
 
+    for c in top:
+        c["match_tier"] = _match_tier(c, requested_designations)
+        c["earliest_available_date"] = None
+        c["earliest_available_proof"] = None
+
+    best_fit_if_delayed: list[dict] = []
+    if compute_earliest_availability:
+        shown_ids = {c["employee_id"] for c in top}
+        for c in ranked[:10]:
+            if len(best_fit_if_delayed) >= 3:
+                break
+            if c["meets_requested_capacity"] or c["employee_id"] in shown_ids:
+                continue
+            found = find_earliest_availability(c["employee_id"], allocations, as_of_date, requested_pct)
+            if found:
+                best_fit_if_delayed.append(
+                    {
+                        **c,
+                        "match_tier": _match_tier(c, requested_designations),
+                        "earliest_available_date": found["earliest_available_date"],
+                        "earliest_available_proof": found["proof"],
+                    }
+                )
+
     top_signal = top[0]["staffing_signal"] if top else "hire"
     hire_vs_redeploy = top_signal == "hire"
     has_skillset = bool(required_phrases)
@@ -129,6 +230,15 @@ def get_recommendations(
     # really just the most available, unranked-by-skill person (bucket="not_assessed").
     # Surfacing the real pool size and match count lets the UI say so honestly.
     real_match_count = sum(1 for r in top if r["bucket"] != "not_assessed")
+    genuine_skill_match_count = sum(
+        1 for r in top if r["skill_confidence"] not in ("no_match", "no_requirement")
+    )
+
+    fallback_candidates = None
+    if requested_designations and has_skillset and genuine_skill_match_count == 0:
+        fallback_candidates = _build_fallback_candidates(
+            ranked, requested_designations, requested_coe_categories or []
+        )
 
     return {
         "request": {
@@ -144,6 +254,9 @@ def get_recommendations(
         "total_employees_considered": int(len(active_employees)),
         "candidate_pool_size": int(len(pool)),
         "candidates_with_real_skill_match": real_match_count,
+        "genuine_skill_match_count": genuine_skill_match_count,
+        "fallback_candidates": fallback_candidates,
+        "best_fit_if_delayed": best_fit_if_delayed,
     }
 
 def get_recommendations_for_pipeline_row(
@@ -155,11 +268,15 @@ def get_recommendations_for_pipeline_row(
         raise RowIndexOutOfRange(row_index, len(pipeline) - 1)
 
     row = pipeline.iloc[row_index]
+    requested_designations = decode_resource_code(row.get("resources_requested"))
+    requested_coe_categories = classify_skillset(row.get("skillset"))
     result = get_recommendations(
         skillset_text=row.get("skillset", ""),
         likely_start_date=str(row.get("likely_start_date")),
         requested_pct_raw=row.get("requested_pct", "100"),
         top_n=top_n,
+        requested_designations=requested_designations,
+        requested_coe_categories=requested_coe_categories,
         **prefetched,
     )
     cluster = row.get("cluster")
@@ -185,7 +302,8 @@ def get_recommendations_for_pipeline_row(
         "request_type": row.get("request_type"),
         "deal_stage_hubspot": row.get("deal_stage_hubspot"),
         "comments": row.get("comments"),
-        "skillset_coe_categories": classify_skillset(row.get("skillset")),
+        "skillset_coe_categories": requested_coe_categories,
+        "requested_designations": requested_designations,
     }
 
     if pd.notna(deal_id):
@@ -255,6 +373,7 @@ def get_coverage_summary() -> dict:
         "skill_index": skill_index,
         "common_tokens": scoring.common_skill_tokens(skill_index),
         "employee_coe_map": get_employee_primary_coe_map(),
+        "compute_earliest_availability": False,
     }
     pipeline = adapter.get_pipeline_forecast()
 

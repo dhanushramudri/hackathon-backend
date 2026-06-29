@@ -31,6 +31,15 @@ def _primary_coe(tech_coe: str | None) -> str:
         return "Unknown"
     return str(tech_coe).split(";")[0]
 
+ON_TIME_OVERRUN_GRACE_DAYS = 14
+
+def _tag_on_time(real_projects: pd.DataFrame, allocations: pd.DataFrame) -> pd.DataFrame:
+    max_alloc_end = allocations.groupby("project_id")["allocated_end_date"].max().rename("max_alloc_end")
+    tagged = real_projects.merge(max_alloc_end, left_on="project_code", right_index=True, how="left")
+    overrun_days = (tagged["max_alloc_end"] - tagged["project_end_date"]).dt.days
+    tagged["is_on_time"] = overrun_days.fillna(0) <= ON_TIME_OVERRUN_GRACE_DAYS
+    return tagged
+
 def _real_completed_merged() -> pd.DataFrame:
     adapter = get_adapter()
     projects = adapter.get_projects()
@@ -41,6 +50,7 @@ def _real_completed_merged() -> pd.DataFrame:
         (projects["date_source"].isin(["given", "derived_allocation"])) & (projects["project_status"] == "COMPLETE")
     ].copy()
     real["tech_coe_primary"] = real["tech_coe"].apply(_primary_coe)
+    real = _tag_on_time(real, allocations)
 
     merged = (
         real.merge(allocations, left_on="project_code", right_on="project_id")
@@ -51,6 +61,23 @@ def _real_completed_merged() -> pd.DataFrame:
     return merged
 
 COMMON_ROLE_PREVALENCE_PCT = 40.0
+
+MIN_ON_TIME_SAMPLE_PROJECTS = 3
+
+def _aggregate_role_mix_preferring_on_time(group: pd.DataFrame) -> dict:
+    on_time = group[group.get("is_on_time", False) == True]  # noqa: E712
+    on_time_n = int(on_time["project_code"].nunique()) if not on_time.empty else 0
+    all_n = int(group["project_code"].nunique())
+
+    if on_time_n >= MIN_ON_TIME_SAMPLE_PROJECTS:
+        result = _aggregate_role_mix_detailed(on_time)
+        result["source"] = "derived_empirical_on_time_preferred"
+    else:
+        result = _aggregate_role_mix_detailed(group)
+
+    result["on_time_sample_size"] = on_time_n
+    result["all_completed_sample_size"] = all_n
+    return result
 
 def _aggregate_role_mix_detailed(group: pd.DataFrame) -> dict:
     n_projects = group["project_code"].nunique()
@@ -92,7 +119,7 @@ def build_role_mix_templates() -> dict[tuple[str, str], dict]:
     merged = _real_completed_merged()
     templates: dict[tuple[str, str], dict] = {}
     for (type_of_project, coe), group in merged.groupby(["type_of_project", "tech_coe_primary"]):
-        templates[(type_of_project, coe)] = _aggregate_role_mix_detailed(group)
+        templates[(type_of_project, coe)] = _aggregate_role_mix_preferring_on_time(group)
     return templates
 
 def get_role_mix_by_category(category: str) -> dict:
@@ -114,7 +141,7 @@ def get_role_mix_by_category(category: str) -> dict:
     filtered = merged[mask]
     if filtered.empty:
         return {"role_mix": {}, "roles": [], "sample_size": 0, "source": "no_data"}
-    result = _aggregate_role_mix_detailed(filtered)
+    result = _aggregate_role_mix_preferring_on_time(filtered)
     result["resolved_via"] = spec
     return result
 
@@ -160,7 +187,7 @@ def get_role_mix_by_coes(coes: list[str], type_of_project: str | None = None) ->
     filtered = merged[mask]
     if filtered.empty:
         return {"role_mix": {}, "roles": [], "sample_size": 0, "source": "no_data", "matched_project_codes": []}
-    result = _aggregate_role_mix_detailed(filtered)
+    result = _aggregate_role_mix_preferring_on_time(filtered)
     result["matched_project_codes"] = sorted(filtered["project_code"].unique().tolist())[:10]
     return result
 

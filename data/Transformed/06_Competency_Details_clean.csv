@@ -1545,3 +1545,21 @@ EMP384,Finance Executive,Support,Synthetic Proxy,Tenure-based capability proxy,N
 EMP19,,,Synthetic Proxy,Tenure-based capability proxy,No,1.0,imputed_tenure_proxy
 EMP250,Trainee Software Engineer,Delivery,Synthetic Proxy,Tenure-based capability proxy,No,0.0,imputed_tenure_proxy
 EMP480,Senior Associate Consultant,Delivery,Synthetic Proxy,Tenure-based capability proxy,Yes,2.0,imputed_tenure_proxy
+EMP1043,Consultant,Data Engineering,Solution Consultant,"Effectivetly articulates JMAN's capabilities and offerrings in terms of delivery and outcome, and leads on advancing our offerring. ",Yes,4.0,observed
+EMP1043,Consultant,Data Engineering,Solution Consultant,"Expert in estimating and designing solution architectures. Drive team to meet sprint plan, deadlines and best practices; Instrumental in making the team meet the expected deadlines without compromising on quality",Yes,4.0,observed
+EMP1043,Consultant,Data Engineering,Solution Consultant,Good at estimating and drafting project plans. Define sprints and story points. Advocate and implement agile SQUAD model. ,No,2.0,observed
+EMP1044,Senior Software Engineer,Data Engineering,Senior Software Engineer,Brings strong techno‑functional consulting expertise aligned to JMAN’s delivery context,Yes,4.0,observed
+EMP1044,Senior Software Engineer,Data Engineering,Senior Software Engineer,"Communicates with clarity, with the ability to confidently explain complex concepts in a simple, structured manner",Yes,4.0,observed
+EMP1044,Senior Software Engineer,Data Engineering,Senior Software Engineer,"Effectively navigates ambiguity and delivery‑stage complexity, maintaining composure and driving outcomes under pressure",No,2.0,observed
+EMP1045,Senior Software Engineer,Data Engineering,Senior Software Engineer,Brings strong techno‑functional consulting expertise aligned to JMAN’s delivery context,Yes,4.0,observed
+EMP1045,Senior Software Engineer,Data Engineering,Senior Software Engineer,"Communicates with clarity, with the ability to confidently explain complex concepts in a simple, structured manner",Yes,4.0,observed
+EMP1045,Senior Software Engineer,Data Engineering,Senior Software Engineer,"Effectively navigates ambiguity and delivery‑stage complexity, maintaining composure and driving outcomes under pressure",No,2.0,observed
+EMP1046,Software Engineer,Data Engineering,Synthetic Proxy,Tenure-based capability proxy,No,1.0,imputed_tenure_proxy
+EMP1047,Software Engineer,Data Engineering,Synthetic Proxy,Tenure-based capability proxy,No,1.0,imputed_tenure_proxy
+EMP1048,Software Engineer,Data Engineering,Synthetic Proxy,Tenure-based capability proxy,No,1.0,imputed_tenure_proxy
+EMP1049,Software Engineer,Data Engineering,Synthetic Proxy,Tenure-based capability proxy,No,1.0,imputed_tenure_proxy
+EMP1050,Solutions Enabler,Data Engineering,Solution Enabler,Demonstrates strong capability to manage and influence client stakeholders effectively across varying seniority levels,Yes,4.0,observed
+EMP1050,Solutions Enabler,Data Engineering,Solution Enabler,"Operates in a consultative / advisory capacity, guiding clients toward optimal solutions",Yes,3.0,observed
+EMP1050,Solutions Enabler,Data Engineering,Solution Enabler,Brings strong techno‑functional consulting expertise aligned to JMAN’s delivery context,Yes,4.0,observed
+EMP1050,Solutions Enabler,Data Engineering,Solution Enabler,"Communicates with clarity, with the ability to confidently explain complex concepts in a simple, structured manner",Yes,4.0,observed
+EMP1050,Solutions Enabler,Data Engineering,Solution Enabler,"Effectively navigates ambiguity and delivery‑stage complexity, maintaining composure and driving outcomes under pressure",Yes,3.0,observed
