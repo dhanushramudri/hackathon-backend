@@ -4,7 +4,7 @@ import pandas as pd
 
 from app.core.adapter import get_adapter
 from app.engines import scoring
-from app.engines.designation_ladder import adjacent_designations
+from app.engines.designation_ladder import LEADERSHIP_DESIGNATIONS, adjacent_designations
 from app.engines.employee_coe import get_employee_primary_coe_map
 from app.engines.role_mix_engine import get_role_mix_by_category, get_role_mix_by_coes
 from app.services.allocation_report_service import UNDER_UTILIZED_THRESHOLD
@@ -91,7 +91,8 @@ def _find_recommended_start_date(
             if d != designation:
                 if skill_index is None:
                     continue
-                pool = [c for c in pool if c.get("skill_score", 0) >= scoring.ELIGIBLE_THRESHOLD]
+                if designation not in LEADERSHIP_DESIGNATIONS:
+                    pool = [c for c in pool if c.get("skill_score", 0) >= scoring.ELIGIBLE_THRESHOLD]
             for c in pool:
                 c["source_designation"] = d
                 c["level_offset"] = 0 if d == designation else next(o for dd, o in adjacent_designations(designation) if dd == d)
@@ -135,6 +136,7 @@ def get_new_project_forecast(specs: list[dict]) -> dict:
     total_need: dict[tuple[str, str], float] = {}
     duration_weeks_by_date: dict[str, int | None] = {}
     role_mix_sources = []
+    excluded_rare_roles: dict[str, dict] = {}
     for spec in specs:
         result = _resolve_role_mix(spec)
         role_mix_sources.append(
@@ -147,7 +149,24 @@ def get_new_project_forecast(specs: list[dict]) -> dict:
         )
         date_key = spec.get("start_date") or today_key
         duration_weeks_by_date.setdefault(date_key, spec.get("duration_weeks"))
+        # role_mix carries every designation ever seen on a past project, even ones that
+        # showed up on a single one-off engagement (prevalence_pct in the low single
+        # digits). Rounding even a 5% historical fte need up to "you must hire 1 of
+        # these" for a brand-new project massively overstates the real ask -- only the
+        # empirically common roles (the same >=40% prevalence bar the role-mix preview
+        # already uses) count toward real headcount need here. Rare ones are tracked
+        # and surfaced separately instead of silently dropped.
+        common_by_designation = {r["designation"]: r["common"] for r in result.get("roles", [])}
         for designation, fte in result["role_mix"].items():
+            if not common_by_designation.get(designation, True):
+                prior = excluded_rare_roles.get(designation)
+                prevalence = next((r["prevalence_pct"] for r in result["roles"] if r["designation"] == designation), None)
+                excluded_rare_roles[designation] = {
+                    "designation": designation,
+                    "prevalence_pct": prevalence,
+                    "fte": round((prior["fte"] if prior else 0) + fte * spec["count"], 2),
+                }
+                continue
             key = (designation, date_key)
             total_need[key] = total_need.get(key, 0) + fte * spec["count"]
 
@@ -175,8 +194,10 @@ def get_new_project_forecast(specs: list[dict]) -> dict:
         # gate, asking for a skill nobody has still reports every free person in that title as
         # "covered" (shortfall 0), because shortfall_at_level used to come from raw headcount.
         # The adjacent-level fallback below already requires ELIGIBLE_THRESHOLD; same-level
-        # candidates need the identical check for the same reason.
-        if skill_index is not None:
+        # candidates need the identical check for the same reason. Leadership designations
+        # (Manager/Principal/Associate Partner/Partner) are exempt -- they're oversight roles,
+        # not hands-on ICs, so a missing technical skill shouldn't read as "need to hire one".
+        if skill_index is not None and designation not in LEADERSHIP_DESIGNATIONS:
             qualifying_candidates = [c for c in candidates if c.get("skill_score", 0) >= scoring.ELIGIBLE_THRESHOLD]
         else:
             qualifying_candidates = candidates
@@ -198,9 +219,11 @@ def get_new_project_forecast(specs: list[dict]) -> dict:
                 adjacent_level_candidates.extend(pool)
             _tag_coe(adjacent_level_candidates, employee_coe_map)
             adjacent_level_candidates.sort(key=lambda c: (-c.get("skill_score", -1), abs(c["level_offset"])))
-            if skill_index is not None:
+            if skill_index is not None and designation not in LEADERSHIP_DESIGNATIONS:
                 qualifying = [c for c in adjacent_level_candidates if c.get("skill_score", 0) >= scoring.ELIGIBLE_THRESHOLD]
                 adjacent_fill_count = min(len(qualifying), shortfall_at_level)
+            else:
+                adjacent_fill_count = min(len(adjacent_level_candidates), shortfall_at_level)
 
         shortfall = max(0, shortfall_at_level - adjacent_fill_count)
 
@@ -258,6 +281,7 @@ def get_new_project_forecast(specs: list[dict]) -> dict:
         "role_mix_sources": role_mix_sources,
         "required_skills": all_required_skills,
         "breakdown": breakdown,
+        "excluded_rare_roles": sorted(excluded_rare_roles.values(), key=lambda r: -(r["prevalence_pct"] or 0)),
         "total_shortfall_headcount": sum(b["shortfall"] for b in breakdown),
         "total_shortfall_value_usd": sum(b["shortfall_value_usd"] for b in breakdown),
         "total_full_role_value_usd": total_full_role_value_usd,

@@ -7,6 +7,12 @@ DESIGNATION_LADDERS: list[list[str]] = [
     ["Manager", "Principal", "Associate Partner", "Partner"],
 ]
 
+# Manager/Principal/Associate Partner/Partner are oversight and client-relationship
+# roles, not hands-on technical ICs -- gating their availability on the same technical
+# skill requirements (SQL, Python, etc.) as a Senior Software Engineer produces false
+# "need to hire a Partner" signals for every project that asks for any technical skill.
+LEADERSHIP_DESIGNATIONS: frozenset[str] = frozenset(DESIGNATION_LADDERS[-1])
+
 def adjacent_designations(designation: str, max_levels: int = 1) -> list[tuple[str, int]]:
     for ladder in DESIGNATION_LADDERS:
         if designation not in ladder:
