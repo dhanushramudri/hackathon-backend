@@ -6,6 +6,7 @@ import pandas as pd
 from app.ai import llm
 from app.ai.providers.base import QuotaExceededError
 from app.core.adapter import get_adapter
+from app.engines import scoring
 from app.services.employee_profile_service import skills_for
 from app.services.recommendation_service import RowIndexOutOfRange, availability_as_of
 
@@ -38,14 +39,15 @@ def _build_candidate_pool(likely_start_date: str) -> list[dict]:
     active_employees = employees[employees["account_status"] == 1]
     as_of_date = pd.to_datetime(likely_start_date)
     busy_pct = availability_as_of(allocations, as_of_date)
-    competency_mean_by_id = (competencies.groupby("employee_id")["score"].mean() / 5.0).to_dict()
+    competency_index = scoring.build_employee_competency_index(competencies)
+    default_competency = {"score": scoring.DEFAULT_COMPETENCY_SCORE, "confidence": "imputed"}
 
     pool = []
     for _, emp in active_employees.iterrows():
         emp_id = emp["employee_id"]
         job_name = emp.get("job_name")
         available_pct = max(0.0, 100.0 - float(busy_pct.get(emp_id, 0.0)))
-        competency_score = competency_mean_by_id.get(emp_id, 0.5)
+        competency_score = competency_index.get(emp_id, default_competency)["score"]
         rank_score = (available_pct / 100.0) * 0.5 + competency_score * 0.5
         pool.append(
             {
@@ -152,7 +154,7 @@ def get_semantic_match_suggestions(row_index: int) -> dict:
     messages = [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": user_message}]
 
     try:
-        turn = provider.generate_with_tools(messages, [], max_tokens=1500)
+        turn = provider.generate_with_tools(messages, [], temperature=0.0, max_tokens=1500)
     except QuotaExceededError:
         return {"available": False, "reason": "AI quota exceeded -- try again later."}
 

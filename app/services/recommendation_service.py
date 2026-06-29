@@ -127,7 +127,6 @@ def get_recommendations(
     pipeline_skillset: pd.DataFrame | None = None,
     skills: pd.DataFrame | None = None,
     skill_index: dict | None = None,
-    common_tokens: frozenset | None = None,
     employee_coe_map: dict | None = None,
 ) -> dict:
     adapter = get_adapter()
@@ -143,21 +142,22 @@ def get_recommendations(
     if skill_index is None:
         skills = adapter.get_skills() if skills is None else skills
         skill_index = scoring.build_employee_skill_index(skills)
-    if common_tokens is None:
-        common_tokens = scoring.common_skill_tokens(skill_index)
     if employee_coe_map is None:
         employee_coe_map = get_employee_primary_coe_map()
     busy_pct = availability_as_of(allocations, as_of_date)
 
     active_employees = employees[employees["account_status"] == 1]
     job_name_by_id = active_employees.set_index("employee_id")["job_name"].to_dict()
-    competency_mean_by_id = (competencies.groupby("employee_id")["score"].mean() / 5.0).to_dict()
+    competency_index = scoring.build_employee_competency_index(competencies)
+    default_competency = {"score": scoring.DEFAULT_COMPETENCY_SCORE, "confidence": "imputed"}
 
     results = []
     for emp_id in active_employees["employee_id"]:
         job_name = job_name_by_id.get(emp_id)
-        skill_result = scoring.score_skill_match(required_phrases, skill_index.get(emp_id, {}), common_tokens)
-        competency_score = float(round(competency_mean_by_id.get(emp_id, 0.5), 3))
+        skill_result = scoring.score_skill_match(required_phrases, skill_index.get(emp_id, {}))
+        competency_entry = competency_index.get(emp_id, default_competency)
+        competency_score = competency_entry["score"]
+        competency_confidence = competency_entry["confidence"]
         available_pct = max(0.0, 100.0 - float(busy_pct.get(emp_id, 0.0)))
         availability_score = min(available_pct / 100.0, 1.0)
         composite = scoring.composite_score(skill_result["score"], competency_score, availability_score)
@@ -181,12 +181,14 @@ def get_recommendations(
                     available_pct=available_pct,
                     requested_pct=requested_pct,
                     meets_requested_capacity=meets_requested_capacity,
+                    competency_confidence=competency_confidence,
                 ),
                 "skill_score": skill_result["score"],
                 "matched_skills": skill_result["matched"],
                 "missing_skills": skill_result["missing"],
                 "skill_confidence": skill_result["confidence"],
                 "competency_score": competency_score,
+                "competency_confidence": competency_confidence,
                 "available_pct": round(available_pct, 1),
                 "meets_requested_capacity": meets_requested_capacity,
             }
@@ -328,7 +330,6 @@ def get_redeploy_matches_for_employee(employee_id: str, top_n: int = 5) -> list[
     pipeline = adapter.get_pipeline_forecast()
     pipeline_skillset = adapter.get_pipeline_skillset()
     skill_index = scoring.build_employee_skill_index(adapter.get_skills())
-    common_tokens = scoring.common_skill_tokens(skill_index)
     employee_tokens = skill_index.get(employee_id, {})
     if not employee_tokens:
         return []
@@ -342,7 +343,7 @@ def get_redeploy_matches_for_employee(employee_id: str, top_n: int = 5) -> list[
         required_phrases = scoring.enrich_required_phrases(required_phrases, pipeline_skillset)
         if not required_phrases:
             continue
-        result = scoring.score_skill_match(required_phrases, employee_tokens, common_tokens)
+        result = scoring.score_skill_match(required_phrases, employee_tokens)
         if result["score"] <= 0:
             continue
         matches.append(
@@ -371,7 +372,6 @@ def get_coverage_summary() -> dict:
         "allocations": adapter.get_allocations(),
         "pipeline_skillset": adapter.get_pipeline_skillset(),
         "skill_index": skill_index,
-        "common_tokens": scoring.common_skill_tokens(skill_index),
         "employee_coe_map": get_employee_primary_coe_map(),
         "compute_earliest_availability": False,
     }

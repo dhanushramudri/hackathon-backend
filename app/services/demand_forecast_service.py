@@ -45,11 +45,11 @@ def _tag_coe(candidates: list[dict], employee_coe_map: dict[str, str]) -> None:
     for c in candidates:
         c["coe"] = employee_coe_map.get(c["employee_id"])
 
-def _score_candidates(candidates: list[dict], required_skills: list[str], skill_index: dict | None, common_tokens: frozenset) -> None:
+def _score_candidates(candidates: list[dict], required_skills: list[str], skill_index: dict | None) -> None:
     if skill_index is None:
         return
     for c in candidates:
-        skill_result = scoring.score_skill_match(required_skills, skill_index.get(c["employee_id"], {}), common_tokens)
+        skill_result = scoring.score_skill_match(required_skills, skill_index.get(c["employee_id"], {}))
         c["skill_score"] = skill_result["score"]
         c["matched_skills"] = skill_result["matched"]
         c["missing_skills"] = skill_result["missing"]
@@ -64,7 +64,6 @@ def _find_recommended_start_date(
     allocations: pd.DataFrame,
     required_skills: list[str],
     skill_index: dict | None,
-    common_tokens: frozenset,
 ) -> dict | None:
     ladder = [designation] + [d for d, _ in adjacent_designations(designation)]
     relevant_ids = set(
@@ -88,7 +87,7 @@ def _find_recommended_start_date(
         fill: list[dict] = []
         for d in ladder:
             pool = get_redeploy_candidates_as_of(d, check_date, employees, allocations)
-            _score_candidates(pool, required_skills, skill_index, common_tokens)
+            _score_candidates(pool, required_skills, skill_index)
             if d != designation:
                 if skill_index is None:
                     continue
@@ -130,10 +129,8 @@ def get_new_project_forecast(specs: list[dict]) -> dict:
 
     all_required_skills = sorted({s.lower() for spec in specs for s in (spec.get("required_skills") or [])})
     skill_index = None
-    common_tokens: frozenset = frozenset()
     if all_required_skills:
         skill_index = scoring.build_employee_skill_index(get_adapter().get_skills())
-        common_tokens = scoring.common_skill_tokens(skill_index)
 
     total_need: dict[tuple[str, str], float] = {}
     duration_weeks_by_date: dict[str, int | None] = {}
@@ -171,7 +168,7 @@ def get_new_project_forecast(specs: list[dict]) -> dict:
         else:
             emp_df, alloc_df = _ensure_employee_tables()
             candidates = get_redeploy_candidates_as_of(designation, pd.to_datetime(date_key), emp_df, alloc_df)
-        _score_candidates(candidates, all_required_skills, skill_index, common_tokens)
+        _score_candidates(candidates, all_required_skills, skill_index)
         _tag_coe(candidates, employee_coe_map)
 
         # Holding the exact designation only means availability, not skill fit -- without this
@@ -194,7 +191,7 @@ def get_new_project_forecast(specs: list[dict]) -> dict:
                 else:
                     emp_df, alloc_df = _ensure_employee_tables()
                     pool = get_redeploy_candidates_as_of(adj_designation, pd.to_datetime(date_key), emp_df, alloc_df)
-                _score_candidates(pool, all_required_skills, skill_index, common_tokens)
+                _score_candidates(pool, all_required_skills, skill_index)
                 for c in pool:
                     c["source_designation"] = adj_designation
                     c["level_offset"] = offset
@@ -213,7 +210,7 @@ def get_new_project_forecast(specs: list[dict]) -> dict:
         if shortfall > 0:
             emp_df, alloc_df = _ensure_employee_tables()
             found = _find_recommended_start_date(
-                designation, pd.to_datetime(date_key), needed_headcount, emp_df, alloc_df, all_required_skills, skill_index, common_tokens
+                designation, pd.to_datetime(date_key), needed_headcount, emp_df, alloc_df, all_required_skills, skill_index
             )
             if found:
                 recommended_start_date = found["recommended_start_date"]
