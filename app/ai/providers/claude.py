@@ -6,7 +6,7 @@ from .base import LLMProvider, QuotaExceededError, ToolTurn, is_quota_error
 
 logger = logging.getLogger("resourceiq.ai.claude")
 
-_MODEL = "claude-sonnet-4-6"
+_MODEL = "claude-haiku-4-5"
 
 def _to_claude_messages(messages: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], Optional[str]]:
     system_parts = [m["content"] for m in messages if m["role"] == "system" and m.get("content")]

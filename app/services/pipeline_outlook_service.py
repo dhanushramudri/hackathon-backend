@@ -3,32 +3,14 @@ import pandas as pd
 from app.core.adapter import get_adapter
 from app.engines.resource_code_decoder import decode_resource_code, group_label
 from app.engines.skillset_classifier import classify_skillset
-from app.services.demand_forecast_service import STANDARD_MONTHLY_HOURS
+from app.services.demand_forecast_service import MIN_AVAILABLE_PCT_TO_SURFACE, STANDARD_MONTHLY_HOURS
 from app.services.rate_card_service import get_hourly_rate
+from app.services.recommendation_service import INTERNAL_PROJECT_TYPE, availability_as_of
 
 OUTLOOK_MONTHS = 6
 MAX_HORIZON_MONTHS = 36
 SUPPLY_ANOMALY_SHARE_THRESHOLD = 0.90
 LATE_NOTICE_THRESHOLD_DAYS = 14
-
-DEAL_STAGE_WEIGHT: dict[str, float] = {
-    "opportunity inception": 0.10,
-    "build the proposition": 0.20,
-    "propose & negotiate": 0.35,
-    "scoping approval": 0.50,
-    "make it real": 0.60,
-    "replacement": 0.70,
-    "sow pending signature": 0.80,
-    "sow with customer": 0.85,
-    "deal won": 0.95,
-    "signed": 1.00,
-}
-DEFAULT_STAGE_WEIGHT = 0.50
-
-def _stage_weight(stage) -> float:
-    if not isinstance(stage, str) or not stage.strip():
-        return DEFAULT_STAGE_WEIGHT
-    return DEAL_STAGE_WEIGHT.get(stage.strip().lower(), DEFAULT_STAGE_WEIGHT)
 
 def _avg_rate(designations: list[str]) -> float | None:
     rates = [r for d in designations if (r := get_hourly_rate(d)) is not None]
@@ -73,8 +55,6 @@ def _enrich_pipeline(pipeline: pd.DataFrame, granularity: str = "month") -> pd.D
     pipeline["requested_pct_numeric"] = pd.to_numeric(pipeline["requested_pct"], errors="coerce").fillna(100.0)
     pipeline["value_usd"] = pipeline.apply(lambda r: _row_value_usd(r["designations"], r.get("requested_pct")), axis=1)
     pipeline["skill_areas"] = pipeline["skillset"].apply(classify_skillset)
-    pipeline["stage_weight"] = pipeline["deal_stage_hubspot"].apply(_stage_weight)
-    pipeline["probable_value_usd"] = (pipeline["value_usd"] * pipeline["stage_weight"]).where(~pipeline["is_confirmed"])
 
     notice_days = (pipeline["likely_start_date"] - pipeline["request_received"]).dt.days
     has_notice = notice_days.notna()
@@ -134,8 +114,6 @@ def _deal_dict(r: pd.Series) -> dict:
         "is_late_notice": bool(r["is_late_notice"]) if pd.notna(r.get("is_late_notice")) else None,
         "hourly_rate_usd": round(_avg_rate(r.get("designations") or []), 2) if _avg_rate(r.get("designations") or []) is not None else None,
         "value_usd": round(float(r["value_usd"]), 2) if pd.notna(r.get("value_usd")) else None,
-        "stage_weight": float(r["stage_weight"]) if pd.notna(r.get("stage_weight")) else None,
-        "probable_value_usd": round(float(r["probable_value_usd"]), 2) if pd.notna(r.get("probable_value_usd")) else None,
     }
 
 def _supply_dict(r: pd.Series, anomaly_date) -> dict:
@@ -153,11 +131,69 @@ def _supply_dict(r: pd.Series, anomaly_date) -> dict:
         "is_anomaly_cluster": bool(anomaly_date is not None and pd.notna(end_date) and end_date == anomaly_date),
     }
 
-def _role_demand_rows(rows: pd.DataFrame, supply_by_month_role: pd.Series, is_confirmed: bool) -> tuple[list[dict], str | None]:
+def _period_start_date(label: str, granularity: str) -> pd.Timestamp:
+    return pd.to_datetime(label) if granularity == "week" else pd.Period(label, freq="M").start_time
+
+def _designation_roster_as_of(
+    target_designations: list[str],
+    as_of_date: pd.Timestamp,
+    employees: pd.DataFrame,
+    allocations: pd.DataFrame,
+    projects: pd.DataFrame,
+    busy_pct_cache: dict[pd.Timestamp, pd.Series],
+) -> list[dict]:
+    active = employees[(employees["account_status"] == 1) & (employees["job_name"].isin(target_designations))]
+    if active.empty:
+        return []
+
+    if as_of_date not in busy_pct_cache:
+        busy_pct_cache[as_of_date] = availability_as_of(allocations, as_of_date)
+    busy_pct = busy_pct_cache[as_of_date]
+
+    covering = allocations[
+        (allocations["is_allocation_active"] == 1)
+        & (allocations["allocated_start_date"] <= as_of_date)
+        & (allocations["allocated_end_date"] >= as_of_date)
+    ].merge(projects[["project_code", "type_of_project"]], left_on="project_id", right_on="project_code", how="left")
+
+    roster = []
+    for _, emp in active.iterrows():
+        emp_id = emp["employee_id"]
+        busy = float(busy_pct.get(emp_id, 0.0))
+        available_pct = max(0.0, round(100.0 - busy, 1))
+        is_available = busy == 0 or available_pct >= MIN_AVAILABLE_PCT_TO_SURFACE
+        current = covering[covering["employee_id"] == emp_id]
+        roster.append(
+            {
+                "employee_id": emp_id,
+                "job_name": emp.get("job_name"),
+                "location": emp.get("location"),
+                "department_name": emp.get("department_name"),
+                "available_pct": available_pct,
+                "is_available": bool(is_available),
+                "current_allocations": [
+                    {
+                        "project_id": r["project_id"],
+                        "type_of_project": r.get("type_of_project"),
+                        "allocation_by_percentage": r["allocation_by_percentage"],
+                        "allocated_start_date": _fmt_date(r.get("allocated_start_date")),
+                        "allocated_end_date": _fmt_date(r.get("allocated_end_date")),
+                        "is_internal": r.get("type_of_project") == INTERNAL_PROJECT_TYPE,
+                    }
+                    for _, r in current.iterrows()
+                ],
+            }
+        )
+    roster.sort(key=lambda r: (not r["is_available"], -r["available_pct"]))
+    return roster
+
+def _role_demand_rows(
+    rows: pd.DataFrame, employees: pd.DataFrame, allocations: pd.DataFrame, projects: pd.DataFrame, granularity: str, is_confirmed: bool
+) -> tuple[list[dict], str | None, list[dict]]:
+    busy_pct_cache: dict[pd.Timestamp, pd.Series] = {}
     role_need = rows.groupby(["month", "role_label"]).agg(
         needed_headcount=("role_code", "size"),
         value_usd=("value_usd", "sum"),
-        probable_value_usd=("probable_value_usd", "sum"),
         role_code=("role_code", "first"),
         avg_requested_pct=("requested_pct_numeric", "mean"),
     ).reset_index()
@@ -170,7 +206,11 @@ def _role_demand_rows(rows: pd.DataFrame, supply_by_month_role: pd.Series, is_co
         shortfall = None
         shortfall_value = 0.0
         if is_confirmed:
-            available = sum(int(supply_by_month_role.get((row["month"], d), 0)) for d in designations) if designations else None
+            available = None
+            if designations:
+                as_of_date = _period_start_date(row["month"], granularity)
+                roster = _designation_roster_as_of(designations, as_of_date, employees, allocations, projects, busy_pct_cache)
+                available = sum(1 for r in roster if r["is_available"])
             shortfall = max(0, int(row["needed_headcount"]) - available) if available is not None else None
             rate = _avg_rate(designations)
             avg_pct = float(row["avg_requested_pct"]) if pd.notna(row["avg_requested_pct"]) else 100.0
@@ -188,11 +228,11 @@ def _role_demand_rows(rows: pd.DataFrame, supply_by_month_role: pd.Series, is_co
                 "shortfall": shortfall,
                 "shortfall_value_usd": shortfall_value,
                 "value_usd": round(float(row["value_usd"]), 2) if pd.notna(row["value_usd"]) else None,
-                "probable_value_usd": round(float(row["probable_value_usd"]), 2) if (not is_confirmed and pd.notna(row["probable_value_usd"])) else None,
                 "is_confirmed": is_confirmed,
             }
         )
-    return out, first_shortfall_month
+    first_shortfall_roles = [r for r in out if r["month"] == first_shortfall_month and r["shortfall"]] if first_shortfall_month else []
+    return out, first_shortfall_month, first_shortfall_roles
 
 def get_pipeline_outlook(
     start_date: str | None = None, horizon_months: int = OUTLOOK_MONTHS, granularity: str = "month"
@@ -200,8 +240,11 @@ def get_pipeline_outlook(
     horizon_months = max(1, min(horizon_months, MAX_HORIZON_MONTHS))
     granularity = granularity if granularity in _GRANULARITY_FREQ else "month"
     adapter = get_adapter()
+    employees = adapter.get_employees()
+    allocations = adapter.get_allocations()
+    projects = adapter.get_projects()
     pipeline = _enrich_pipeline(adapter.get_pipeline_forecast(), granularity)
-    freed = _enrich_supply(adapter.get_allocations(), adapter.get_employees(), granularity)
+    freed = _enrich_supply(allocations, employees, granularity)
 
     real_max_demand_month = pipeline["month"][pipeline["likely_start_date"].notna()].max() if pipeline["likely_start_date"].notna().any() else None
     real_max_supply_month = freed["end_month"][freed["allocated_end_date"].notna()].max() if freed["allocated_end_date"].notna().any() else None
@@ -213,7 +256,6 @@ def get_pipeline_outlook(
     freed_in_window = freed[freed["end_month"].isin(months)]
 
     supply_by_month = freed_in_window.groupby("end_month")["employee_id"].nunique()
-    supply_by_month_role = freed_in_window.groupby(["end_month", "job_name"])["employee_id"].nunique()
 
     anomaly_by_month: dict[str, str] = {}
     for m in months:
@@ -224,10 +266,13 @@ def get_pipeline_outlook(
     demand_counts = in_window.groupby(["month", "is_confirmed"]).size()
     confirmed_value_by_month = in_window[in_window["is_confirmed"]].groupby("month")["value_usd"].sum()
     unconfirmed_value_by_month = in_window[~in_window["is_confirmed"]].groupby("month")["value_usd"].sum()
-    probable_unconfirmed_value_by_month = in_window[~in_window["is_confirmed"]].groupby("month")["probable_value_usd"].sum()
 
-    confirmed_role_rows, first_shortfall_month = _role_demand_rows(in_window[in_window["is_confirmed"]], supply_by_month_role, is_confirmed=True)
-    unconfirmed_role_rows, _ = _role_demand_rows(in_window[~in_window["is_confirmed"]], supply_by_month_role, is_confirmed=False)
+    confirmed_role_rows, first_shortfall_month, first_shortfall_roles = _role_demand_rows(
+        in_window[in_window["is_confirmed"]], employees, allocations, projects, granularity, is_confirmed=True
+    )
+    unconfirmed_role_rows, _, _ = _role_demand_rows(
+        in_window[~in_window["is_confirmed"]], employees, allocations, projects, granularity, is_confirmed=False
+    )
     role_demand_by_month = confirmed_role_rows + unconfirmed_role_rows
 
     skill_rows = in_window[in_window["is_confirmed"]][["month", "skill_areas"]].explode("skill_areas")
@@ -261,7 +306,6 @@ def get_pipeline_outlook(
                 "supply_anomaly_note": anomaly_by_month.get(m),
                 "confirmed_value_usd": round(float(confirmed_value_by_month.get(m, 0.0) or 0.0), 2),
                 "unconfirmed_value_usd": round(float(unconfirmed_value_by_month.get(m, 0.0) or 0.0), 2),
-                "probable_unconfirmed_value_usd": round(float(probable_unconfirmed_value_by_month.get(m, 0.0) or 0.0), 2),
             }
         )
 
@@ -302,6 +346,7 @@ def get_pipeline_outlook(
         "granularity": granularity,
         "months": month_rows,
         "first_shortfall_month": first_shortfall_month,
+        "first_shortfall_roles": first_shortfall_roles,
         "real_demand_data_through": real_max_demand_month,
         "real_supply_data_through": real_max_supply_month,
         "role_demand_by_month": role_demand_by_month,
@@ -319,10 +364,9 @@ def get_pipeline_outlook(
             "A few codes ('EM', 'GTM Architect', 'Sr DS SME') have no real designation at all and are "
             "excluded from dollar figures, though still counted in headcount. Dollar values use the "
             "illustrative Rate Card (no real cost data exists in any source file) weighted by each "
-            "deal's own real requested %. Unconfirmed-deal 'probable' values additionally apply an "
-            "illustrative stage-order weight from the real HubSpot Deal Stage field -- no historical "
-            "win-rate data exists to calibrate this against, so it is an ordered assumption, not a "
-            "measured probability. Pipeline demand has zero real rows past "
+            "deal's own real requested %. Unconfirmed demand's $ value is shown as-is, not weighted by "
+            "deal stage -- no historical win-rate data exists to calibrate a real probability against, "
+            "so we deliberately don't manufacture one. Pipeline demand has zero real rows past "
             f"{real_max_demand_month or 'the available data'} -- months beyond that show real zeros, "
             "not an estimate. Every number on this page is click-through to the exact real rows behind "
             "it -- nothing here is a black box."
@@ -379,18 +423,19 @@ def get_pipeline_outlook_drilldown(
 
     supply_employees: list[dict] = []
     supply_note: str | None = None
+    designation_roster: list[dict] = []
     if dimension == "supply" and month:
         freed = _enrich_supply(adapter.get_allocations(), adapter.get_employees(), granularity)
         anomaly_date, supply_note = _anomaly_date_for_month(freed, month)
         month_freed = freed[freed["end_month"] == month].drop_duplicates("employee_id")
         supply_employees = [_supply_dict(r, anomaly_date) for _, r in month_freed.iterrows()]
-    elif dimension == "role" and is_confirmed and len(rows):
+    elif dimension == "role" and is_confirmed and len(rows) and month:
         target_designations = decode_resource_code(rows.iloc[0]["role_code"])
         if target_designations:
-            freed = _enrich_supply(adapter.get_allocations(), adapter.get_employees(), granularity)
-            anomaly_date, _ = _anomaly_date_for_month(freed, month) if month else (None, None)
-            month_freed = freed[(freed["job_name"].isin(target_designations)) & (freed["end_month"] == month)].drop_duplicates("employee_id")
-            supply_employees = [_supply_dict(r, anomaly_date) for _, r in month_freed.iterrows()]
+            as_of_date = _period_start_date(month, granularity)
+            designation_roster = _designation_roster_as_of(
+                target_designations, as_of_date, adapter.get_employees(), adapter.get_allocations(), adapter.get_projects(), {}
+            )
 
     return {
         "month": month,
@@ -399,4 +444,5 @@ def get_pipeline_outlook_drilldown(
         "deals": deals,
         "supply_employees": supply_employees,
         "supply_anomaly_note": supply_note,
+        "designation_roster": designation_roster,
     }

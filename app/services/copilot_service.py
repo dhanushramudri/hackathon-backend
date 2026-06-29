@@ -531,7 +531,12 @@ def _truncate_for_llm(name: str, result):
             if k not in ("role_demand_by_month", "skill_area_demand_by_month", "project_mix_by_cluster_by_month", "project_mix_by_solution_by_month", "cluster_scorecards")
         }
     if name == "get_pipeline_outlook_drilldown" and isinstance(result, dict):
-        return {**result, "deals": result.get("deals", [])[:15], "supply_employees": result.get("supply_employees", [])[:15]}
+        return {
+            **result,
+            "deals": result.get("deals", [])[:15],
+            "supply_employees": result.get("supply_employees", [])[:15],
+            "designation_roster": result.get("designation_roster", [])[:15],
+        }
     if name == "get_redeploy_matches_for_employee" and isinstance(result, list):
         return result[:5]
     if name == "get_employee_overtime_risk" and isinstance(result, dict):

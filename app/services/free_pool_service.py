@@ -22,7 +22,10 @@ def get_free_pool() -> list[dict]:
     today = pd.Timestamp.now().normalize()
 
     ended = allocations[allocations["allocated_end_date"] < today]
-    last_ended_by_employee = ended.groupby("employee_id")["allocated_end_date"].max()
+    # .last() after an ascending sort carries the project_id of that specific max-date
+    # row along with it -- a separate .max() on the date alone would lose which
+    # project it actually was, leaving "free for Xd" with no real proof behind it.
+    last_ended_row_by_employee = ended.sort_values("allocated_end_date").groupby("employee_id").last()
 
     ending_rows_by_emp: dict[str, list[dict]] = {}
     for r in report:
@@ -78,10 +81,15 @@ def get_free_pool() -> list[dict]:
         c["hourly_rate_usd"] = get_hourly_rate(c["job_name"])
         c["idle_value_usd_per_month"] = _idle_value_usd_per_month(c["job_name"], idle_pct)
         if c["reason"] == "fully_free":
-            last_ended = last_ended_by_employee.get(emp_id)
+            last_row = last_ended_row_by_employee.loc[emp_id] if emp_id in last_ended_row_by_employee.index else None
+            last_ended = last_row["allocated_end_date"] if last_row is not None else None
             c["days_free"] = int((today - last_ended).days) if pd.notna(last_ended) else None
+            c["last_ended_project_id"] = last_row["project_id"] if last_row is not None else None
+            c["last_ended_date"] = last_ended.strftime("%Y-%m-%d") if pd.notna(last_ended) else None
         else:
             c["days_free"] = None
+            c["last_ended_project_id"] = None
+            c["last_ended_date"] = None
 
     return sorted(pool.values(), key=lambda c: (c["reason"] != "fully_free", c.get("current_allocation_pct", 0)))
 
