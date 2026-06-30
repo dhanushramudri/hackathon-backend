@@ -86,6 +86,22 @@ def get_employee_recent_daily_hours(employee_id: str) -> list[dict]:
         for d, h in zip(rows["date"], rows["hours"])
     ]
 
+def get_employee_recent_projects(employee_id: str) -> list[dict]:
+    """Which project(s) this employee actually logged hours against in the recent
+    overtime window, ranked by hours -- lets the wellbeing page point an overworked
+    employee at the specific project where relief staffing would help them."""
+    adapter = get_adapter()
+    timesheets = adapter.get_timesheets()
+    ts = timesheets.dropna(subset=["date", "project_id"])
+    ts = ts[ts["employee_id"] == employee_id]
+
+    today = pd.Timestamp.now().normalize()
+    window_start = today - pd.Timedelta(days=SUSTAINED_OVERTIME_WINDOW_DAYS)
+    recent = ts[(ts["date"] >= window_start) & (ts["date"] <= today)]
+
+    by_project = recent.groupby("project_id")["time"].sum().sort_values(ascending=False)
+    return [{"project_id": pid, "hours_recent": float(round(h, 1))} for pid, h in by_project.items()]
+
 def get_project_weekly_hours(project_id: str, n_weeks: int = 8) -> list[dict]:
     adapter = get_adapter()
     timesheets = adapter.get_timesheets()
