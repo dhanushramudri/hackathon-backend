@@ -205,18 +205,21 @@ def _role_demand_rows(
         available = None
         shortfall = None
         shortfall_value = 0.0
-        if is_confirmed:
-            available = None
-            if designations:
-                as_of_date = _period_start_date(row["month"], granularity)
-                roster = _designation_roster_as_of(designations, as_of_date, employees, allocations, projects, busy_pct_cache)
-                available = sum(1 for r in roster if r["is_available"])
-            shortfall = max(0, int(row["needed_headcount"]) - available) if available is not None else None
+        if designations:
+            as_of_date = _period_start_date(row["month"], granularity)
+            roster = _designation_roster_as_of(designations, as_of_date, employees, allocations, projects, busy_pct_cache)
+            available = sum(1 for r in roster if r["is_available"])
+        if available is not None:
+            shortfall = max(0, int(row["needed_headcount"]) - available)
             rate = _avg_rate(designations)
             avg_pct = float(row["avg_requested_pct"]) if pd.notna(row["avg_requested_pct"]) else 100.0
             shortfall_value = round(shortfall * rate * STANDARD_MONTHLY_HOURS * (avg_pct / 100), 2) if (shortfall and rate) else 0.0
-            if shortfall and (first_shortfall_month is None or row["month"] < first_shortfall_month):
-                first_shortfall_month = row["month"]
+        # Only CONFIRMED shortfalls drive the page's headline "first shortfall" alert --
+        # unconfirmed/speculative requests may never materialize, so they still get a real
+        # available/shortfall number for reference (computed identically either way), but
+        # don't get to trigger the actionable warning banner.
+        if is_confirmed and shortfall and (first_shortfall_month is None or row["month"] < first_shortfall_month):
+            first_shortfall_month = row["month"]
         out.append(
             {
                 "month": row["month"],
