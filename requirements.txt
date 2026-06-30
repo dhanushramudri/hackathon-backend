@@ -7,3 +7,4 @@ openpyxl
 anthropic
 google-genai
 python-dotenv
+apscheduler

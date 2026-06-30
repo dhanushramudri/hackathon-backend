@@ -105,6 +105,18 @@ for "why" or "what should I do" questions):
   system is SYNTHETIC (no real leave/absence dataset exists in the source files) -- say so
   plainly whenever you surface it. The Rate Card is ILLUSTRATIVE (no real cost data exists
   anywhere) -- say so plainly whenever you cite a dollar figure from it.
+- Several tools return long lists capped for display: when a tool result is an object with
+  "total_count"/"shown_count"/"items" fields, the real population size is total_count --
+  NEVER answer a "how many" question with the length of items or shown_count, those are
+  just the sample shown to you. If shown_count < total_count, say so explicitly (e.g.
+  "111 employees are fully free; showing the first 25 below") rather than silently citing
+  the smaller number. Several tools also return exact breakdown counts computed over the
+  FULL population alongside the capped sample -- get_free_pool's reason_counts, get_health_report's
+  risk_band_counts, get_allocation_report's utilization_band_counts/ending_soon_count,
+  get_leave_impact's currently_on_leave_count/no_backfill_count. Always answer a "how many
+  are X" question using the matching exact count field when one is present, never by
+  counting matches within the truncated items sample -- the sample is not representative
+  (it may be sorted, capped, or arbitrarily ordered) and counting within it WILL be wrong.
 
 You have at most a few tool-call turns for one question -- use them deliberately, don't
 call more tools than the question actually needs.
@@ -493,19 +505,56 @@ def _dispatch(name: str, args: dict):
         return get_revenue_trend()
     return {"error": f"unknown tool {name}"}
 
+def _capped(items: list, n: int, extra: dict | None = None) -> dict:
+    # A bare truncated list gives the model no way to tell "shown" from "real total" --
+    # that's exactly what made Buddy report "25 employees fully free" (the get_free_pool
+    # cap) when the real count was 111. Every truncated list is wrapped this way so a
+    # "how many" question always has the real total available, not just the sample size.
+    # extra/total_count/shown_count are placed BEFORE "items" deliberately: the final
+    # payload is hard-truncated to 10000 chars as a JSON string before being sent to the
+    # LLM, so any summary field placed after a large "items" list can silently fall past
+    # that cutoff and never reach the model at all.
+    out = {"total_count": len(items), "shown_count": min(len(items), n)}
+    if extra:
+        out.update(extra)
+    out["items"] = items[:n]
+    return out
+
 def _truncate_for_llm(name: str, result):
     if name == "get_health_report" and isinstance(result, list):
-        return sorted(result, key=lambda r: -r["risk_score"])[:15]
+        return _capped(
+            sorted(result, key=lambda r: -r["risk_score"]), 15,
+            extra={"risk_band_counts": dict(Counter(r["risk_band"] for r in result))},
+        )
     if name == "get_allocation_report" and isinstance(result, list):
-        return result[:20]
+        return _capped(
+            result, 20,
+            extra={
+                "utilization_band_counts": dict(Counter(r["utilization_band"] for r in result)),
+                "ending_soon_count": sum(1 for r in result if r.get("ending_soon")),
+            },
+        )
     if name in ("get_recommendations", "get_recommendations_for_pipeline_row") and isinstance(result, dict):
-        return {**result, "candidates": result.get("candidates", [])[:8]}
+        return {**result, "candidates": _capped(result.get("candidates", []), 8)}
     if name == "list_pipeline_demand" and isinstance(result, list):
-        return result[:30]
+        return _capped(result, 30)
     if name == "get_recommendations_coverage_summary" and isinstance(result, dict):
         return {k: v for k, v in result.items() if k != "rows"}
     if name == "get_project_health_detail" and isinstance(result, dict):
         trimmed = {k: v for k, v in result.items() if k != "allocations_roster"}
+        spike = trimmed.get("effort_spike")
+        if isinstance(spike, dict) and spike.get("weekly_hours"):
+            # weekly_hours (the raw list) gets stripped below like every other proof list --
+            # but unlike the other sections, effort_spike has no parallel scalar summary field,
+            # so without this it loses the actual latest-vs-baseline numbers that justify "fired".
+            weeks = spike["weekly_hours"]
+            n = spike.get("min_baseline_weeks", 3)
+            if len(weeks) >= n + 1:
+                latest = weeks[-1]["hours"]
+                baseline_weeks = weeks[-(n + 1):-1]
+                baseline = sum(w["hours"] for w in baseline_weeks) / len(baseline_weeks)
+                spike["latest_week_hours"] = round(latest, 1)
+                spike["baseline_avg_weekly_hours"] = round(baseline, 1)
         for section in ("overrun", "shadow_heavy", "high_churn", "overtime_risk", "effort_spike", "wsr"):
             if isinstance(trimmed.get(section), dict):
                 trimmed[section] = {
@@ -516,15 +565,24 @@ def _truncate_for_llm(name: str, result):
     if name == "get_employee_profile" and isinstance(result, dict):
         return {
             **result,
-            "skills": result.get("skills", [])[:10],
-            "competencies": result.get("competencies", [])[:10],
-            "allocations": result.get("allocations", [])[:10],
+            "skills": _capped(result.get("skills", []), 10),
+            "competencies": _capped(result.get("competencies", []), 10),
+            "allocations": _capped(result.get("allocations", []), 10),
             "daily_hours_recent": result.get("daily_hours_recent", [])[:5],
         }
     if name == "get_free_pool" and isinstance(result, list):
-        return result[:25]
+        reason_counts: dict[str, int] = {}
+        for r in result:
+            reason_counts[r["reason"]] = reason_counts.get(r["reason"], 0) + 1
+        return _capped(result, 25, extra={"reason_counts": reason_counts})
     if name == "get_leave_impact" and isinstance(result, list):
-        return result[:20]
+        return _capped(
+            result, 20,
+            extra={
+                "currently_on_leave_count": sum(1 for r in result if r.get("is_currently_on_leave")),
+                "no_backfill_count": sum(1 for r in result if not r.get("backfill_available")),
+            },
+        )
     if name == "get_pipeline_outlook" and isinstance(result, dict):
         return {
             k: v for k, v in result.items()
@@ -533,22 +591,22 @@ def _truncate_for_llm(name: str, result):
     if name == "get_pipeline_outlook_drilldown" and isinstance(result, dict):
         return {
             **result,
-            "deals": result.get("deals", [])[:15],
-            "supply_employees": result.get("supply_employees", [])[:15],
-            "designation_roster": result.get("designation_roster", [])[:15],
+            "deals": _capped(result.get("deals", []), 15),
+            "supply_employees": _capped(result.get("supply_employees", []), 15),
+            "designation_roster": _capped(result.get("designation_roster", []), 15),
         }
     if name == "get_redeploy_matches_for_employee" and isinstance(result, list):
-        return result[:5]
+        return _capped(result, 5)
     if name == "get_employee_overtime_risk" and isinstance(result, dict):
         at_risk = {k: v for k, v in result.items() if v.get("is_sustained_overtime")}
-        return dict(list(at_risk.items())[:20])
+        return {"total_count": len(at_risk), "shown_count": min(len(at_risk), 20), "items": dict(list(at_risk.items())[:20])}
     if name == "get_project_effort_spikes" and isinstance(result, dict):
         spikes = {k: v for k, v in result.items() if v.get("is_effort_spike")}
-        return dict(list(spikes.items())[:20])
+        return {"total_count": len(spikes), "shown_count": min(len(spikes), 20), "items": dict(list(spikes.items())[:20])}
     if name == "get_allocation_timesheet" and isinstance(result, dict):
         return {**result, "daily_hours": result.get("daily_hours", [])[-30:]}
     if name == "get_project_roster" and isinstance(result, dict):
-        return {**result, "roster": result.get("roster", [])[:20]}
+        return {**result, "roster": _capped(result.get("roster", []), 20)}
     return result
 
 _BUCKET_LABEL = {"eligible": "Redeploy", "trainable": "Needs training", "gap": "Hire signal", "not_assessed": "Not assessed"}
@@ -966,6 +1024,68 @@ def ask(message: str, history: list[dict] | None = None) -> dict:
     if not llm.get_providers():
         return _deterministic_ask(message)
     return _run_with_llm(message, history or [])
+
+def ask_stream(message: str, history: list[dict] | None = None):
+    """SSE-friendly twin of ask()/_run_with_llm(): yields progress events as
+    each tool is called, ending in {"type": "done", **<same shape ask() returns>}.
+    Tool dispatch/truncation logic is identical to _run_with_llm -- this only adds
+    yield points around it so the frontend can show "which tools are being called"
+    live instead of only after the full answer is ready. Kept as a separate
+    function (rather than refactoring _run_with_llm to share it) so the existing,
+    already-verified non-streaming path can't regress from this change.
+    """
+    history = history or []
+    if not llm.get_providers():
+        yield {"type": "done", **_deterministic_ask(message)}
+        return
+
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    for h in history[-MAX_HISTORY_TURNS:]:
+        if h.get("role") in ("user", "assistant") and h.get("content"):
+            messages.append({"role": h["role"], "content": h["content"]})
+    messages.append({"role": "user", "content": message})
+
+    providers = llm.get_providers()
+    active_idx = 0
+    last_data = None
+    last_tool_name = None
+
+    for _ in range(MAX_TOOL_TURNS):
+        turn = None
+        while active_idx < len(providers):
+            provider = providers[active_idx]
+            try:
+                turn = provider.generate_with_tools(messages, TOOLS, max_tokens=2048)
+            except QuotaExceededError:
+                logger.warning("%s quota exceeded -- failing over", provider.provider_name)
+                active_idx += 1
+                continue
+            if turn is None:
+                logger.warning("%s returned no result -- failing over", provider.provider_name)
+                active_idx += 1
+                continue
+            break
+
+        if turn is None:
+            yield {"type": "done", **_deterministic_ask(message)}
+            return
+
+        if not turn["tool_calls"]:
+            summary, fmt = _parse_final_answer(turn["content"])
+            yield {"type": "done", **_build_response(summary, fmt, last_tool_name, last_data)}
+            return
+
+        messages.append({"role": "assistant", "content": turn["content"], "tool_calls": turn["tool_calls"]})
+        for tc in turn["tool_calls"]:
+            yield {"type": "tool_call", "tool": tc["name"], "arguments": tc["arguments"]}
+            result = _dispatch(tc["name"], tc["arguments"])
+            last_data = result
+            last_tool_name = tc["name"]
+            payload = _truncate_for_llm(tc["name"], result)
+            messages.append({"role": "tool", "tool_call_id": tc["id"], "name": tc["name"], "content": json.dumps(payload, default=str)[:10000]})
+            yield {"type": "tool_result", "tool": tc["name"]}
+
+    yield {"type": "done", **_build_response("I'm having trouble narrowing that down -- try a more specific question.", "text", last_tool_name, last_data)}
 
 HELP_TEXT = (
     "I can help with: who's available for a skillset, which pipeline deal needs staffing, "
