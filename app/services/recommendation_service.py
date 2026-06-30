@@ -7,7 +7,7 @@ from app.engines import scoring
 from app.engines.designation_ladder import adjacent_designations
 from app.engines.employee_coe import get_employee_primary_coe_map
 from app.engines.resource_code_decoder import decode_resource_code
-from app.engines.skillset_classifier import classify_skillset
+from app.engines.skillset_classifier import classify_skillset, classify_skillset_with_proof
 
 TOP_N = 15
 MAX_FALLBACK_CANDIDATES = 5
@@ -273,7 +273,7 @@ def get_recommendations_for_pipeline_row(
 
     row = pipeline.iloc[row_index]
     requested_designations = decode_resource_code(row.get("resources_requested"))
-    requested_coe_categories = classify_skillset(row.get("skillset"))
+    requested_coe_categories, skillset_classification_proof = classify_skillset_with_proof(row.get("skillset"))
     result = get_recommendations(
         skillset_text=row.get("skillset", ""),
         likely_start_date=str(row.get("likely_start_date")),
@@ -307,6 +307,7 @@ def get_recommendations_for_pipeline_row(
         "deal_stage_hubspot": row.get("deal_stage_hubspot"),
         "comments": row.get("comments"),
         "skillset_coe_categories": requested_coe_categories,
+        "skillset_classification_proof": skillset_classification_proof,
         "requested_designations": requested_designations,
     }
 
