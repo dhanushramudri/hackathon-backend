@@ -51,8 +51,6 @@ def derive_skills_for_coes(coes: list[str], top_n: int = TOP_N_SKILLS) -> dict:
     org_wide_fallback = _aggregate_skills(real_skills, top_n)
 
     by_coe: dict[str, dict] = {}
-    combined_seen: set[tuple] = set()
-    combined: list[dict] = []
     for coe in coes:
         mapping = COE_SKILL_MAP.get(coe, {"skill_coes": [], "confidence": "none"})
         skill_coes = mapping["skill_coes"]
@@ -71,11 +69,27 @@ def derive_skills_for_coes(coes: list[str], top_n: int = TOP_N_SKILLS) -> dict:
                 "matched_skill_coes": [],
                 "fallback": "no_direct_coe_skill_data",
             }
-        for s in by_coe[coe]["skills"]:
+
+    # Round-robin across CoEs (each CoE's own #1 skill, then each CoE's #2, ...) instead
+    # of pooling every CoE's candidates and re-sorting by org-wide employee_count -- the
+    # latter let a CoE with broadly common skills (e.g. SQL/Python in Data Engineering)
+    # crowd out every skill from a second selected CoE whose skills are real but rarer
+    # org-wide (e.g. Scrapy, Robots.txt awareness in TechOps & Automation), so a 2-CoE
+    # selection silently showed only one CoE's skills.
+    combined_seen: set[tuple] = set()
+    combined: list[dict] = []
+    max_rounds = max((len(by_coe[c]["skills"]) for c in coes), default=0)
+    for i in range(max_rounds):
+        if len(combined) >= top_n:
+            break
+        for coe in coes:
+            skills_list = by_coe[coe]["skills"]
+            if i >= len(skills_list):
+                continue
+            s = skills_list[i]
             key = (s["skill"], s["subskill"])
             if key not in combined_seen:
                 combined_seen.add(key)
                 combined.append(s)
 
-    combined.sort(key=lambda s: -s["employee_count"])
     return {"by_coe": by_coe, "combined": combined[:top_n]}
