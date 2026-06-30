@@ -157,6 +157,40 @@ def score_skill_match(required_phrases: list[str], employee_tokens: dict[str, di
     confidence = "observed" if any_observed else ("imputed" if weights else "no_match")
     return {"score": float(round(min(score, 1.0), 3)), "matched": matched, "missing": missing, "confidence": confidence}
 
+PHRASE_SUBSKILL_MAX_WORDS = 6
+
+def top_skill_phrases_for_employees(skills_subset: pd.DataFrame, generic_coes: frozenset, top_n: int) -> list[str]:
+    """Turns a set of employees' real (observed, non-zero, non-generic) skill rows
+    into a short list of phrases ranked by how many of those employees share them --
+    the "who actually has this" signal, scoped to whichever employee set is passed in
+    (a project's roster, a single person, etc). Shared by leave_service (backfill
+    required-skills) and health_detail_service (relief-staffing required-skills) so
+    both derive a project's effective skillset identically."""
+    if skills_subset.empty:
+        return []
+    real = skills_subset[
+        skills_subset["skill_source"].eq("observed")
+        & (~skills_subset["coe"].isin(generic_coes))
+        & (pd.to_numeric(skills_subset["score"], errors="coerce").fillna(0) > 0)
+    ]
+    if real.empty:
+        return []
+    grouped = (
+        real.groupby(["skill", "subskill"])
+        .agg(employee_count=("employee_id", "nunique"), avg_score=("score", "mean"))
+        .reset_index()
+        .sort_values(["employee_count", "avg_score"], ascending=[False, False])
+        .head(top_n)
+    )
+    phrases = []
+    for r in grouped.itertuples(index=False):
+        subskill = str(r.subskill) if pd.notna(r.subskill) else ""
+        if subskill and len(subskill.split()) <= PHRASE_SUBSKILL_MAX_WORDS:
+            phrases.append(f"{r.skill} - {subskill}")
+        else:
+            phrases.append(str(r.skill))
+    return phrases
+
 DEFAULT_COMPETENCY_SCORE = 0.5
 IMPUTED_COMPETENCY_DISCOUNT = 0.6
 

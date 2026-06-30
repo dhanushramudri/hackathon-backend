@@ -26,7 +26,7 @@ from app.services.employee_profile_service import (
     get_employee_profile,
 )
 from app.services.free_pool_service import get_free_pool
-from app.services.health_detail_service import ProjectNotFound, get_project_health_detail
+from app.services.health_detail_service import ProjectNotFound, get_project_health_detail, get_relief_staffing_candidates
 from app.services.health_monitor_service import get_health_report
 from app.services.leave_service import get_leave_impact
 from app.services.pipeline_outlook_service import get_pipeline_outlook, get_pipeline_outlook_drilldown, get_six_month_outlook
@@ -74,6 +74,11 @@ for "why" or "what should I do" questions):
   in that list, it's likely PROPOSE/DEAL WON/CLOSED; use get_project_info (works for any
   status) and get_project_roster (who's ever been staffed on it, for churn/rotation
   questions) instead of treating it as not found.
+- For "is the team burning out" / "who can we add to relieve this project" / "save this
+  project from risk" questions, call get_project_health_detail first to confirm
+  overtime_risk or understaffed actually fired (don't suggest relief staffing for a
+  project that isn't actually flagged), then call get_relief_staffing_candidates for the
+  real ranked Free Pool matches.
 - For "who's logged hours on this allocation" / "prove the hours" / "are there missing
   days" questions about one specific person+project, call get_allocation_timesheet with
   the employee_id and project_id (from get_employee_profile's allocations list or
@@ -259,6 +264,15 @@ TOOLS = [
     {
         "name": "get_project_health_detail",
         "description": "The full real-rows proof behind one project's fired risk root causes (overrun, shadow-heavy, high churn, understaffed, overtime risk, effort spike, and the 3 WSR signals). Requires a real project_code -- call get_health_report first if you don't already have one from this conversation.",
+        "parameters": {
+            "type": "object",
+            "properties": {"project_code": {"type": "string"}},
+            "required": ["project_code"],
+        },
+    },
+    {
+        "name": "get_relief_staffing_candidates",
+        "description": "For a project that's overtime-risk and/or understaffed, real Free Pool people (fully_free/under_utilized, available right now) ranked by skill+competency+availability fit against this project's own real skillset -- 'who could we add to take pressure off this team'. Call get_project_health_detail first to confirm overtime_risk or understaffed actually fired before calling this.",
         "parameters": {
             "type": "object",
             "properties": {"project_code": {"type": "string"}},
@@ -456,6 +470,11 @@ def _dispatch(name: str, args: dict):
             return get_project_health_detail(args.get("project_code", ""))
         except ProjectNotFound as exc:
             return {"error": str(exc)}
+    if name == "get_relief_staffing_candidates":
+        try:
+            return get_relief_staffing_candidates(args.get("project_code", ""))
+        except ProjectNotFound as exc:
+            return {"error": str(exc)}
     if name == "get_pipeline_outlook":
         return get_pipeline_outlook(
             start_date=args.get("start_date"),
@@ -540,6 +559,8 @@ def _truncate_for_llm(name: str, result):
         return _capped(result, 30)
     if name == "get_recommendations_coverage_summary" and isinstance(result, dict):
         return {k: v for k, v in result.items() if k != "rows"}
+    if name == "get_relief_staffing_candidates" and isinstance(result, dict):
+        return {**result, "candidates": _capped(result.get("candidates", []), 10)}
     if name == "get_project_health_detail" and isinstance(result, dict):
         trimmed = {k: v for k, v in result.items() if k != "allocations_roster"}
         spike = trimmed.get("effort_spike")
@@ -720,6 +741,21 @@ def _redeploy_matches_table(data) -> dict | None:
     ]
     return {"columns": columns, "rows": rows}
 
+def _relief_staffing_table(data) -> dict | None:
+    candidates = (data or {}).get("candidates") if isinstance(data, dict) else None
+    if not candidates:
+        return None
+    columns = ["Employee", "Role", "Reason free", "Skill", "Competency", "Available %", "Fit"]
+    rows = [
+        [
+            c.get("employee_id"), c.get("job_name") or "-", c.get("reason"),
+            f"{c.get('skill_score', 0) * 100:.0f}%", f"{c.get('competency_score', 0) * 100:.0f}%",
+            f"{c.get('idle_capacity_pct', 0):.0f}%", f"{c.get('composite_score', 0) * 100:.0f}%",
+        ]
+        for c in candidates[:10]
+    ]
+    return {"columns": columns, "rows": rows}
+
 def _rate_card_table(data) -> dict | None:
     if not isinstance(data, list) or not data:
         return None
@@ -809,6 +845,7 @@ def _revenue_table(data) -> dict | None:
 _TABLE_BUILDERS = {
     "get_recommendations": _candidates_table,
     "get_recommendations_for_pipeline_row": _candidates_table,
+    "get_relief_staffing_candidates": _relief_staffing_table,
     "list_pipeline_demand": _pipeline_demand_table,
     "get_health_report": _health_table,
     "get_allocation_report": _allocation_table,

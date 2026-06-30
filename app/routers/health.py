@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 
-from app.services.health_detail_service import ProjectNotFound, get_project_health_detail
+from app.services.health_detail_service import ProjectNotFound, get_project_health_detail, get_relief_staffing_candidates
 from app.services.health_monitor_service import get_health_report, get_validation_summary
 from app.services.project_roster_service import get_project_info, get_project_roster
 
@@ -29,5 +29,12 @@ def project_info(project_code: str) -> dict:
 def project_detail(project_code: str) -> dict:
     try:
         return get_project_health_detail(project_code)
+    except ProjectNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+@router.get("/projects/{project_code}/relief-candidates")
+def relief_candidates(project_code: str, top_n: int = 30) -> dict:
+    try:
+        return get_relief_staffing_candidates(project_code, top_n=top_n)
     except ProjectNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

@@ -3,7 +3,7 @@ import pandas as pd
 from app.core.adapter import get_adapter
 from app.engines.coe_skill_engine import GENERIC_SKILL_COES
 from app.engines.role_mix_engine import canonical_project_coe
-from app.engines.scoring import bucket, build_employee_skill_index, score_skill_match
+from app.engines.scoring import bucket, build_employee_skill_index, score_skill_match, top_skill_phrases_for_employees
 from app.services.free_pool_service import get_free_pool_by_designation
 
 MAX_BACKFILL_SHOWN = 5
@@ -12,38 +12,9 @@ TOP_N_REQUIRED_SKILLS = 8
 # these skills" -- a single person's idiosyncratic skill list isn't a project
 # signature. Falls back to the on-leave person's own skills instead (see below).
 MIN_ROSTER_FOR_PROJECT_SKILLS = 2
-MAX_SUBSKILL_WORDS = 6
 
 def _top_skill_phrases(skills_subset: pd.DataFrame, top_n: int) -> list[str]:
-    """Turns a set of employees' real (observed, non-zero, non-generic) skill rows
-    into a short list of phrases ranked by how many of those employees share them --
-    the same "who actually has this" signal coe_skill_engine uses for CoE-level
-    skill aggregation, just scoped to whichever employee set is passed in (a
-    project's roster, or a single on-leave person)."""
-    if skills_subset.empty:
-        return []
-    real = skills_subset[
-        skills_subset["skill_source"].eq("observed")
-        & (~skills_subset["coe"].isin(GENERIC_SKILL_COES))
-        & (pd.to_numeric(skills_subset["score"], errors="coerce").fillna(0) > 0)
-    ]
-    if real.empty:
-        return []
-    grouped = (
-        real.groupby(["skill", "subskill"])
-        .agg(employee_count=("employee_id", "nunique"), avg_score=("score", "mean"))
-        .reset_index()
-        .sort_values(["employee_count", "avg_score"], ascending=[False, False])
-        .head(top_n)
-    )
-    phrases = []
-    for r in grouped.itertuples(index=False):
-        subskill = str(r.subskill) if pd.notna(r.subskill) else ""
-        if subskill and len(subskill.split()) <= MAX_SUBSKILL_WORDS:
-            phrases.append(f"{r.skill} - {subskill}")
-        else:
-            phrases.append(str(r.skill))
-    return phrases
+    return top_skill_phrases_for_employees(skills_subset, GENERIC_SKILL_COES, top_n)
 
 def get_leave_impact() -> list[dict]:
     adapter = get_adapter()

@@ -1,7 +1,10 @@
 import pandas as pd
 
 from app.core.adapter import get_adapter
-from app.engines.role_mix_engine import get_role_mix
+from app.engines import scoring
+from app.engines.coe_skill_engine import GENERIC_SKILL_COES, derive_skills_for_coes
+from app.engines.role_mix_engine import canonical_project_coe, get_role_mix
+from app.services.free_pool_service import get_free_pool
 from app.services.health_monitor_service import (
     OVERRUN_DAYS_THRESHOLD,
     SHADOW_SHARE_THRESHOLD,
@@ -250,4 +253,107 @@ def get_project_health_detail(project_code: str) -> dict:
         "effort_spike": effort_spike_proof,
         "wsr": wsr_proof,
         "allocations_roster": roster,
+    }
+
+TOP_N_RELIEF_REQUIRED_SKILLS = 8
+MIN_ROSTER_FOR_RELIEF_SKILLS = 2
+MAX_RELIEF_CANDIDATES_SHOWN = 30
+
+def get_relief_staffing_candidates(project_code: str, top_n: int = MAX_RELIEF_CANDIDATES_SHOWN) -> dict:
+    """Who from the Free Pool could realistically be added to a project that's
+    overtime-risk and/or understaffed -- the same composite (skill + competency +
+    availability) scoring used everywhere else, with the required skillset derived
+    the same way the Leave page derives one for backfill: from this project's own
+    team's real observed skills, falling back to typical skills for the project's
+    CoE when the roster is too thin to trust as a signature.
+
+    Two tiers, both real and both scored the same way (skill + competency, same
+    weights as everywhere else): people with REAL idle capacity right now
+    (fully_free/under_utilized), and people who are still busy but have a real,
+    dated end to that -- "ending_soon" -- shown separately with their actual free
+    date so relief isn't limited to only who happens to be idle today."""
+    summary = next((r for r in get_health_report() if r["project_code"] == project_code), None)
+    if summary is None:
+        raise ProjectNotFound(project_code)
+    root_causes = summary["root_causes"]
+
+    adapter = get_adapter()
+    skills = adapter.get_skills()
+    allocations = adapter.get_allocations()
+    competencies = adapter.get_competencies()
+
+    proj_allocs = allocations[allocations["project_id"] == project_code]
+    roster_ids = proj_allocs[proj_allocs["is_allocation_active"] == 1]["employee_id"].unique()
+
+    required_phrases: list[str] = []
+    required_skill_source = "none"
+    if len(roster_ids) >= MIN_ROSTER_FOR_RELIEF_SKILLS:
+        required_phrases = scoring.top_skill_phrases_for_employees(
+            skills[skills["employee_id"].isin(roster_ids)], GENERIC_SKILL_COES, TOP_N_RELIEF_REQUIRED_SKILLS
+        )
+        if required_phrases:
+            required_skill_source = "project_roster"
+
+    project_coe = canonical_project_coe(summary.get("tech_coe"))
+    if not required_phrases and project_coe:
+        coe_skills = derive_skills_for_coes([project_coe], TOP_N_RELIEF_REQUIRED_SKILLS)["combined"]
+        required_phrases = [
+            f"{s['skill']} - {s['subskill']}" if s.get("subskill") else s["skill"] for s in coe_skills
+        ]
+        if required_phrases:
+            required_skill_source = "coe_typical"
+
+    skill_index = scoring.build_employee_skill_index(skills)
+    competency_index = scoring.build_employee_competency_index(competencies)
+    today = pd.Timestamp.now().normalize()
+
+    def score_one(c: dict, available_now: bool) -> dict:
+        emp_id = c["employee_id"]
+        skill_result = scoring.score_skill_match(required_phrases, skill_index.get(emp_id, {}))
+        competency_entry = competency_index.get(emp_id, {"score": scoring.DEFAULT_COMPETENCY_SCORE, "confidence": "imputed"})
+        # An "ending_soon" person isn't free yet, so their current idle_capacity_pct
+        # (which is 0 or near it today) isn't a real availability signal -- scoring
+        # them at 0 here keeps the composite honest; available_from_date carries the
+        # actual real-world timing separately instead of faking it into the score.
+        availability_score = min((c.get("idle_capacity_pct") or 0.0) / 100.0, 1.0) if available_now else 0.0
+        composite = scoring.composite_score(skill_result["score"], competency_entry["score"], availability_score)
+        return {
+            **c,
+            "composite_score": composite,
+            "skill_score": skill_result["score"],
+            "matched_skills": skill_result["matched"],
+            "missing_skills": skill_result["missing"],
+            "skill_confidence": skill_result["confidence"],
+            "competency_score": competency_entry["score"],
+            "competency_confidence": competency_entry["confidence"],
+            "skill_bucket": scoring.bucket(skill_result["score"], skill_result["confidence"]),
+            "coe_matches_project": bool(project_coe) and c.get("primary_coe") == project_coe,
+        }
+
+    free_pool = get_free_pool()
+    now_pool = [c for c in free_pool if c["reason"] in ("fully_free", "under_utilized") and c["employee_id"] not in roster_ids]
+    soon_pool = [c for c in free_pool if c["reason"] == "ending_soon" and c["employee_id"] not in roster_ids]
+
+    candidates = sorted((score_one(c, True) for c in now_pool), key=lambda c: -c["composite_score"])
+
+    available_soon = []
+    for c in soon_pool:
+        scored = score_one(c, False)
+        days = c.get("days_to_end")
+        scored["days_to_available"] = days
+        scored["available_from_date"] = (today + pd.Timedelta(days=days)).strftime("%Y-%m-%d") if days is not None else None
+        available_soon.append(scored)
+    available_soon.sort(key=lambda c: (-c["composite_score"], c.get("days_to_available") if c.get("days_to_available") is not None else 999))
+
+    return {
+        "project_code": project_code,
+        "overtime_fired": "overtime_risk" in root_causes,
+        "understaffed_fired": "understaffed" in root_causes,
+        "overtime_employee_count": summary.get("overtime_employee_count", 0),
+        "project_coe": project_coe,
+        "required_skills": required_phrases,
+        "required_skill_source": required_skill_source,
+        "candidate_pool_size": len(now_pool),
+        "candidates": candidates[:top_n],
+        "available_soon_candidates": available_soon[:top_n],
     }
