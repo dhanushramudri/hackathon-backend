@@ -1,3 +1,5 @@
+import re
+
 import pandas as pd
 
 from app.core.adapter import get_adapter
@@ -325,28 +327,34 @@ def get_recommendations_for_pipeline_row(
 
     return result
 
-def get_redeploy_matches_for_employee(employee_id: str, top_n: int = 5) -> list[dict]:
+_open_rows_cache: list[dict] | None = None
+_open_rows_fingerprint: tuple | None = None
+
+def _open_pipeline_rows_enriched() -> list[dict]:
+    """Open (not-yet-resourced) pipeline rows with required_phrases/skill_areas
+    precomputed once. tokenize_skillset + enrich_required_phrases + classify_skillset
+    are each a real DataFrame scan -- redoing them per employee (245 open rows x 412
+    free-pool people) measured at ~500s for the full pool. Precomputing once here and
+    caching (same fingerprint pattern as scoring.build_employee_skill_index) drops that
+    to a single pass; every per-employee match call below reuses this list."""
+    global _open_rows_cache, _open_rows_fingerprint
     adapter = get_adapter()
     pipeline = adapter.get_pipeline_forecast()
-    pipeline_skillset = adapter.get_pipeline_skillset()
-    skill_index = scoring.build_employee_skill_index(adapter.get_skills())
-    employee_tokens = skill_index.get(employee_id, {})
-    if not employee_tokens:
-        return []
+    fingerprint = (len(pipeline), int(pd.util.hash_pandas_object(pipeline["status"], index=False).sum()))
+    if _open_rows_cache is not None and fingerprint == _open_rows_fingerprint:
+        return _open_rows_cache
 
+    pipeline_skillset = adapter.get_pipeline_skillset()
     is_open = ~pipeline["status"].fillna("").str.strip().str.lower().eq("resourced")
     open_rows = pipeline[is_open]
 
-    matches = []
+    enriched = []
     for idx, row in open_rows.iterrows():
         required_phrases = scoring.tokenize_skillset(row.get("skillset", ""))
         required_phrases = scoring.enrich_required_phrases(required_phrases, pipeline_skillset)
         if not required_phrases:
             continue
-        result = scoring.score_skill_match(required_phrases, employee_tokens)
-        if result["score"] <= 0:
-            continue
-        matches.append(
+        enriched.append(
             {
                 "row_index": int(idx),
                 "client": row.get("client") if pd.notna(row.get("client")) else None,
@@ -355,13 +363,131 @@ def get_redeploy_matches_for_employee(employee_id: str, top_n: int = 5) -> list[
                 "likely_start_date": _fmt_date(row.get("likely_start_date")),
                 "status": row.get("status"),
                 "priority": row.get("priority"),
-                "skill_score": result["score"],
-                "matched_skills": result["matched"],
-                "missing_skills": result["missing"],
+                "required_phrases": required_phrases,
+                # Pre-split once here instead of inside score_skill_match -- that function
+                # re.split()s every phrase on every call, which is fine for one employee
+                # but is the dominant cost when scoring hundreds of employees x hundreds
+                # of rows (the batch summary below).
+                "phrase_tokens": [[t for t in re.split(r"\W+", p.lower()) if len(t) > 2] for p in required_phrases],
+                "skill_areas": classify_skillset(row.get("skillset", "")),
             }
         )
-    matches.sort(key=lambda m: -m["skill_score"])
+    _open_rows_cache = enriched
+    _open_rows_fingerprint = fingerprint
+    return enriched
+
+def get_redeploy_matches_for_employee(employee_id: str, top_n: int = 20) -> list[dict]:
+    """Reverse direction of get_recommendations: for one specific employee, every open
+    pipeline deal they could redeploy into, ranked by the same composite_score (skill +
+    competency + availability) used everywhere else in the app -- not skill alone, so a
+    candidate who's a perfect skill match but already busy or weak on competency doesn't
+    outrank someone who's a genuinely better overall fit."""
+    adapter = get_adapter()
+    skill_index = scoring.build_employee_skill_index(adapter.get_skills())
+    employee_tokens = skill_index.get(employee_id, {})
+    if not employee_tokens:
+        return []
+
+    competency_index = scoring.build_employee_competency_index(adapter.get_competencies())
+    competency_entry = competency_index.get(employee_id, {"score": scoring.DEFAULT_COMPETENCY_SCORE, "confidence": "imputed"})
+    allocations = adapter.get_allocations()
+
+    matches = []
+    for row in _open_pipeline_rows_enriched():
+        skill_result = scoring.score_skill_match(row["required_phrases"], employee_tokens)
+        if skill_result["score"] <= 0:
+            continue
+        as_of_date = pd.to_datetime(row["likely_start_date"]) if row["likely_start_date"] else pd.Timestamp.now().normalize()
+        busy_pct = float(availability_as_of(allocations, as_of_date).get(employee_id, 0.0))
+        available_pct = max(0.0, 100.0 - busy_pct)
+        availability_score = min(available_pct / 100.0, 1.0)
+        composite = scoring.composite_score(skill_result["score"], competency_entry["score"], availability_score)
+        matches.append(
+            {
+                "row_index": row["row_index"],
+                "client": row["client"],
+                "resources_requested": row["resources_requested"],
+                "requested_pct": row["requested_pct"],
+                "likely_start_date": row["likely_start_date"],
+                "status": row["status"],
+                "priority": row["priority"],
+                "skill_areas": row["skill_areas"],
+                "skill_score": skill_result["score"],
+                "matched_skills": skill_result["matched"],
+                "missing_skills": skill_result["missing"],
+                "skill_confidence": skill_result["confidence"],
+                "competency_score": competency_entry["score"],
+                "competency_confidence": competency_entry["confidence"],
+                "available_pct": round(available_pct, 1),
+                "composite_score": composite,
+                "bucket": scoring.bucket(skill_result["score"], skill_result["confidence"]),
+            }
+        )
+    matches.sort(key=lambda m: -m["composite_score"])
     return matches[:top_n]
+
+def _fast_skill_score(phrase_tokens_list: list[list[str]], employee_tokens: dict[str, dict]) -> float:
+    """Score-only twin of scoring.score_skill_match for the batch summary path -- skips
+    building matched/missing lists and re-tokenizing phrases (both already precomputed
+    in _open_pipeline_rows_enriched), since the summary only needs the number."""
+    if not phrase_tokens_list:
+        return 0.5
+    weights = []
+    for tokens in phrase_tokens_list:
+        best_weight = 0.0
+        for t in tokens:
+            entry = employee_tokens.get(t)
+            if entry is not None and entry["weight"] > best_weight:
+                best_weight = entry["weight"]
+        if best_weight > 0:
+            weights.append(best_weight)
+    if not weights:
+        return 0.0
+    return min(sum(weights) / len(phrase_tokens_list), 1.0)
+
+def get_redeploy_summary_for_employees(employee_ids: list[str]) -> dict[str, dict]:
+    """Cheap batch variant for the Free Pool table's 'Projects Recommended' column --
+    one top match + count per employee, for potentially hundreds of employees at once.
+    Uses a single as-of-today availability snapshot shared across everyone (one groupby
+    over the whole org, O(1) lookup per employee) instead of get_redeploy_matches_for_employee's
+    precise per-deal as-of-likely-start-date check -- exact for "today", a reasonable
+    trade for a table-wide preview; the modal drilldown still uses the precise version."""
+    adapter = get_adapter()
+    skill_index = scoring.build_employee_skill_index(adapter.get_skills())
+    competency_index = scoring.build_employee_competency_index(adapter.get_competencies())
+    allocations = adapter.get_allocations()
+    busy_pct_today = availability_as_of(allocations, pd.Timestamp.now().normalize())
+    open_rows = _open_pipeline_rows_enriched()
+
+    summary: dict[str, dict] = {}
+    for emp_id in employee_ids:
+        employee_tokens = skill_index.get(emp_id, {})
+        if not employee_tokens:
+            summary[emp_id] = {"recommended_project_count": 0, "top_match": None}
+            continue
+        competency_entry = competency_index.get(emp_id, {"score": scoring.DEFAULT_COMPETENCY_SCORE, "confidence": "imputed"})
+        available_pct = max(0.0, 100.0 - float(busy_pct_today.get(emp_id, 0.0)))
+        availability_score = min(available_pct / 100.0, 1.0)
+
+        best = None
+        count = 0
+        for row in open_rows:
+            skill_score = _fast_skill_score(row["phrase_tokens"], employee_tokens)
+            if skill_score <= 0:
+                continue
+            count += 1
+            composite = scoring.composite_score(skill_score, competency_entry["score"], availability_score)
+            if best is None or composite > best["composite_score"]:
+                best = {
+                    "row_index": row["row_index"],
+                    "client": row["client"],
+                    "resources_requested": row["resources_requested"],
+                    "skill_areas": row["skill_areas"],
+                    "skill_score": skill_score,
+                    "composite_score": composite,
+                }
+        summary[emp_id] = {"recommended_project_count": count, "top_match": best}
+    return summary
 
 def get_coverage_summary() -> dict:
     adapter = get_adapter()

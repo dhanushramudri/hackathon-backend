@@ -13,7 +13,7 @@ def _idle_value_usd_per_month(job_name, idle_pct: float) -> float | None:
         return None
     return round((idle_pct / 100) * rate * STANDARD_MONTHLY_HOURS, 0)
 
-def get_free_pool() -> list[dict]:
+def get_free_pool(include_redeploy_summary: bool = True) -> list[dict]:
     adapter = get_adapter()
     employees = adapter.get_employees()
     allocations = adapter.get_allocations()
@@ -91,10 +91,25 @@ def get_free_pool() -> list[dict]:
             c["last_ended_project_id"] = None
             c["last_ended_date"] = None
 
+    if include_redeploy_summary:
+        # Imported here, not at module level -- recommendation_service doesn't import
+        # free_pool_service, but keeping the import local avoids any future risk of a
+        # circular import as both modules grow, and makes the dependency explicit at
+        # the one call site that actually needs it.
+        from app.services.recommendation_service import get_redeploy_summary_for_employees
+
+        summary = get_redeploy_summary_for_employees(list(pool.keys()))
+        for emp_id, c in pool.items():
+            s = summary.get(emp_id, {"recommended_project_count": 0, "top_match": None})
+            c["recommended_project_count"] = s["recommended_project_count"]
+            c["top_recommended_project"] = s["top_match"]
+
     return sorted(pool.values(), key=lambda c: (c["reason"] != "fully_free", c.get("current_allocation_pct", 0)))
 
 def get_free_pool_by_designation() -> dict[str, list[dict]]:
     grouped: dict[str, list[dict]] = {}
-    for c in get_free_pool():
+    # Leave's backfill matching doesn't use "recommended projects" -- skip the extra
+    # composite-score pass over every open pipeline row for every candidate here.
+    for c in get_free_pool(include_redeploy_summary=False):
         grouped.setdefault(c["job_name"], []).append(c)
     return grouped

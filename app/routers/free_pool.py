@@ -10,5 +10,5 @@ def free_pool() -> list[dict]:
     return get_free_pool()
 
 @router.get("/{employee_id}/matches")
-def free_pool_matches(employee_id: str, top_n: int = 5) -> list[dict]:
+def free_pool_matches(employee_id: str, top_n: int = 20) -> list[dict]:
     return get_redeploy_matches_for_employee(employee_id, top_n=top_n)
