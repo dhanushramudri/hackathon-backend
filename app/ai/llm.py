@@ -26,8 +26,10 @@ def _build_providers() -> list[LLMProvider]:
 
     if providers:
         logger.info("AI providers, in priority order: %s", [p.provider_name for p in providers])
+        print(f"[LLM] Providers loaded: {[p.provider_name for p in providers]}", flush=True)
     else:
         logger.warning("No AI provider configured -- copilot falls back to the deterministic router")
+        print("[LLM] WARNING: No AI provider configured — falling back to deterministic router", flush=True)
     return providers
 
 def get_providers() -> list[LLMProvider]:

@@ -106,6 +106,8 @@ class GeminiProvider(LLMProvider):
             return {"content": ("\n".join(text_parts).strip() or None) if not tool_calls else None, "tool_calls": tool_calls}
         except Exception as e:
             if is_quota_error(e):
+                print(f"[Gemini] QUOTA EXCEEDED: {e}", flush=True)
                 raise QuotaExceededError(str(e)) from e
+            print(f"[Gemini] ERROR: {type(e).__name__}: {e}", flush=True)
             logger.warning("Gemini generate_with_tools failed: %s", e)
             return None

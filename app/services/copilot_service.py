@@ -1018,7 +1018,7 @@ def _run_with_llm(message: str, history: list[dict]) -> dict:
 
     providers = llm.get_providers()
     if not providers:
-        return _deterministic_ask(message)
+        return _build_response("Buddy's AI is not configured. Please set GEMINI_API_KEY or ANTHROPIC_API_KEY in the backend .env file.", "text", None, None)
 
     active_idx = 0
     last_data = None
@@ -1041,7 +1041,7 @@ def _run_with_llm(message: str, history: list[dict]) -> dict:
             break
 
         if turn is None:
-            return _deterministic_ask(message)
+            return _build_response("Buddy's AI quota is currently exhausted. Please try again in a few minutes or contact your admin to refresh the API key.", "text", None, None)
 
         if not turn["tool_calls"]:
             summary, fmt = _parse_final_answer(turn["content"])
@@ -1058,9 +1058,8 @@ def _run_with_llm(message: str, history: list[dict]) -> dict:
     return _build_response("I'm having trouble narrowing that down -- try a more specific question.", "text", last_tool_name, last_data)
 
 def ask(message: str, history: list[dict] | None = None) -> dict:
-    if not llm.get_providers():
-        return _deterministic_ask(message)
     return _run_with_llm(message, history or [])
+
 
 def ask_stream(message: str, history: list[dict] | None = None):
     """SSE-friendly twin of ask()/_run_with_llm(): yields progress events as
@@ -1073,7 +1072,7 @@ def ask_stream(message: str, history: list[dict] | None = None):
     """
     history = history or []
     if not llm.get_providers():
-        yield {"type": "done", **_deterministic_ask(message)}
+        yield {"type": "done", **_build_response("Buddy's AI is not configured. Please set GEMINI_API_KEY or ANTHROPIC_API_KEY in the backend .env file.", "text", None, None)}
         return
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
@@ -1104,7 +1103,8 @@ def ask_stream(message: str, history: list[dict] | None = None):
             break
 
         if turn is None:
-            yield {"type": "done", **_deterministic_ask(message)}
+            print(f"[Buddy] All providers failed. last_tool_name={last_tool_name}", flush=True)
+            yield {"type": "done", **_build_response("Buddy's AI quota is currently exhausted. Please try again in a few minutes or contact your admin to refresh the API key.", "text", None, None)}
             return
 
         if not turn["tool_calls"]:
