@@ -198,6 +198,7 @@ def get_employee_profile(employee_id: str) -> dict:
         raise EmployeeNotFound(employee_id)
     employee_row = match.iloc[0]
 
+    coe_map = get_employee_primary_coe_map()
     current_allocations = [r for r in get_allocation_report() if r["employee_id"] == employee_id]
     employee_total_allocation_pct = current_allocations[0]["employee_total_allocation_pct"] if current_allocations else None
     employee_client_allocation_pct = current_allocations[0]["employee_client_allocation_pct"] if current_allocations else None
@@ -229,6 +230,8 @@ def get_employee_profile(employee_id: str) -> dict:
         "location": employee_row.get("location") if pd.notna(employee_row.get("location")) else None,
         "date_of_join": employee_row["date_of_join"].strftime("%Y-%m-%d") if pd.notna(employee_row.get("date_of_join")) else None,
         "account_status": bool(employee_row["account_status"]) if pd.notna(employee_row.get("account_status")) else None,
+        "coe": coe_map.get(employee_id),
+        "manager_employee_id": employee_row.get("manager_employee_id") if pd.notna(employee_row.get("manager_employee_id")) else None,
         "employee_total_allocation_pct": employee_total_allocation_pct,
         "employee_client_allocation_pct": employee_client_allocation_pct,
         "employee_internal_allocation_pct": employee_internal_allocation_pct,

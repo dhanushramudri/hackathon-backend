@@ -490,6 +490,278 @@ def get_redeploy_summary_for_employees(employee_ids: list[str]) -> dict[str, dic
         summary[emp_id] = {"recommended_project_count": count, "top_match": best}
     return summary
 
+def _safe_str(val) -> str | None:
+    """Return None if val is NaN/None/empty, else the stripped string."""
+    if val is None:
+        return None
+    try:
+        if pd.isna(val):
+            return None
+    except (TypeError, ValueError):
+        pass
+    s = str(val).strip()
+    return s or None
+
+
+_PRIORITY_RANK: dict[str, int] = {"urgent": 0, "high": 1, "medium": 2, "low": 3}
+_STATUS_RANK: dict[str, int] = {"not resourced": 0, "part resourced": 1, "resourced": 2}
+_LATE_NOTICE_THRESHOLD_DAYS = 14
+
+
+def _is_late_notice(likely_start_date, request_received) -> bool | None:
+    """Mirrors the computation in the pipeline router — requests with fewer than
+    14 days between the received date and the target start are flagged late-notice."""
+    try:
+        if not pd.notna(likely_start_date) or not pd.notna(request_received):
+            return None
+        days = (pd.Timestamp(likely_start_date) - pd.Timestamp(request_received)).days
+        return bool(days < _LATE_NOTICE_THRESHOLD_DAYS)
+    except Exception:
+        return None
+
+
+def list_deals() -> list[dict]:
+    """Groups all pipeline rows by deal_id for the project-based recommendation view.
+    Rows without a deal_id form singleton groups so nothing is dropped.
+    Returns one entry per deal (or solo row) with full metadata for the left panel,
+    including every field needed to replicate the By-Role filter set."""
+    from collections import defaultdict
+    adapter = get_adapter()
+    pipeline = adapter.get_pipeline_forecast()
+
+    groups: dict[str, list[tuple[int, object]]] = defaultdict(list)
+    for idx, row in pipeline.iterrows():
+        deal_id = row.get("deal_id")
+        key = f"deal_{int(deal_id)}" if pd.notna(deal_id) else f"solo_{int(idx)}"
+        groups[key].append((int(idx), row))
+
+    deals: list[dict] = []
+    for deal_key, row_list in groups.items():
+        start_dates = [
+            row.get("likely_start_date")
+            for _, row in row_list
+            if pd.notna(row.get("likely_start_date"))
+        ]
+        earliest_start = _fmt_date(min(start_dates)) if start_dates else None
+
+        priority_vals = [_safe_str(row.get("priority")) for _, row in row_list]
+        priority_vals = [p for p in priority_vals if p]
+        best_priority: str | None = None
+        best_rank = 999
+        for p in priority_vals:
+            rank = _PRIORITY_RANK.get(p.lower(), 99)
+            if rank < best_rank:
+                best_rank = rank
+                best_priority = p
+
+        status_vals = [_safe_str(row.get("status")) for _, row in row_list]
+        status_vals = [s for s in status_vals if s]
+        worst_status: str | None = None
+        worst_rank = 999
+        for s in status_vals:
+            rank = _STATUS_RANK.get(s.lower(), 99)
+            if rank < worst_rank:
+                worst_rank = rank
+                worst_status = s
+
+        sow_signed = any(
+            (_safe_str(row.get("sow_signed")) or "").lower() == "yes"
+            for _, row in row_list
+        )
+        # A deal is late-notice if ANY role in it has a late-notice start
+        is_late = any(
+            _is_late_notice(row.get("likely_start_date"), row.get("request_received"))
+            for _, row in row_list
+        )
+        # start_date_confirmed: "Yes" if any role is confirmed
+        start_confirmed = any(
+            (_safe_str(row.get("start_date_confirmed")) or "").lower() == "yes"
+            for _, row in row_list
+        )
+
+        # Use the first role's values for fields that are deal-level by nature
+        first_row = row_list[0][1]
+
+        roles = [
+            {
+                "row_index": idx,
+                "resources_requested": _safe_str(row.get("resources_requested")),
+                "requested_pct": _safe_str(row.get("requested_pct")),
+                "skillset": _safe_str(row.get("skillset")),
+                "status": _safe_str(row.get("status")),
+                "priority": _safe_str(row.get("priority")),
+                "likely_start_date": _fmt_date(row.get("likely_start_date")),
+                "client_priority": _safe_str(row.get("client_priority")),
+                "request_type": _safe_str(row.get("request_type")),
+                "deal_stage_hubspot": _safe_str(row.get("deal_stage_hubspot")),
+                "start_date_confirmed": _safe_str(row.get("start_date_confirmed")),
+                "is_late_notice": _is_late_notice(row.get("likely_start_date"), row.get("request_received")),
+            }
+            for idx, row in row_list
+        ]
+
+        deals.append({
+            "deal_key": deal_key,
+            "row_indices": [idx for idx, _ in row_list],
+            "client": _safe_str(first_row.get("client")),
+            "cluster": int(first_row.get("cluster")) if pd.notna(first_row.get("cluster")) else None,
+            "solution": _safe_str(first_row.get("solution")),
+            "role_count": len(row_list),
+            "roles": roles,
+            "earliest_start": earliest_start,
+            "priority": best_priority,
+            "status": worst_status,
+            "sow_signed": sow_signed,
+            "is_late_notice": is_late,
+            "start_date_confirmed": "Yes" if start_confirmed else "No",
+            # Deal-level filter fields — taken from the first role (consistent within a deal)
+            "client_priority": _safe_str(first_row.get("client_priority")),
+            "request_type": _safe_str(first_row.get("request_type")),
+            "deal_stage_hubspot": _safe_str(first_row.get("deal_stage_hubspot")),
+        })
+
+    deals.sort(key=lambda d: (
+        d["earliest_start"] or "9999",
+        _PRIORITY_RANK.get((d["priority"] or "").strip().lower(), 99),
+    ))
+    return deals
+
+
+def get_project_team_recommendation(row_indices: list[int], top_n: int = 15) -> dict:
+    """Greedy conflict-aware team assignment for a set of pipeline roles.
+
+    Processes roles from most-constrained (fewest candidates that meet requested capacity)
+    to least-constrained, so that hard-to-fill roles get first pick of the talent pool.
+    Tracks remaining capacity per employee and deducts after each assignment so one person
+    cannot be double-booked across roles in the same deal.
+
+    Returns per-role assignments and a deal-level coverage summary."""
+    if not row_indices:
+        return {
+            "roles": [],
+            "coverage_summary": {"total": 0, "assigned": 0, "hire_signal": 0, "conflict": 0},
+        }
+
+    adapter = get_adapter()
+    pipeline = adapter.get_pipeline_forecast()
+
+    # Prefetch once — each get_recommendations_for_pipeline_row call reuses this
+    prefetched: dict = {
+        "employees": adapter.get_employees(),
+        "competencies": adapter.get_competencies(),
+        "allocations": adapter.get_allocations(),
+        "pipeline_skillset": adapter.get_pipeline_skillset(),
+        "skill_index": scoring.build_employee_skill_index(adapter.get_skills()),
+        "employee_coe_map": get_employee_primary_coe_map(),
+        "compute_earliest_availability": False,
+    }
+
+    # Fetch all candidates for each role with a large pool so constraint ordering is accurate
+    role_data: list[dict] = []
+    for row_index in row_indices:
+        if row_index < 0 or row_index >= len(pipeline):
+            continue
+        result = get_recommendations_for_pipeline_row(
+            row_index, pipeline=pipeline, top_n=2000, **prefetched
+        )
+        role_data.append({
+            "row_index": row_index,
+            "pipeline_row": result["pipeline_row"],
+            "all_candidates": result["candidates"],
+            "requested_pct": result["request"]["requested_pct"],
+            "hire_vs_redeploy_flag": result["hire_vs_redeploy_flag"],
+            "has_skillset": result["has_skillset"],
+            "fallback_candidates": result.get("fallback_candidates"),
+        })
+
+    # Sort roles from most-constrained (fewest capacity-meeting candidates) to least
+    def _viable_count(rd: dict) -> int:
+        return sum(1 for c in rd["all_candidates"] if c["meets_requested_capacity"])
+
+    constraint_order = sorted(range(len(role_data)), key=lambda i: _viable_count(role_data[i]))
+
+    # Bootstrap remaining_capacity from the first time we see each employee
+    remaining_capacity: dict[str, float] = {}
+    for rd in role_data:
+        for c in rd["all_candidates"]:
+            if c["employee_id"] not in remaining_capacity:
+                remaining_capacity[c["employee_id"]] = c["available_pct"]
+
+    assigned_map: dict[int, dict | None] = {}
+    status_map: dict[int, str] = {}
+
+    for i in constraint_order:
+        rd = role_data[i]
+        row_index = rd["row_index"]
+        req_pct = rd["requested_pct"]
+
+        # Pick the best candidate (already ranked by composite_score desc) with enough capacity
+        best: dict | None = None
+        for c in rd["all_candidates"]:
+            if remaining_capacity.get(c["employee_id"], 0.0) >= req_pct:
+                best = c
+                break
+
+        if best is not None:
+            remaining_capacity[best["employee_id"]] = remaining_capacity[best["employee_id"]] - req_pct
+            assigned_map[row_index] = best
+            status_map[row_index] = "assigned"
+        elif rd["hire_vs_redeploy_flag"]:
+            assigned_map[row_index] = None
+            status_map[row_index] = "hire_signal"
+        else:
+            # Internal candidates exist but all are capacity-exhausted by sibling roles
+            assigned_map[row_index] = None
+            status_map[row_index] = "conflict"
+
+    # Build output: preserve original row order; include top-N candidates for the UI
+    output_roles: list[dict] = []
+    for rd in role_data:
+        row_index = rd["row_index"]
+        assigned = assigned_map.get(row_index)
+        assigned_id = assigned["employee_id"] if assigned else None
+
+        # Alternatives: best candidates that still have enough remaining capacity, excluding
+        # the assigned one (informational — the RM decides whether to swap)
+        alternatives = [
+            c for c in rd["all_candidates"]
+            if c["employee_id"] != assigned_id
+            and remaining_capacity.get(c["employee_id"], 0.0) >= rd["requested_pct"]
+        ][:5]
+
+        output_roles.append({
+            "row_index": row_index,
+            "pipeline_row": rd["pipeline_row"],
+            "requested_pct": rd["requested_pct"],
+            "has_skillset": rd["has_skillset"],
+            "hire_vs_redeploy_flag": rd["hire_vs_redeploy_flag"],
+            "status": status_map.get(row_index, "conflict"),
+            "assigned": assigned,
+            "alternatives": alternatives,
+            "candidates": rd["all_candidates"][:top_n],
+            "fallback_candidates": rd["fallback_candidates"],
+        })
+
+    # Restore original row_indices order for the response
+    idx_order = {ri: pos for pos, ri in enumerate(row_indices)}
+    output_roles.sort(key=lambda r: idx_order.get(r["row_index"], 999))
+
+    total = len(output_roles)
+    assigned_count = sum(1 for r in output_roles if r["status"] == "assigned")
+    hire_count = sum(1 for r in output_roles if r["status"] == "hire_signal")
+    conflict_count = sum(1 for r in output_roles if r["status"] == "conflict")
+
+    return {
+        "roles": output_roles,
+        "coverage_summary": {
+            "total": total,
+            "assigned": assigned_count,
+            "hire_signal": hire_count,
+            "conflict": conflict_count,
+        },
+    }
+
+
 def get_coverage_summary() -> dict:
     adapter = get_adapter()
     skill_index = scoring.build_employee_skill_index(adapter.get_skills())
