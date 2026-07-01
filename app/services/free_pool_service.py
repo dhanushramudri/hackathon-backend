@@ -14,12 +14,20 @@ def _idle_value_usd_per_month(job_name, idle_pct: float) -> float | None:
     return round((idle_pct / 100) * rate * STANDARD_MONTHLY_HOURS, 0)
 
 def get_free_pool(include_redeploy_summary: bool = True) -> list[dict]:
+    from app.services.recommendation_service import NON_DELIVERY_ROLES  # local to avoid circular import
     adapter = get_adapter()
     employees = adapter.get_employees()
     allocations = adapter.get_allocations()
     report = get_allocation_report()
     coe_map = get_employee_primary_coe_map()
     today = pd.Timestamp.now().normalize()
+
+    delivery_ids = set(
+        employees[
+            (employees["account_status"] == 1)
+            & (~employees["job_name"].isin(NON_DELIVERY_ROLES))
+        ]["employee_id"]
+    )
 
     ended = allocations[allocations["allocated_end_date"] < today]
     # .last() after an ascending sort carries the project_id of that specific max-date
@@ -29,6 +37,8 @@ def get_free_pool(include_redeploy_summary: bool = True) -> list[dict]:
 
     ending_rows_by_emp: dict[str, list[dict]] = {}
     for r in report:
+        if r["employee_id"] not in delivery_ids:
+            continue
         # An ending internal-project allocation doesn't free up "capacity" in any real
         # sense -- it was never blocking client work to begin with.
         if r["ending_soon"] and r["type_of_project"] != INTERNAL_PROJECT_TYPE:
@@ -51,6 +61,8 @@ def get_free_pool(include_redeploy_summary: bool = True) -> list[dict]:
 
     for r in report:
         emp_id = r["employee_id"]
+        if emp_id not in delivery_ids:
+            continue
         if emp_id in pool:
             continue
         # Judged on client-only allocation, not utilization_band's total-based check --
@@ -64,7 +76,11 @@ def get_free_pool(include_redeploy_summary: bool = True) -> list[dict]:
             }
 
     allocated_ids = {r["employee_id"] for r in report}
-    fully_free = employees[(employees["account_status"] == 1) & (~employees["employee_id"].isin(allocated_ids))]
+    fully_free = employees[
+        (employees["account_status"] == 1)
+        & (~employees["job_name"].isin(NON_DELIVERY_ROLES))
+        & (~employees["employee_id"].isin(allocated_ids))
+    ]
     for _, row in fully_free.iterrows():
         pool.setdefault(row["employee_id"], {
             "employee_id": row["employee_id"], "job_name": row["job_name"], "department_name": row["department_name"],

@@ -1,5 +1,6 @@
 import re
 
+import numpy as np
 import pandas as pd
 
 from app.core.adapter import get_adapter
@@ -8,9 +9,41 @@ from app.engines.designation_ladder import adjacent_designations
 from app.engines.employee_coe import get_employee_primary_coe_map
 from app.engines.resource_code_decoder import decode_resource_code
 from app.engines.skillset_classifier import classify_skillset, classify_skillset_with_proof
+from app.engines import embedding_engine
 
 TOP_N = 15
 MAX_FALLBACK_CANDIDATES = 5
+
+# Roles that are never valid internal candidates for client delivery work.
+# Confirmed by resource management — Finance, HR/People, Operations, IT support,
+# Legal, Marketing, and executive/admin functions are excluded from all recommendations.
+NON_DELIVERY_ROLES: frozenset[str] = frozenset({
+    # Finance
+    "Senior Finance Executive", "Finance Executive", "Finance Officer", "Finance Specialist",
+    "Finance Assistant", "Finance Controller", "Associate Finance Controller",
+    "Interim Group Financial Controller", "Head of Financial Control",
+    "FP&A Business Partner", "FP&A Manager", "Head of FP&A",
+    # HR / People / Talent
+    "HRBP", "Associate HRBP", "Senior HRBP", "HR Administrator",
+    "Head of HR", "Head of HR & Operations", "Head of Talent",
+    "Senior HR Leader Consultant", "People Lead", "People Partner",
+    "People and Internal Communications Associate", "Senior People Operations",
+    "Talent Acquisition", "Talent Acquisition Partner",
+    "TA Coordinator", "Senior TA Coordinator",
+    # Operations / Admin / Resourcing
+    "Operations Associate", "Operations Lead",
+    "Resourcing Manager", "RM Specialist",
+    "Administration", "Admin Manager", "Office Manager",
+    "EA and Team Assistant", "Head of Delivery Governance",
+    # IT support (internal IT, not delivery engineers)
+    "IT Support Engineer", "IT Manager", "IT Infrastructure Enabler",
+    # Legal
+    "Legal Counsel", "Senior Legal Counsel", "Senior Legal Counsel & Head of Privacy",
+    # Marketing
+    "Marketing Manager",
+    # Executive / board
+    "Non-executive Director", "Partner",
+})
 
 class RowIndexOutOfRange(Exception):
 
@@ -114,6 +147,13 @@ def find_earliest_availability(
             }
     return None
 
+# Blend weights: embedding captures semantic similarity, word matching provides
+# verified skill overlap. 65/35 gives semantic the primary voice while keeping
+# the proof-backed word signal meaningful.
+_EMBEDDING_WEIGHT = 0.65
+_WORD_WEIGHT = 0.35
+
+
 def get_recommendations(
     skillset_text: str,
     likely_start_date: str,
@@ -130,6 +170,9 @@ def get_recommendations(
     skills: pd.DataFrame | None = None,
     skill_index: dict | None = None,
     employee_coe_map: dict | None = None,
+    # Embedding layer — pre-built by the caller for multi-role efficiency.
+    # When None, built here on demand (also cached internally by embedding_engine).
+    emp_embedding_index: dict | None = None,
 ) -> dict:
     adapter = get_adapter()
     employees = adapter.get_employees() if employees is None else employees
@@ -148,7 +191,24 @@ def get_recommendations(
         employee_coe_map = get_employee_primary_coe_map()
     busy_pct = availability_as_of(allocations, as_of_date)
 
-    active_employees = employees[employees["account_status"] == 1]
+    # ── Embedding layer ───────────────────────────────────────────────────────
+    # Build the employee embedding index on first call (cached inside the engine).
+    # Compute one job-description embedding, then batch cosine-sim across all
+    # employees in a single numpy matmul — total overhead ~1-2 ms.
+    if emp_embedding_index is None:
+        _skills_df = skills if skills is not None else adapter.get_skills()
+        emp_embedding_index = embedding_engine.build_employee_embedding_index(_skills_df)
+
+    job_vec = embedding_engine.embed_jobspec(skillset_text) if skillset_text else None
+    semantic_scores: dict[str, float] = {}
+    if emp_embedding_index is not None and job_vec is not None:
+        semantic_scores = embedding_engine.batch_cosine_similarity(job_vec, emp_embedding_index)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    active_employees = employees[
+        (employees["account_status"] == 1)
+        & (~employees["job_name"].isin(NON_DELIVERY_ROLES))
+    ]
     job_name_by_id = active_employees.set_index("employee_id")["job_name"].to_dict()
     competency_index = scoring.build_employee_competency_index(competencies)
     default_competency = {"score": scoring.DEFAULT_COMPETENCY_SCORE, "confidence": "imputed"}
@@ -156,7 +216,30 @@ def get_recommendations(
     results = []
     for emp_id in active_employees["employee_id"]:
         job_name = job_name_by_id.get(emp_id)
-        skill_result = scoring.score_skill_match(required_phrases, skill_index.get(emp_id, {}))
+        # Word-token matching — always runs; provides proof (matched/missing lists)
+        word_result = scoring.score_skill_match(required_phrases, skill_index.get(emp_id, {}))
+
+        # Semantic score — blended in when the embedding layer is available
+        sem_score = semantic_scores.get(emp_id)
+        if sem_score is not None and required_phrases:
+            # 65% semantic + 35% word — semantic drives ranking, word anchors it to
+            # verified skill records. When word score is 0 but semantic is strong, the
+            # candidate still surfaces; matched_skills proves it if available.
+            blended = _EMBEDDING_WEIGHT * sem_score + _WORD_WEIGHT * word_result["score"]
+            # Confidence: prefer observed/imputed from word matching; fall back to
+            # "semantic_match" when word matching found nothing but embedding did.
+            confidence = word_result["confidence"]
+            if confidence == "no_match" and sem_score >= 0.35:
+                confidence = "semantic_match"
+            skill_result = {
+                "score": round(min(blended, 1.0), 3),
+                "matched": word_result["matched"],
+                "missing": word_result["missing"],
+                "confidence": confidence,
+            }
+        else:
+            skill_result = word_result
+
         competency_entry = competency_index.get(emp_id, default_competency)
         competency_score = competency_entry["score"]
         competency_confidence = competency_entry["confidence"]
@@ -196,7 +279,22 @@ def get_recommendations(
             }
         )
 
-    ranked = sorted(results, key=lambda r: r["composite_score"], reverse=True)
+    # Sort by bucket first (eligible > trainable > gap), then confidence tier
+    # (observed > imputed/semantic > no_match), then composite score.  Without
+    # this, a 100%-available employee with only inferred/imputed skills can rank
+    # above a Software Engineer with real observed (but weaker or partially busy)
+    # skills purely because availability inflates their composite.
+    _BUCKET_RANK = {"eligible": 3, "trainable": 2, "gap": 1, "not_assessed": 0}
+    _CONFIDENCE_RANK = {"observed": 2, "imputed": 1, "semantic_match": 1, "no_match": 0, "no_requirement": 0}
+    ranked = sorted(
+        results,
+        key=lambda r: (
+            _BUCKET_RANK.get(r["bucket"], 0),
+            _CONFIDENCE_RANK.get(r["skill_confidence"], 0),
+            r["composite_score"],
+        ),
+        reverse=True,
+    )
     candidates_meeting_capacity = [r for r in ranked if r["meets_requested_capacity"]]
     pool = candidates_meeting_capacity or ranked
     top = pool[:top_n]
@@ -234,9 +332,20 @@ def get_recommendations(
     # really just the most available, unranked-by-skill person (bucket="not_assessed").
     # Surfacing the real pool size and match count lets the UI say so honestly.
     real_match_count = sum(1 for r in top if r["bucket"] != "not_assessed")
-    genuine_skill_match_count = sum(
-        1 for r in top if r["skill_confidence"] not in ("no_match", "no_requirement")
+    # observed = directly assessed skill records (highest confidence)
+    # imputed  = inferred from peers/defaults (lower confidence, shown separately)
+    # semantic = AI embedding only, no skill records at all
+    observed_skill_match_count = sum(
+        1 for r in top if r["skill_confidence"] == "observed"
     )
+    inferred_skill_match_count = sum(
+        1 for r in top if r["skill_confidence"] == "imputed"
+    )
+    semantic_only_match_count = sum(
+        1 for r in top if r["skill_confidence"] == "semantic_match"
+    )
+    # Legacy alias kept so existing callers don't break
+    genuine_skill_match_count = observed_skill_match_count
 
     fallback_candidates = None
     if requested_designations and has_skillset and genuine_skill_match_count == 0:
@@ -259,6 +368,9 @@ def get_recommendations(
         "candidate_pool_size": int(len(pool)),
         "candidates_with_real_skill_match": real_match_count,
         "genuine_skill_match_count": genuine_skill_match_count,
+        "observed_skill_match_count": observed_skill_match_count,
+        "inferred_skill_match_count": inferred_skill_match_count,
+        "semantic_only_match_count": semantic_only_match_count,
         "fallback_candidates": fallback_candidates,
         "best_fit_if_delayed": best_fit_if_delayed,
     }
@@ -274,8 +386,10 @@ def get_recommendations_for_pipeline_row(
     row = pipeline.iloc[row_index]
     requested_designations = decode_resource_code(row.get("resources_requested"))
     requested_coe_categories, skillset_classification_proof = classify_skillset_with_proof(row.get("skillset"))
+    _skillset_raw = row.get("skillset", "")
+    _skillset = _skillset_raw if isinstance(_skillset_raw, str) else ""
     result = get_recommendations(
-        skillset_text=row.get("skillset", ""),
+        skillset_text=_skillset,
         likely_start_date=str(row.get("likely_start_date")),
         requested_pct_raw=row.get("requested_pct", "100"),
         top_n=top_n,
@@ -384,10 +498,15 @@ def get_redeploy_matches_for_employee(employee_id: str, top_n: int = 20) -> list
     candidate who's a perfect skill match but already busy or weak on competency doesn't
     outrank someone who's a genuinely better overall fit."""
     adapter = get_adapter()
-    skill_index = scoring.build_employee_skill_index(adapter.get_skills())
+    skills = adapter.get_skills()
+    skill_index = scoring.build_employee_skill_index(skills)
     employee_tokens = skill_index.get(employee_id, {})
-    if not employee_tokens:
-        return []
+
+    # Semantic layer — get this employee's own embedding vector, then for each
+    # pipeline row embed its skillset text (cached in embed_jobspec) and compute
+    # cosine similarity. Same 65/35 blend as get_recommendations, reversed direction.
+    emp_embedding_index = embedding_engine.build_employee_embedding_index(skills)
+    emp_vec = emp_embedding_index.get(employee_id) if emp_embedding_index else None
 
     competency_index = scoring.build_employee_competency_index(adapter.get_competencies())
     competency_entry = competency_index.get(employee_id, {"score": scoring.DEFAULT_COMPETENCY_SCORE, "confidence": "imputed"})
@@ -395,7 +514,20 @@ def get_redeploy_matches_for_employee(employee_id: str, top_n: int = 20) -> list
 
     matches = []
     for row in _open_pipeline_rows_enriched():
-        skill_result = scoring.score_skill_match(row["required_phrases"], employee_tokens)
+        word_result = scoring.score_skill_match(row["required_phrases"], employee_tokens)
+
+        # Blend semantic into the word score for this pipeline row
+        skill_result = word_result
+        if emp_vec is not None and row["required_phrases"]:
+            row_vec = embedding_engine.embed_jobspec(" | ".join(row["required_phrases"]))
+            if row_vec is not None:
+                sem_score = float(np.clip(np.dot(emp_vec, row_vec), 0.0, 1.0))
+                blended = 0.65 * sem_score + 0.35 * word_result["score"]
+                confidence = word_result["confidence"]
+                if confidence == "no_match" and sem_score >= 0.35:
+                    confidence = "semantic_match"
+                skill_result = {"score": round(min(blended, 1.0), 3), "matched": word_result["matched"], "missing": word_result["missing"], "confidence": confidence}
+
         if skill_result["score"] <= 0:
             continue
         as_of_date = pd.to_datetime(row["likely_start_date"]) if row["likely_start_date"] else pd.Timestamp.now().normalize()
@@ -452,10 +584,14 @@ def get_redeploy_summary_for_employees(employee_ids: list[str]) -> dict[str, dic
     Uses a single as-of-today availability snapshot shared across everyone (one groupby
     over the whole org, O(1) lookup per employee) instead of get_redeploy_matches_for_employee's
     precise per-deal as-of-likely-start-date check -- exact for "today", a reasonable
-    trade for a table-wide preview; the modal drilldown still uses the precise version."""
+    trade for a table-wide preview; the modal drilldown still uses the precise version.
+    Uses the same 65/35 semantic+word blend as get_recommendations (reversed direction:
+    employee vec → pipeline row vec, same as get_redeploy_matches_for_employee)."""
     adapter = get_adapter()
-    skill_index = scoring.build_employee_skill_index(adapter.get_skills())
+    skills = adapter.get_skills()
+    skill_index = scoring.build_employee_skill_index(skills)
     competency_index = scoring.build_employee_competency_index(adapter.get_competencies())
+    emp_embedding_index = embedding_engine.build_employee_embedding_index(skills)
     allocations = adapter.get_allocations()
     busy_pct_today = availability_as_of(allocations, pd.Timestamp.now().normalize())
     open_rows = _open_pipeline_rows_enriched()
@@ -466,6 +602,7 @@ def get_redeploy_summary_for_employees(employee_ids: list[str]) -> dict[str, dic
         if not employee_tokens:
             summary[emp_id] = {"recommended_project_count": 0, "top_match": None}
             continue
+        emp_vec = emp_embedding_index.get(emp_id) if emp_embedding_index else None
         competency_entry = competency_index.get(emp_id, {"score": scoring.DEFAULT_COMPETENCY_SCORE, "confidence": "imputed"})
         available_pct = max(0.0, 100.0 - float(busy_pct_today.get(emp_id, 0.0)))
         availability_score = min(available_pct / 100.0, 1.0)
@@ -473,7 +610,16 @@ def get_redeploy_summary_for_employees(employee_ids: list[str]) -> dict[str, dic
         best = None
         count = 0
         for row in open_rows:
-            skill_score = _fast_skill_score(row["phrase_tokens"], employee_tokens)
+            word_score = _fast_skill_score(row["phrase_tokens"], employee_tokens)
+            if emp_vec is not None and row["required_phrases"]:
+                row_vec = embedding_engine.embed_jobspec(" | ".join(row["required_phrases"]))
+                if row_vec is not None:
+                    sem_score = float(np.clip(np.dot(emp_vec, row_vec), 0.0, 1.0))
+                    skill_score = round(min(0.65 * sem_score + 0.35 * word_score, 1.0), 3)
+                else:
+                    skill_score = word_score
+            else:
+                skill_score = word_score
             if skill_score <= 0:
                 continue
             count += 1
@@ -645,14 +791,18 @@ def get_project_team_recommendation(row_indices: list[int], top_n: int = 15) -> 
     adapter = get_adapter()
     pipeline = adapter.get_pipeline_forecast()
 
-    # Prefetch once — each get_recommendations_for_pipeline_row call reuses this
+    # Prefetch once — each get_recommendations_for_pipeline_row call reuses this.
+    # The embedding index is built here so all roles share the same cached vectors.
+    _skills = adapter.get_skills()
     prefetched: dict = {
         "employees": adapter.get_employees(),
         "competencies": adapter.get_competencies(),
         "allocations": adapter.get_allocations(),
         "pipeline_skillset": adapter.get_pipeline_skillset(),
-        "skill_index": scoring.build_employee_skill_index(adapter.get_skills()),
+        "skills": _skills,
+        "skill_index": scoring.build_employee_skill_index(_skills),
         "employee_coe_map": get_employee_primary_coe_map(),
+        "emp_embedding_index": embedding_engine.build_employee_embedding_index(_skills),
         "compute_earliest_availability": False,
     }
 
@@ -762,35 +912,91 @@ def get_project_team_recommendation(row_indices: list[int], top_n: int = 15) -> 
     }
 
 
+_coverage_cache: dict | None = None
+_coverage_fingerprint: tuple | None = None
+
+
 def get_coverage_summary() -> dict:
+    """Fast coverage summary using word-token scoring only — no embedding model call.
+
+    The full get_recommendations_for_pipeline_row path runs sentence-transformer
+    inference for every pipeline row (293 × ~5s = many minutes) and blocks the
+    entire uvicorn worker while doing so. This version uses only the pre-built
+    skill-token index (pure pandas/numpy, <1s total) which is accurate enough
+    for the aggregate redeploy/hire-signal counts shown in the UI banner.
+    Results are cached until the underlying data changes.
+    """
+    global _coverage_cache, _coverage_fingerprint
+
     adapter = get_adapter()
-    skill_index = scoring.build_employee_skill_index(adapter.get_skills())
-    prefetched = {
-        "employees": adapter.get_employees(),
-        "competencies": adapter.get_competencies(),
-        "allocations": adapter.get_allocations(),
-        "pipeline_skillset": adapter.get_pipeline_skillset(),
-        "skill_index": skill_index,
-        "employee_coe_map": get_employee_primary_coe_map(),
-        "compute_earliest_availability": False,
-    }
     pipeline = adapter.get_pipeline_forecast()
+    skills = adapter.get_skills()
+    pipeline_skillset = adapter.get_pipeline_skillset()
+
+    fp = (
+        len(pipeline),
+        int(pd.util.hash_pandas_object(pipeline["status"], index=False).sum()),
+        len(skills),
+    )
+    if _coverage_cache is not None and _coverage_fingerprint == fp:
+        return _coverage_cache
+
+    skill_index = scoring.build_employee_skill_index(skills)
+    employees = adapter.get_employees()
+    active_employees = employees[
+        (employees["account_status"] == 1)
+        & (~employees["job_name"].isin(NON_DELIVERY_ROLES))
+    ]
+    active_ids = set(active_employees["employee_id"].tolist())
+
+    allocations = adapter.get_allocations()
+    as_of_today = pd.Timestamp.now().normalize()
+    busy_pct = availability_as_of(allocations, as_of_today)
 
     rows = []
-    for row_index in range(len(pipeline)):
-        result = get_recommendations_for_pipeline_row(row_index, pipeline=pipeline, **prefetched)
-        top = result["candidates"][0] if result["candidates"] else None
-        has_skillset = len(result["request"]["required_phrases"]) > 0
-        rows.append(
-            {
-                "row_index": row_index,
-                "client": result["pipeline_row"]["client"],
-                "resources_requested": result["pipeline_row"]["resources_requested"],
-                "top_candidate_signal": result["top_candidate_signal"] if has_skillset else None,
-                "top_bucket": (top["bucket"] if top else "gap") if has_skillset else None,
-                "has_skillset": has_skillset,
-            }
-        )
+    for row_index, row in pipeline.iterrows():
+        _skillset_raw = row.get("skillset", "")
+        _skillset = _skillset_raw if isinstance(_skillset_raw, str) else ""
+        required_phrases = scoring.tokenize_skillset(_skillset)
+        required_phrases = scoring.enrich_required_phrases(required_phrases, pipeline_skillset)
+        has_skillset = bool(required_phrases)
+
+        if not has_skillset:
+            rows.append({
+                "row_index": int(row_index),
+                "client": row.get("client"),
+                "resources_requested": row.get("resources_requested"),
+                "top_candidate_signal": None,
+                "top_bucket": None,
+                "has_skillset": False,
+            })
+            continue
+
+        # Score every active delivery employee with word-token only (no embeddings)
+        best_signal = "hire"
+        best_bucket = "gap"
+        for emp_id in active_ids:
+            avail = max(0.0, 100.0 - float(busy_pct.get(emp_id, 0.0)))
+            if avail < 100.0:
+                continue  # fast approximation: only consider fully-free employees
+            word_result = scoring.score_skill_match(required_phrases, skill_index.get(emp_id, {}))
+            b = scoring.bucket(word_result["score"], word_result["confidence"])
+            if b == "eligible":
+                best_bucket = "eligible"
+                best_signal = "redeploy"
+                break
+            if b == "trainable" and best_bucket != "eligible":
+                best_bucket = "trainable"
+                best_signal = "redeploy_with_training"
+
+        rows.append({
+            "row_index": int(row_index),
+            "client": row.get("client"),
+            "resources_requested": row.get("resources_requested"),
+            "top_candidate_signal": best_signal,
+            "top_bucket": best_bucket,
+            "has_skillset": True,
+        })
 
     total = len(rows)
     no_skillset_count = sum(1 for r in rows if not r["has_skillset"])
@@ -798,7 +1004,7 @@ def get_coverage_summary() -> dict:
     redeploy_count = sum(1 for r in rows if r["top_candidate_signal"] == "redeploy")
     training_count = sum(1 for r in rows if r["top_candidate_signal"] == "redeploy_with_training")
 
-    return {
+    result = {
         "total_demand_rows": total,
         "no_skillset_specified_count": no_skillset_count,
         "redeploy_ready_count": redeploy_count,
@@ -807,3 +1013,6 @@ def get_coverage_summary() -> dict:
         "hire_signal_pct": round(100.0 * hire_count / total, 1) if total else 0.0,
         "rows": rows,
     }
+    _coverage_cache = result
+    _coverage_fingerprint = fp
+    return result

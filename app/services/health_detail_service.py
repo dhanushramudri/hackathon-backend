@@ -1,7 +1,7 @@
 import pandas as pd
 
 from app.core.adapter import get_adapter
-from app.engines import scoring
+from app.engines import embedding_engine, scoring
 from app.engines.coe_skill_engine import GENERIC_SKILL_COES, derive_skills_for_coes
 from app.engines.role_mix_engine import canonical_project_coe, get_role_mix
 from app.services.free_pool_service import get_free_pool
@@ -307,9 +307,26 @@ def get_relief_staffing_candidates(project_code: str, top_n: int = MAX_RELIEF_CA
     competency_index = scoring.build_employee_competency_index(competencies)
     today = pd.Timestamp.now().normalize()
 
+    # Semantic embedding layer — same 65/35 blend used in get_recommendations()
+    emp_embedding_index = embedding_engine.build_employee_embedding_index(skills)
+    skillset_text = " | ".join(required_phrases) if required_phrases else ""
+    job_vec = embedding_engine.embed_jobspec(skillset_text) if skillset_text else None
+    semantic_scores: dict[str, float] = {}
+    if emp_embedding_index is not None and job_vec is not None:
+        semantic_scores = embedding_engine.batch_cosine_similarity(job_vec, emp_embedding_index)
+
     def score_one(c: dict, available_now: bool) -> dict:
         emp_id = c["employee_id"]
-        skill_result = scoring.score_skill_match(required_phrases, skill_index.get(emp_id, {}))
+        word_result = scoring.score_skill_match(required_phrases, skill_index.get(emp_id, {}))
+        sem_score = semantic_scores.get(emp_id)
+        if sem_score is not None and required_phrases:
+            blended = 0.65 * sem_score + 0.35 * word_result["score"]
+            confidence = word_result["confidence"]
+            if confidence == "no_match" and sem_score >= 0.35:
+                confidence = "semantic_match"
+            skill_result = {"score": round(min(blended, 1.0), 3), "matched": word_result["matched"], "missing": word_result["missing"], "confidence": confidence}
+        else:
+            skill_result = word_result
         competency_entry = competency_index.get(emp_id, {"score": scoring.DEFAULT_COMPETENCY_SCORE, "confidence": "imputed"})
         # An "ending_soon" person isn't free yet, so their current idle_capacity_pct
         # (which is 0 or near it today) isn't a real availability signal -- scoring

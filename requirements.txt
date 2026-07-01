@@ -8,3 +8,4 @@ anthropic
 google-genai
 python-dotenv
 apscheduler
+sentence-transformers>=2.7.0

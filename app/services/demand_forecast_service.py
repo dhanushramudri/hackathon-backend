@@ -3,7 +3,7 @@ import math
 import pandas as pd
 
 from app.core.adapter import get_adapter
-from app.engines import scoring
+from app.engines import embedding_engine, scoring
 from app.engines.designation_ladder import LEADERSHIP_DESIGNATIONS, adjacent_designations
 from app.engines.employee_coe import get_employee_primary_coe_map
 from app.engines.role_mix_engine import get_role_mix_by_category, get_role_mix_by_coes
@@ -45,16 +45,42 @@ def _tag_coe(candidates: list[dict], employee_coe_map: dict[str, str]) -> None:
     for c in candidates:
         c["coe"] = employee_coe_map.get(c["employee_id"])
 
-def _score_candidates(candidates: list[dict], required_skills: list[str], skill_index: dict | None) -> None:
+def _score_candidates(candidates: list[dict], required_skills: list[str], skill_index: dict | None, competency_index: dict | None = None, emp_embedding_index: dict | None = None) -> None:
     if skill_index is None:
         return
+    # Semantic layer — embed required_skills once, batch cosine-sim (same 65/35 blend as /recommendations)
+    semantic_scores: dict[str, float] = {}
+    if emp_embedding_index is not None and required_skills:
+        job_vec = embedding_engine.embed_jobspec(" | ".join(required_skills))
+        if job_vec is not None:
+            pool_ids = {c["employee_id"] for c in candidates}
+            semantic_scores = embedding_engine.batch_cosine_similarity(
+                job_vec, {k: v for k, v in emp_embedding_index.items() if k in pool_ids}
+            )
     for c in candidates:
-        skill_result = scoring.score_skill_match(required_skills, skill_index.get(c["employee_id"], {}))
+        word_result = scoring.score_skill_match(required_skills, skill_index.get(c["employee_id"], {}))
+        sem_score = semantic_scores.get(c["employee_id"])
+        if sem_score is not None and required_skills:
+            blended = 0.65 * sem_score + 0.35 * word_result["score"]
+            confidence = word_result["confidence"]
+            if confidence == "no_match" and sem_score >= 0.35:
+                confidence = "semantic_match"
+            skill_result = {"score": round(min(blended, 1.0), 3), "matched": word_result["matched"], "missing": word_result["missing"], "confidence": confidence}
+        else:
+            skill_result = word_result
         c["skill_score"] = skill_result["score"]
         c["matched_skills"] = skill_result["matched"]
         c["missing_skills"] = skill_result["missing"]
         c["skill_confidence"] = skill_result["confidence"]
-    candidates.sort(key=lambda c: -c["skill_score"])
+        if competency_index is not None:
+            comp_entry = competency_index.get(c["employee_id"], {"score": scoring.DEFAULT_COMPETENCY_SCORE, "confidence": "imputed"})
+            avail_score = min((c.get("available_pct_as_of") or c.get("idle_capacity_pct") or 0.0) / 100.0, 1.0)
+            c["competency_score"] = comp_entry["score"]
+            c["composite_score"] = scoring.composite_score(skill_result["score"], comp_entry["score"], avail_score)
+    if competency_index is not None:
+        candidates.sort(key=lambda c: -c.get("composite_score", 0))
+    else:
+        candidates.sort(key=lambda c: -c["skill_score"])
 
 def _find_recommended_start_date(
     designation: str,
@@ -64,6 +90,8 @@ def _find_recommended_start_date(
     allocations: pd.DataFrame,
     required_skills: list[str],
     skill_index: dict | None,
+    competency_index: dict | None = None,
+    emp_embedding_index: dict | None = None,
 ) -> dict | None:
     ladder = [designation] + [d for d, _ in adjacent_designations(designation)]
     relevant_ids = set(
@@ -87,7 +115,7 @@ def _find_recommended_start_date(
         fill: list[dict] = []
         for d in ladder:
             pool = get_redeploy_candidates_as_of(d, check_date, employees, allocations)
-            _score_candidates(pool, required_skills, skill_index)
+            _score_candidates(pool, required_skills, skill_index, competency_index, emp_embedding_index)
             if d != designation:
                 if skill_index is None:
                     continue
@@ -130,8 +158,14 @@ def get_new_project_forecast(specs: list[dict]) -> dict:
 
     all_required_skills = sorted({s.lower() for spec in specs for s in (spec.get("required_skills") or [])})
     skill_index = None
+    competency_index = None
+    emp_embedding_index = None
     if all_required_skills:
-        skill_index = scoring.build_employee_skill_index(get_adapter().get_skills())
+        adapter = get_adapter()
+        _skills_df = adapter.get_skills()
+        skill_index = scoring.build_employee_skill_index(_skills_df)
+        competency_index = scoring.build_employee_competency_index(adapter.get_competencies())
+        emp_embedding_index = embedding_engine.build_employee_embedding_index(_skills_df)
 
     total_need: dict[tuple[str, str], float] = {}
     duration_weeks_by_date: dict[str, int | None] = {}
@@ -187,7 +221,7 @@ def get_new_project_forecast(specs: list[dict]) -> dict:
         else:
             emp_df, alloc_df = _ensure_employee_tables()
             candidates = get_redeploy_candidates_as_of(designation, pd.to_datetime(date_key), emp_df, alloc_df)
-        _score_candidates(candidates, all_required_skills, skill_index)
+        _score_candidates(candidates, all_required_skills, skill_index, competency_index, emp_embedding_index)
         _tag_coe(candidates, employee_coe_map)
 
         # Holding the exact designation only means availability, not skill fit -- without this
@@ -212,7 +246,7 @@ def get_new_project_forecast(specs: list[dict]) -> dict:
                 else:
                     emp_df, alloc_df = _ensure_employee_tables()
                     pool = get_redeploy_candidates_as_of(adj_designation, pd.to_datetime(date_key), emp_df, alloc_df)
-                _score_candidates(pool, all_required_skills, skill_index)
+                _score_candidates(pool, all_required_skills, skill_index, competency_index, emp_embedding_index)
                 for c in pool:
                     c["source_designation"] = adj_designation
                     c["level_offset"] = offset
@@ -233,7 +267,7 @@ def get_new_project_forecast(specs: list[dict]) -> dict:
         if shortfall > 0:
             emp_df, alloc_df = _ensure_employee_tables()
             found = _find_recommended_start_date(
-                designation, pd.to_datetime(date_key), needed_headcount, emp_df, alloc_df, all_required_skills, skill_index
+                designation, pd.to_datetime(date_key), needed_headcount, emp_df, alloc_df, all_required_skills, skill_index, competency_index, emp_embedding_index
             )
             if found:
                 recommended_start_date = found["recommended_start_date"]

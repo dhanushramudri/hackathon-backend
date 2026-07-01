@@ -3,7 +3,16 @@ import pandas as pd
 from app.core.adapter import get_adapter
 from app.engines.coe_skill_engine import GENERIC_SKILL_COES
 from app.engines.role_mix_engine import canonical_project_coe
-from app.engines.scoring import bucket, build_employee_skill_index, score_skill_match, top_skill_phrases_for_employees
+from app.engines import embedding_engine
+from app.engines.scoring import (
+    DEFAULT_COMPETENCY_SCORE,
+    bucket,
+    build_employee_competency_index,
+    build_employee_skill_index,
+    composite_score,
+    score_skill_match,
+    top_skill_phrases_for_employees,
+)
 from app.services.free_pool_service import get_free_pool_by_designation
 
 MAX_BACKFILL_SHOWN = 5
@@ -26,6 +35,8 @@ def get_leave_impact() -> list[dict]:
     pool_by_designation = get_free_pool_by_designation()
     tech_coe_by_project = projects.set_index("project_code")["tech_coe"]
     skill_index = build_employee_skill_index(skills)
+    competency_index = build_employee_competency_index(adapter.get_competencies())
+    emp_embedding_index = embedding_engine.build_employee_embedding_index(skills)
 
     today = pd.Timestamp.now().normalize()
     relevant_leaves = leaves[leaves["leave_end_date"] >= today]
@@ -66,18 +77,46 @@ def get_leave_impact() -> list[dict]:
                 required_phrases = own_skill_phrases_cache[emp_id]
                 required_skill_source = "own_skills" if required_phrases else "none"
 
+            # Semantic layer — embed the required skillset once per project, then
+            # blend 65% semantic + 35% word for each backfill candidate (same formula
+            # as get_recommendations so all candidate surfaces are consistent).
+            skillset_text = " | ".join(required_phrases)
+            job_vec = embedding_engine.embed_jobspec(skillset_text) if skillset_text else None
+            pool_ids = {c["employee_id"] for c in backfill_pool}
+            semantic_scores: dict[str, float] = {}
+            if emp_embedding_index is not None and job_vec is not None and pool_ids:
+                semantic_scores = embedding_engine.batch_cosine_similarity(
+                    job_vec, {k: v for k, v in emp_embedding_index.items() if k in pool_ids}
+                )
+
             scored_pool = []
             for c in backfill_pool:
-                result = score_skill_match(required_phrases, skill_index.get(c["employee_id"], {}))
+                emp_id = c["employee_id"]
+                word_result = score_skill_match(required_phrases, skill_index.get(emp_id, {}))
+                sem_score = semantic_scores.get(emp_id)
+                if sem_score is not None and required_phrases:
+                    blended = 0.65 * sem_score + 0.35 * word_result["score"]
+                    confidence = word_result["confidence"]
+                    if confidence == "no_match" and sem_score >= 0.35:
+                        confidence = "semantic_match"
+                    skill_result = {"score": round(min(blended, 1.0), 3), "matched": word_result["matched"], "missing": word_result["missing"], "confidence": confidence}
+                else:
+                    skill_result = word_result
+                comp_entry = competency_index.get(emp_id, {"score": DEFAULT_COMPETENCY_SCORE, "confidence": "imputed"})
+                avail_score = min((c.get("idle_capacity_pct") or 0.0) / 100.0, 1.0)
+                comp = composite_score(skill_result["score"], comp_entry["score"], avail_score)
                 scored_pool.append({
                     **c,
-                    "skill_score": result["score"],
-                    "matched_skills": result["matched"],
-                    "missing_skills": result["missing"],
-                    "skill_confidence": result["confidence"],
-                    "skill_bucket": bucket(result["score"], result["confidence"]),
+                    "skill_score": skill_result["score"],
+                    "matched_skills": skill_result["matched"],
+                    "missing_skills": skill_result["missing"],
+                    "skill_confidence": skill_result["confidence"],
+                    "skill_bucket": bucket(skill_result["score"], skill_result["confidence"]),
+                    "competency_score": comp_entry["score"],
+                    "competency_confidence": comp_entry["confidence"],
+                    "composite_score": comp,
                 })
-            scored_pool.sort(key=lambda c: -(c["skill_score"] or 0))
+            scored_pool.sort(key=lambda c: -(c["composite_score"] or 0))
             top_skill_score = scored_pool[0]["skill_score"] if scored_pool else None
 
             impacts.append(
