@@ -1009,8 +1009,11 @@ def _parse_final_answer(content: str | None) -> tuple[str, str]:
     except (json.JSONDecodeError, AttributeError):
         return content, "text"
 
-def _run_with_llm(message: str, history: list[dict]) -> dict:
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+def _run_with_llm(message: str, history: list[dict], prior_context: str | None = None) -> dict:
+    system = SYSTEM_PROMPT
+    if prior_context:
+        system = SYSTEM_PROMPT + f"\n\nPRIOR SESSION MEMORY (summaries from this user's previous Buddy conversations — use for continuity):\n{prior_context}"
+    messages = [{"role": "system", "content": system}]
     for h in history[-MAX_HISTORY_TURNS:]:
         if h.get("role") in ("user", "assistant") and h.get("content"):
             messages.append({"role": h["role"], "content": h["content"]})
@@ -1057,11 +1060,11 @@ def _run_with_llm(message: str, history: list[dict]) -> dict:
 
     return _build_response("I'm having trouble narrowing that down -- try a more specific question.", "text", last_tool_name, last_data)
 
-def ask(message: str, history: list[dict] | None = None) -> dict:
-    return _run_with_llm(message, history or [])
+def ask(message: str, history: list[dict] | None = None, prior_context: str | None = None) -> dict:
+    return _run_with_llm(message, history or [], prior_context)
 
 
-def ask_stream(message: str, history: list[dict] | None = None):
+def ask_stream(message: str, history: list[dict] | None = None, prior_context: str | None = None):
     """SSE-friendly twin of ask()/_run_with_llm(): yields progress events as
     each tool is called, ending in {"type": "done", **<same shape ask() returns>}.
     Tool dispatch/truncation logic is identical to _run_with_llm -- this only adds
@@ -1075,7 +1078,10 @@ def ask_stream(message: str, history: list[dict] | None = None):
         yield {"type": "done", **_build_response("Buddy's AI is not configured. Please set GEMINI_API_KEY or ANTHROPIC_API_KEY in the backend .env file.", "text", None, None)}
         return
 
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    system = SYSTEM_PROMPT
+    if prior_context:
+        system = SYSTEM_PROMPT + f"\n\nPRIOR SESSION MEMORY (summaries from this user's previous Buddy conversations — use for continuity):\n{prior_context}"
+    messages = [{"role": "system", "content": system}]
     for h in history[-MAX_HISTORY_TURNS:]:
         if h.get("role") in ("user", "assistant") and h.get("content"):
             messages.append({"role": h["role"], "content": h["content"]})

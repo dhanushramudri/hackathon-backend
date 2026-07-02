@@ -2,6 +2,7 @@ import pandas as pd
 
 from app.core.adapter import get_adapter
 from app.engines.role_mix_engine import build_role_mix_templates, canonical_project_coe, get_role_mix
+from app.engines.sentiment_engine import analyze_comment, summarize_project_sentiment
 from app.services.rate_card_service import get_hourly_rate
 from app.services.timesheet_insights_service import get_employee_overtime_risk, get_project_effort_spikes
 
@@ -253,6 +254,55 @@ def get_health_report() -> list[dict]:
         )
 
     return sorted(records, key=lambda r: r["risk_score"], reverse=True)
+
+
+def get_all_project_sentiments(records: list[dict]) -> dict[str, dict]:
+    """Return BERT sentiment for every project that has WSR data with comments.
+    Called from a separate endpoint so the main health report stays fast.
+    """
+    wsr = get_adapter().get_wsr_reports()
+    result: dict[str, dict] = {}
+    for rec in records:
+        code = rec["project_code"]
+        if rec.get("wsr_data_available"):
+            result[code] = _latest_sentiment(wsr, code)
+        else:
+            result[code] = {"has_data": False, "label": None, "compound": None, "risk_signal": "none", "latest_comment": None}
+    return result
+
+
+def _latest_sentiment(wsr: pd.DataFrame, project_code: str) -> dict:
+    """Return BERT sentiment of the most recent WSR comment for the project."""
+    proj_wsr = wsr[wsr["project_id_masked"] == project_code].sort_values("week_start_date")
+    if "comment" not in proj_wsr.columns:
+        return {"has_data": False, "label": None, "compound": None, "risk_signal": "none", "latest_comment": None}
+    comments = proj_wsr[proj_wsr["comment"].notna() & (proj_wsr["comment"].str.strip() != "")]
+    if comments.empty:
+        return {"has_data": False, "label": None, "compound": None, "risk_signal": "none", "latest_comment": None}
+    latest = comments.iloc[-1]
+    result = analyze_comment(str(latest["comment"]))
+    return {
+        "has_data": True,
+        "label": result["label"],
+        "compound": result["compound"],
+        "risk_signal": result["risk_signal"],
+        "latest_comment": str(latest["comment"])[:300],
+    }
+
+
+def get_project_wsr_sentiment(project_code: str, last_n: int = 8) -> dict:
+    """Full BERT + VADER sentiment analysis of the last N WSR comments for a project."""
+    wsr = get_adapter().get_wsr_reports()
+    proj_wsr = wsr[wsr["project_id_masked"] == project_code].sort_values("week_start_date")
+    if "comment" not in proj_wsr.columns:
+        return summarize_project_sentiment([])
+    has_comments = proj_wsr[proj_wsr["comment"].notna() & (proj_wsr["comment"].str.strip() != "")]
+    recent = has_comments.tail(last_n)
+    entries = [
+        {"date": str(row["week_start_date"])[:10], "comment": str(row["comment"])}
+        for _, row in recent.iterrows()
+    ]
+    return summarize_project_sentiment(entries)
 
 def get_validation_summary(records: list[dict]) -> dict:
     with_wsr = [r for r in records if r["wsr_data_available"]]

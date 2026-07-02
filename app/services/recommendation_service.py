@@ -272,6 +272,7 @@ def get_recommendations(
                 "matched_skills": skill_result["matched"],
                 "missing_skills": skill_result["missing"],
                 "skill_confidence": skill_result["confidence"],
+                "semantic_score": round(float(sem_score), 3) if sem_score is not None else None,
                 "competency_score": competency_score,
                 "competency_confidence": competency_confidence,
                 "available_pct": round(available_pct, 1),

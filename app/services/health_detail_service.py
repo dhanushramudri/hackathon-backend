@@ -230,6 +230,7 @@ def get_project_health_detail(project_code: str) -> dict:
                 "csat_status": r["csat_status"],
                 "team_status": r["team_status"],
                 "worst_signal": r["worst_signal"],
+                "comment": str(r["comment"]) if "comment" in r and pd.notna(r.get("comment")) else None,
             }
             for _, r in proj_wsr_all.iterrows()
         ],
