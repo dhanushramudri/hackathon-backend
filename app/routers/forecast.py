@@ -2,6 +2,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.engines.role_mix_engine import get_role_mix_by_coes
+from app.engines.simple_forecast_engine import get_prediction_forecast
 from app.services.demand_forecast_service import get_new_project_forecast
 from app.services.pipeline_outlook_service import OUTLOOK_MONTHS, get_pipeline_outlook, get_pipeline_outlook_drilldown
 
@@ -28,6 +29,10 @@ def new_projects(specs: list[NewProjectSpec]) -> dict:
 @router.post("/role-mix-preview")
 def role_mix_preview(body: RoleMixPreviewRequest) -> dict:
     return get_role_mix_by_coes(body.coes, body.type_of_project)
+
+@router.get("/prediction")
+def prediction(horizon_months: int = 24) -> dict:
+    return get_prediction_forecast(horizon_months)
 
 @router.get("/six-month-outlook")
 def six_month_outlook(start_date: str | None = None, horizon_months: int = OUTLOOK_MONTHS, granularity: str = "month") -> dict:
