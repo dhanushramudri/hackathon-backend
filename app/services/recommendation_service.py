@@ -913,6 +913,108 @@ def get_project_team_recommendation(row_indices: list[int], top_n: int = 15) -> 
     }
 
 
+def get_backfill_candidates(employee_id: str, source_project_id: str, top_n: int = 15) -> dict:
+    """Find who can replace an employee if they are pulled from source_project_id.
+
+    Returns the full recommendation payload (candidates, best_fit_if_delayed,
+    fallback_candidates, hire_vs_redeploy_flag) with two extra fields per candidate:
+      - on_leave_now  : bool — person is on approved leave today
+      - in_free_pool  : bool — person has ≥80% capacity free (matches free-pool threshold)
+    """
+    adapter = get_adapter()
+    employees  = adapter.get_employees()
+    allocations = adapter.get_allocations()
+    skills     = adapter.get_skills()
+    coe_map    = get_employee_primary_coe_map()
+
+    emp_row = employees[employees["employee_id"] == employee_id]
+    if emp_row.empty:
+        return {
+            "error": f"Employee {employee_id!r} not found",
+            "candidates": [], "best_fit_if_delayed": [],
+            "fallback_candidates": None, "hire_vs_redeploy_flag": False,
+            "backfill_context": None,
+        }
+    emp = emp_row.iloc[0]
+    job_name: str = str(emp.get("job_name") or "")
+
+    emp_alloc = allocations[
+        (allocations["employee_id"] == employee_id)
+        & (allocations["project_id"] == source_project_id)
+    ].sort_values("is_allocation_active", ascending=False)
+    alloc_pct = float(emp_alloc.iloc[0]["allocation_by_percentage"]) if not emp_alloc.empty else 100.0
+
+    emp_skills = skills[skills["employee_id"] == employee_id]
+    terms: list[str] = []
+    for col in ("coe_skill", "skill", "subskill"):
+        for v in emp_skills[col].dropna().astype(str):
+            v = v.strip()
+            if v and v not in terms:
+                terms.append(v)
+        if len(terms) >= 15:
+            break
+    skillset_text = " | ".join(terms[:15]) if terms else job_name
+
+    emp_coe = coe_map.get(employee_id)
+    requested_coe_categories = [emp_coe] if emp_coe else None
+
+    today     = pd.Timestamp.now().normalize()
+    today_str = today.strftime("%Y-%m-%d")
+
+    result = get_recommendations(
+        skillset_text=skillset_text,
+        likely_start_date=today_str,
+        requested_pct_raw=str(int(alloc_pct)),
+        top_n=top_n + 1,           # +1 so filtering the pulled employee doesn't drop below top_n
+        requested_designations=[job_name] if job_name else None,
+        requested_coe_categories=requested_coe_categories,
+        compute_earliest_availability=True,   # populate best_fit_if_delayed
+    )
+
+    leaves = adapter.get_leaves()
+    on_leave_ids: set[str] = set()
+    if not leaves.empty and "leave_start_date" in leaves.columns and "leave_end_date" in leaves.columns:
+        on_leave_rows = leaves[
+            leaves["leave_start_date"].notna()
+            & leaves["leave_end_date"].notna()
+            & (leaves["leave_start_date"] <= today)
+            & (leaves["leave_end_date"] >= today)
+        ]
+        on_leave_ids = set(on_leave_rows["employee_id"].astype(str).tolist())
+
+    def _enrich(c: dict) -> dict:
+        c["on_leave_now"] = c["employee_id"] in on_leave_ids
+        c["in_free_pool"] = float(c.get("available_pct", 0)) >= 80.0
+        return c
+
+    result["candidates"] = [
+        _enrich(c) for c in result["candidates"] if c["employee_id"] != employee_id
+    ][:top_n]
+
+    if result.get("best_fit_if_delayed"):
+        result["best_fit_if_delayed"] = [
+            _enrich(c) for c in result["best_fit_if_delayed"]
+            if c["employee_id"] != employee_id
+        ]
+
+    if result.get("fallback_candidates"):
+        for tier_key in ("same_grade", "adjacent_level"):
+            tier = result["fallback_candidates"].get(tier_key) or []
+            result["fallback_candidates"][tier_key] = [
+                _enrich(c) for c in tier if c["employee_id"] != employee_id
+            ]
+
+    result["backfill_context"] = {
+        "pulled_employee_id": employee_id,
+        "pulled_employee_job": job_name,
+        "pulled_employee_coe": emp_coe,
+        "source_project_id": source_project_id,
+        "vacated_allocation_pct": alloc_pct,
+        "skill_basis": terms[:15],
+    }
+    return result
+
+
 _coverage_cache: dict | None = None
 _coverage_fingerprint: tuple | None = None
 

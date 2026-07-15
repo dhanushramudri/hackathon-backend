@@ -3,6 +3,7 @@ from pydantic import BaseModel
 
 from app.services.recommendation_service import (
     RowIndexOutOfRange,
+    get_backfill_candidates,
     get_coverage_summary,
     get_project_team_recommendation,
     get_recommendations,
@@ -54,6 +55,16 @@ def semantic_match(row_index: int) -> dict:
         return get_semantic_match_suggestions(row_index)
     except RowIndexOutOfRange as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/backfill")
+def backfill(
+    employee_id: str,
+    source_project_id: str,
+    top_n: int = Query(default=15, ge=1, le=50),
+) -> dict:
+    """Find replacement candidates if an employee is pulled from a project."""
+    return get_backfill_candidates(employee_id, source_project_id, top_n=top_n)
 
 
 @router.get("/search")

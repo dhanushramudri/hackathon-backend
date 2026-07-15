@@ -2,6 +2,7 @@ import pandas as pd
 
 from app.core.adapter import get_adapter
 from app.engines.employee_coe import get_employee_primary_coe_map
+from app.services.recommendation_service import NON_DELIVERY_ROLES
 from app.services.allocation_report_service import OVER_ALLOCATED_THRESHOLD, UNDER_UTILIZED_THRESHOLD, get_allocation_report
 from app.services.timesheet_insights_service import (
     OVERTIME_DAILY_HOURS_THRESHOLD,
@@ -50,8 +51,10 @@ def list_employees() -> list[dict]:
     coe_map = get_employee_primary_coe_map()
     alloc_pct_by_emp = {r["employee_id"]: r["employee_total_allocation_pct"] for r in get_allocation_report()}
 
+    active_employees = employees[employees["account_status"] == 1]
+
     out = []
-    for _, r in employees.iterrows():
+    for _, r in active_employees.iterrows():
         resignation = r.get("date_of_resignation")
         if pd.notna(resignation) and resignation <= today:
             status = "departed"
@@ -79,14 +82,32 @@ def list_employees() -> list[dict]:
 def get_employee_headcount_summary() -> dict:
     employees = get_adapter().get_employees()
     today = pd.Timestamp.now().normalize()
-    resignation = employees["date_of_resignation"]
+
+    on_books = employees[employees["account_status"] == 1]
+    resignation = on_books["date_of_resignation"]
     already_departed = resignation.notna() & (resignation <= today)
     in_notice_period = resignation.notna() & (resignation > today)
+
+    delivery_mask = (
+        (employees["account_status"] == 1)
+        & (~employees["job_name"].isin(NON_DELIVERY_ROLES))
+    )
+    delivery_employees = employees[delivery_mask]
+    delivery_departed = (
+        delivery_employees["date_of_resignation"].notna()
+        & (delivery_employees["date_of_resignation"] <= today)
+    )
+    delivery_active = int((~delivery_departed).sum())
+
+    ghost_rows = int(((employees["account_status"] == 0) & employees["job_name"].isna()).sum())
+
     return {
-        "total_ever": int(len(employees)),
-        "currently_active": int((~already_departed).sum()),
+        "total_ever": int(len(on_books)),
+        "currently_active": int((~already_departed & ~in_notice_period).sum()),
+        "delivery_active": delivery_active,
         "already_departed": int(already_departed.sum()),
         "in_notice_period": int(in_notice_period.sum()),
+        "ghost_records": ghost_rows,
     }
 
 def get_overtime_risk_summary() -> dict:
