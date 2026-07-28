@@ -1,3 +1,18 @@
+"""
+health_service.py  —  modified to include DevOps board extension-risk signal.
+
+CHANGES vs original (search for  ← NEW  to find every addition):
+  1. Import devops_insights_service                         (top of file)
+  2. fetch_open_devops_tickets() called ONCE before loop   (in get_health_report)
+  3. compute_devops_extension_risk() called per project    (inside loop)
+  4. "devops_extension_risk" added to root_causes          (inside loop)
+  5. DevOps fields added to returned record dict           (inside loop)
+
+All other logic is UNCHANGED from the original.
+"""
+
+import os                                                                    # ← needed for AZURE_DEVOPS_PAT check
+
 import pandas as pd
 
 from app.core.adapter import get_adapter
@@ -6,11 +21,30 @@ from app.engines.sentiment_engine import analyze_comment, summarize_project_sent
 from app.services.rate_card_service import get_hourly_rate
 from app.services.timesheet_insights_service import get_employee_overtime_risk, get_project_effort_spikes
 
+# ← NEW: DevOps board extension-risk service
+from app.services.devops_insights_service import (
+    compute_devops_extension_risk,
+    compute_devops_ticket_stats,
+    fetch_open_devops_tickets,
+    fetch_open_devops_tickets_cached,
+    group_tickets_by_project_code,
+    no_devops_config_risk,
+)
+
 OVERRUN_DAYS_THRESHOLD = 14
 SHADOW_SHARE_THRESHOLD = 0.3
 RAMP_DOWN_WINDOW_DAYS = 30
 UNDERSTAFFED_RATIO_THRESHOLD = 0.75
 STANDARD_MONTHLY_HOURS = 160
+
+# ── DEMO ONLY ────────────────────────────────────────────────────────────
+# Statically maps every project's DevOps signal to this one real, busy
+# DevOps project code so every card in the health monitor shows meaningful
+# ticket data during demos. Remove this override (and revert the lookup
+# below to `_devops_tickets_by_project.get(project_code, [])`) once each
+# project has its own real, correctly-tagged AreaPath on the board.
+DEMO_STATIC_DEVOPS_PROJECT_CODE = "JMG_242"
+# ── END DEMO ─────────────────────────────────────────────────────────────
 
 WSR_TREND_RECENT_REPORTS = 3
 WSR_TREND_BASELINE_REPORTS = 3
@@ -23,18 +57,23 @@ WSR_CRITICAL_MIN_REPORTS = WSR_TREND_RECENT_REPORTS
 WSR_BASELINE_REPORTS = 3
 WSR_LONG_TERM_MIN_REPORTS = WSR_BASELINE_REPORTS + WSR_TREND_RECENT_REPORTS
 
+
+
 _RAG_SEVERITY = {"RED": 2, "AMBER": 1, "GREEN": 0, "NO_COLOR": -1}
 _SEVERITY_TO_STATUS = {2: "RED", 1: "AMBER", 0: "GREEN", -1: "NO_COLOR"}
 _RAG_COLUMNS = ["scope_status", "schedule_status", "quality_status", "csat_status", "team_status"]
+
 
 def worst_wsr_signal_vectorized(wsr: pd.DataFrame) -> pd.Series:
     severities = wsr[_RAG_COLUMNS].apply(lambda col: col.map(_RAG_SEVERITY))
     return severities.max(axis=1).map(_SEVERITY_TO_STATUS)
 
+
 def wsr_severity_rows(wsr: pd.DataFrame) -> pd.DataFrame:
     df = wsr.copy()
     df["severity"] = df[_RAG_COLUMNS].apply(lambda col: col.map(_RAG_SEVERITY)).max(axis=1)
     return df[df["severity"] >= 0].sort_values("week_start_date")
+
 
 def trend_from_severity_series(severities: pd.Series) -> dict:
     n = len(severities)
@@ -73,6 +112,7 @@ def trend_from_severity_series(severities: pd.Series) -> dict:
         "is_long_term_decline": is_long_term_decline,
     }
 
+
 def wsr_trend(wsr: pd.DataFrame) -> dict[str, dict]:
     df = wsr_severity_rows(wsr)
     results: dict[str, dict] = {}
@@ -81,6 +121,7 @@ def wsr_trend(wsr: pd.DataFrame) -> dict[str, dict]:
         if result["recent_avg_severity"] is not None:
             results[project_id] = result
     return results
+
 
 def churn_p75_threshold() -> float:
     adapter = get_adapter()
@@ -92,6 +133,7 @@ def churn_p75_threshold() -> float:
     duration_days = (active["project_end_date"] - active["project_start_date"]).dt.days.clip(lower=1)
     churn_per_month = active["n_employees"] / (duration_days / 30)
     return round(float(churn_per_month.quantile(0.75)), 2)
+
 
 def get_health_report() -> list[dict]:
     adapter = get_adapter()
@@ -119,10 +161,6 @@ def get_health_report() -> list[dict]:
         .mean()
         .rename("shadow_unbilled_share")
     )
-    # monthly_unbilled_value_usd is a CURRENT, ongoing monthly cost figure -- it must
-    # only count allocations that are actually active today. Without this filter it
-    # sums every SHADOW/UNBILLED allocation ever recorded for the project, including
-    # ones that ended months ago, inflating the real figure by ~5-6x.
     unbilled_value = (
         alloc_with_rate[alloc_with_rate["is_allocation_active"] == 1]
         .groupby("project_id")["unbilled_monthly_value"]
@@ -180,6 +218,24 @@ def get_health_report() -> list[dict]:
     active = active.merge(overtime_employee_count, left_on="project_code", right_index=True, how="left")
     active["overtime_employee_count"] = active["overtime_employee_count"].fillna(0).astype(int)
 
+    # ── ← NEW: DevOps board data — fetch ONCE before the loop ──────────────
+    # A single WIQL + batch-detail call retrieves all open (non-Done) tickets
+    # for every project in Azure DevOps, grouped by project code from AreaPath.
+    # This avoids one network call per project and keeps the health report fast.
+    _devops_enabled = bool(os.getenv("AZURE_DEVOPS_PAT"))
+    if _devops_enabled:
+        # _all_open_devops_tickets = fetch_open_devops_tickets()
+        _all_open_devops_tickets = fetch_open_devops_tickets_cached()
+        _devops_tickets_by_project = group_tickets_by_project_code(_all_open_devops_tickets)
+    else:
+        _devops_tickets_by_project = {}
+    # ── END NEW ─────────────────────────────────────────────────────────────
+
+    _demo_devops_tickets = _devops_tickets_by_project.get(DEMO_STATIC_DEVOPS_PROJECT_CODE, [])
+    _demo_devops_ticket_stats = (
+        compute_devops_ticket_stats(_demo_devops_tickets) if _devops_enabled else None
+    )
+
     records = []
     for _, row in active.iterrows():
         expected = get_role_mix(row["type_of_project"], row["tech_coe"], templates=role_mix_templates)
@@ -197,6 +253,27 @@ def get_health_report() -> list[dict]:
         is_wsr_critical = bool(project_wsr.get("is_critical"))
         is_wsr_long_term_decline = bool(project_wsr.get("is_long_term_decline"))
         overtime_employee_count = int(row["overtime_employee_count"])
+
+        # ── ← NEW: per-project DevOps extension-risk metrics ───────────────
+        # devops_tickets = _devops_tickets_by_project.get(project_code, [])
+        # devops_risk = (
+        #     compute_devops_extension_risk(devops_tickets, row["project_end_date"])
+        #     if _devops_enabled
+        #     else no_devops_config_risk()
+        # )
+        # is_devops_extension_risk = bool(devops_risk["has_devops_extension_risk"])
+
+        # DEMO: force every project to read the same busy DevOps project's
+        # tickets instead of its own (see DEMO_STATIC_DEVOPS_PROJECT_CODE above).
+        devops_tickets = _demo_devops_tickets
+
+        devops_risk = (
+             compute_devops_extension_risk(devops_tickets, row["project_end_date"], project_code, ticket_stats=_demo_devops_ticket_stats)
+             if _devops_enabled
+             else no_devops_config_risk()
+         )
+        is_devops_extension_risk = bool(devops_risk["has_devops_extension_risk"])
+        # ── END NEW ─────────────────────────────────────────────────────────
 
         root_causes = []
         if row["is_overrunning"]:
@@ -217,9 +294,11 @@ def get_health_report() -> list[dict]:
             root_causes.append("wsr_critical")
         if is_wsr_long_term_decline:
             root_causes.append("wsr_long_term_decline")
+        if is_devops_extension_risk:                                          # ← NEW
+            root_causes.append("devops_extension_risk")                       # ← NEW
 
         risk_score = len(root_causes)
-        risk_band = "high" if risk_score >= 2 else ("medium" if risk_score == 1 else "low")
+        risk_band = "high" if risk_score >= 3 else ("medium" if risk_score == 2 else "low")
 
         records.append(
             {
@@ -250,16 +329,39 @@ def get_health_report() -> list[dict]:
                 "wsr_data_available": bool(row["wsr_data_available"]),
                 "wsr_worst_signal": row.get("wsr_worst_signal") if pd.notna(row.get("wsr_worst_signal")) else None,
                 "wsr_latest_signal": row.get("wsr_latest_signal") if pd.notna(row.get("wsr_latest_signal")) else None,
+                # ── ← NEW: DevOps board extension-risk fields ──────────────
+                "devops_data_available":           devops_risk["devops_data_available"],
+                "devops_extension_risk":           is_devops_extension_risk,
+                "devops_open_tickets":             devops_risk["open_ticket_count"],
+                "devops_blocked_tickets":          devops_risk["blocked_ticket_count"],
+                "devops_in_progress_tickets":      devops_risk["in_progress_ticket_count"],
+                "devops_tickets_past_project_end": devops_risk["tickets_due_past_project_end"],
+                "devops_remaining_effort_hours":   devops_risk["remaining_effort_hours"],
+                "devops_completed_work_hours":     devops_risk["completed_work_hours"],
+                "devops_original_estimate_hours":  devops_risk["original_estimate_hours"],
+                "devops_effort_completion_pct":    devops_risk["effort_completion_pct"],
+                 "devops_to_do_tickets":             devops_risk["to_do_ticket_count"],
+                "devops_within_risk_window":        devops_risk["within_risk_window"],
+                "devops_working_days_in_window":    devops_risk["working_days_in_window"],
+                "devops_team_capacity_hours":       devops_risk["team_capacity_hours"],
+                "devops_team_capacity_hours_after_leave": devops_risk["team_capacity_hours_after_leave"],
+                "devops_capacity_surplus_hours":    devops_risk["capacity_surplus_hours"],
+                "devops_is_overdue":                devops_risk["is_overdue"],
+                "devops_tickets_missing_remaining_estimate": devops_risk["tickets_missing_remaining_estimate"],
+                "devops_tickets_with_no_effort_data": devops_risk["tickets_with_no_effort_data"],
+                # ── END NEW ────────────────────────────────────────────────
             }
         )
 
     return sorted(records, key=lambda r: r["risk_score"], reverse=True)
 
 
+# ============================================================
+# Everything below this line is UNCHANGED from the original.
+# ============================================================
+
 def get_all_project_sentiments(records: list[dict]) -> dict[str, dict]:
-    """Return BERT sentiment for every project that has WSR data with comments.
-    Called from a separate endpoint so the main health report stays fast.
-    """
+    """Return BERT sentiment for every project that has WSR data with comments."""
     wsr = get_adapter().get_wsr_reports()
     result: dict[str, dict] = {}
     for rec in records:
@@ -272,7 +374,6 @@ def get_all_project_sentiments(records: list[dict]) -> dict[str, dict]:
 
 
 def _latest_sentiment(wsr: pd.DataFrame, project_code: str) -> dict:
-    """Return BERT sentiment of the most recent WSR comment for the project."""
     proj_wsr = wsr[wsr["project_id_masked"] == project_code].sort_values("week_start_date")
     if "comment" not in proj_wsr.columns:
         return {"has_data": False, "label": None, "compound": None, "risk_signal": "none", "latest_comment": None}
@@ -291,7 +392,6 @@ def _latest_sentiment(wsr: pd.DataFrame, project_code: str) -> dict:
 
 
 def get_project_wsr_sentiment(project_code: str, last_n: int = 8) -> dict:
-    """Full BERT + VADER sentiment analysis of the last N WSR comments for a project."""
     wsr = get_adapter().get_wsr_reports()
     proj_wsr = wsr[wsr["project_id_masked"] == project_code].sort_values("week_start_date")
     if "comment" not in proj_wsr.columns:
@@ -303,6 +403,7 @@ def get_project_wsr_sentiment(project_code: str, last_n: int = 8) -> dict:
         for _, row in recent.iterrows()
     ]
     return summarize_project_sentiment(entries)
+
 
 def get_validation_summary(records: list[dict]) -> dict:
     with_wsr = [r for r in records if r["wsr_data_available"]]

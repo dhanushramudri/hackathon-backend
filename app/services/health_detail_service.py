@@ -1,25 +1,34 @@
 import pandas as pd
-
+import os
 from app.core.adapter import get_adapter
 from app.engines import embedding_engine, scoring
 from app.engines.coe_skill_engine import GENERIC_SKILL_COES, derive_skills_for_coes
 from app.engines.role_mix_engine import canonical_project_coe, get_role_mix
 from app.services.free_pool_service import get_free_pool
 from app.services.health_monitor_service import (
-    OVERRUN_DAYS_THRESHOLD,
-    SHADOW_SHARE_THRESHOLD,
-    STANDARD_MONTHLY_HOURS,
-    UNDERSTAFFED_RATIO_THRESHOLD,
-    WSR_CRITICAL_MIN_REPORTS,
-    WSR_CRITICAL_SEVERITY_THRESHOLD,
-    WSR_LONG_TERM_MIN_REPORTS,
-    WSR_TREND_LOOKBACK_REPORTS,
-    WSR_TREND_RECENT_REPORTS,
-    churn_p75_threshold,
-    get_health_report,
-    trend_from_severity_series,
-    worst_wsr_signal_vectorized,
-    wsr_severity_rows,
+     OVERRUN_DAYS_THRESHOLD,
+     DEMO_STATIC_DEVOPS_PROJECT_CODE,
+     SHADOW_SHARE_THRESHOLD,
+     STANDARD_MONTHLY_HOURS,
+     UNDERSTAFFED_RATIO_THRESHOLD,
+     WSR_CRITICAL_MIN_REPORTS,
+     WSR_CRITICAL_SEVERITY_THRESHOLD,
+     WSR_LONG_TERM_MIN_REPORTS,
+     WSR_TREND_LOOKBACK_REPORTS,
+     WSR_TREND_RECENT_REPORTS,
+     churn_p75_threshold,
+     get_health_report,
+     trend_from_severity_series,
+     worst_wsr_signal_vectorized,
+     wsr_severity_rows,
+)
+from app.services.devops_insights_service import (
+    EXTENSION_RISK_WINDOW_DAYS,
+    compute_sprint_breakdown,
+    fetch_open_devops_tickets,
+    fetch_open_devops_tickets_cached,
+    group_tickets_by_project_code,
+    list_devops_tickets_for_display,
 )
 from app.services.project_roster_service import get_project_roster
 from app.services.rate_card_service import get_hourly_rate
@@ -235,6 +244,39 @@ def get_project_health_detail(project_code: str) -> dict:
             for _, r in proj_wsr_all.iterrows()
         ],
     }
+    _devops_enabled = bool(os.getenv("AZURE_DEVOPS_PAT"))
+    if _devops_enabled:
+        # _devops_tickets_by_project = group_tickets_by_project_code(fetch_open_devops_tickets())
+        _devops_tickets_by_project = group_tickets_by_project_code(fetch_open_devops_tickets_cached())
+        _devops_raw_tickets = _devops_tickets_by_project.get(DEMO_STATIC_DEVOPS_PROJECT_CODE, [])
+    else:
+        _devops_raw_tickets = []
+
+    devops_proof = {
+        "fired": "devops_extension_risk" in root_causes,
+        "data_available": summary["devops_data_available"],
+        "window_days": EXTENSION_RISK_WINDOW_DAYS,
+        "open_ticket_count": summary["devops_open_tickets"],
+        "blocked_ticket_count": summary["devops_blocked_tickets"],
+        "in_progress_ticket_count": summary["devops_in_progress_tickets"],
+        "to_do_ticket_count": summary["devops_to_do_tickets"],
+        "tickets_due_past_project_end": summary["devops_tickets_past_project_end"],
+        "remaining_effort_hours": summary["devops_remaining_effort_hours"],
+        "completed_work_hours": summary["devops_completed_work_hours"],
+        "original_estimate_hours": summary["devops_original_estimate_hours"],
+        "effort_completion_pct": summary["devops_effort_completion_pct"],
+        "within_risk_window": summary["devops_within_risk_window"],
+        "working_days_in_window": summary["devops_working_days_in_window"],
+        "team_capacity_hours": summary["devops_team_capacity_hours"],
+        "team_capacity_hours_after_leave": summary["devops_team_capacity_hours_after_leave"],
+        "capacity_surplus_hours": summary["devops_capacity_surplus_hours"],
+        "is_overdue": summary["devops_is_overdue"],
+        "tickets_missing_remaining_estimate": summary["devops_tickets_missing_remaining_estimate"],
+        "tickets_with_no_effort_data": summary["devops_tickets_with_no_effort_data"],
+        "sprint_breakdown": compute_sprint_breakdown(_devops_raw_tickets, project_end),
+        "tickets": list_devops_tickets_for_display(_devops_raw_tickets, project_end),
+        
+    }
 
     return {
         "project_code": project_code,
@@ -253,6 +295,7 @@ def get_project_health_detail(project_code: str) -> dict:
         "overtime_risk": overtime_proof,
         "effort_spike": effort_spike_proof,
         "wsr": wsr_proof,
+        "devops": devops_proof,
         "allocations_roster": roster,
     }
 

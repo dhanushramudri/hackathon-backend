@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
-
+import logging
+logger = logging.getLogger(__name__)
 from app.core.adapter import get_adapter
 from app.engines.role_mix_engine import canonical_project_coe
 
@@ -150,6 +151,7 @@ def get_allocation_report() -> list[dict]:
     # never formally closed out. Without this filter, departed people keep showing up
     # as "available" in the free pool and elsewhere downstream of this report.
     currently_active_ids = set(employees[employees["account_status"] == 1]["employee_id"])
+
     active = allocations[
         (allocations["is_allocation_active"] == 1) & (allocations["employee_id"].isin(currently_active_ids))
     ].copy()
@@ -209,4 +211,74 @@ def get_allocation_report() -> list[dict]:
     records = out.to_dict(orient="records")
     for record, coe in zip(records, coe_values):
         record["coe"] = coe
+    return records
+
+
+def get_availability_as_of(as_of_date: pd.Timestamp | None = None) -> list[dict]:
+    """Who is available (and how available) on a given date -- not just today.
+    'Available' is judged on client_pct only, same convention as utilization_band:
+    internal-project work is discretionary and shouldn't count against availability."""
+    adapter = get_adapter()
+    allocations = adapter.get_allocations()
+    employees = adapter.get_employees()
+    projects = adapter.get_projects()
+
+    as_of = pd.Timestamp(as_of_date).normalize() if as_of_date is not None else pd.Timestamp.now().normalize()
+    logger.warning(f"[availability] as_of={as_of}, allocations dtype={allocations['allocated_start_date'].dtype}, {allocations['allocated_end_date'].dtype}")
+
+    if "date_of_resignation" in employees.columns:
+        resignation = pd.to_datetime(employees["date_of_resignation"], errors="coerce")
+        will_still_be_active = (employees["account_status"] == 1) & (resignation.isna() | (resignation > as_of))
+        currently_active_ids = set(employees[will_still_be_active]["employee_id"])
+    else:
+        currently_active_ids = set(employees[employees["account_status"] == 1]["employee_id"])
+
+    logger.warning(f"[availability] as_of={as_of}, currently_active_ids count={len(currently_active_ids)}")
+
+    covering = allocations[
+        (allocations["allocated_start_date"] <= as_of)
+        & (allocations["allocated_end_date"] >= as_of)
+        & (allocations["is_allocation_active"] == 1)
+        & (allocations["employee_id"].isin(currently_active_ids))
+    ].copy()
+
+    logger.warning(f"[availability] as_of={as_of}, covering rows={len(covering)}")
+
+    covering = covering.merge(
+        projects[["project_code", "type_of_project"]].rename(columns={"project_code": "project_id"}),
+        on="project_id", how="left",
+    )
+
+    total_pct = covering.groupby("employee_id")["allocation_by_percentage"].sum().rename("total_allocated_pct")
+    client_rows = covering[covering["type_of_project"] != INTERNAL_PROJECT_TYPE]
+    client_pct = client_rows.groupby("employee_id")["allocation_by_percentage"].sum().rename("client_allocated_pct")
+
+    projects_by_employee: dict[str, list[dict]] = {}
+    for emp_id, group in covering.groupby("employee_id"):
+        projects_by_employee[emp_id] = [
+            {
+                "project_id": row["project_id"],
+                "type_of_project": row.get("type_of_project"),
+                "allocation_by_percentage": row["allocation_by_percentage"],
+                "resourcing_status": row["resourcing_status"],
+            }
+            for _, row in group.iterrows()
+        ]
+
+    emp_df = employees[employees["employee_id"].isin(currently_active_ids)][
+        ["employee_id", "job_name", "department_name", "location"]
+    ].copy()
+    emp_df = emp_df.merge(total_pct, on="employee_id", how="left")
+    emp_df = emp_df.merge(client_pct, on="employee_id", how="left")
+    emp_df["total_allocated_pct"] = emp_df["total_allocated_pct"].fillna(0.0)
+    emp_df["client_allocated_pct"] = emp_df["client_allocated_pct"].fillna(0.0)
+    emp_df["available_pct"] = (100 - emp_df["client_allocated_pct"]).clip(lower=0)
+    emp_df["is_fully_free"] = emp_df["client_allocated_pct"] <= 0
+    logger.warning(f"[availability] as_of={as_of}, fully_free count={(emp_df['is_fully_free']).sum()}, avg available_pct={emp_df['available_pct'].mean():.1f}")
+
+    records = emp_df.to_dict(orient="records")
+    for r in records:
+        r["as_of_date"] = as_of.strftime("%Y-%m-%d")
+        r["current_projects"] = projects_by_employee.get(r["employee_id"], [])
+    records.sort(key=lambda r: r["available_pct"], reverse=True)
     return records

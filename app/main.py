@@ -13,6 +13,8 @@ from app.routers import allocations, buddy, digest, employees, forecast, free_po
 from app.routers import health as health_monitor_router
 from app.services.digest_service import build_digest
 from app.services.email_service import render_digest_html, send_email
+from app.services.devops_insights_service import fetch_open_devops_tickets_cached
+
 
 logger = logging.getLogger("resourceiq.scheduler")
 logger_warmup = logging.getLogger("resourceiq.warmup")
@@ -38,6 +40,20 @@ def _warmup_embedding_model() -> None:
         logger_warmup.info("Embedding model warm — worker ready for semantic matching.")
     except Exception:
         logger_warmup.warning("Embedding warmup failed (non-fatal — word-token matching still works).", exc_info=True)
+
+
+def _warmup_devops_cache() -> None:
+    """Pre-fetch the full Azure DevOps ticket board on startup so the first
+    /health-monitor/projects request doesn't pay the ~30-50s fetch cost.
+    Runs in a daemon thread; no-op (returns empty list fast) if
+    AZURE_DEVOPS_PAT isn't configured.
+    """
+    try:
+        logger_warmup.info("Warming up DevOps ticket cache…")
+        tickets = fetch_open_devops_tickets_cached()
+        logger_warmup.info(f"DevOps ticket cache warm — {len(tickets)} tickets loaded.")
+    except Exception:
+        logger_warmup.warning("DevOps cache warmup failed (non-fatal — health report will fetch on first request).", exc_info=True)
 
 def _send_scheduled_digest(period_label: str) -> None:
     recipient = os.environ.get("DIGEST_RECIPIENT_EMAIL", "")
@@ -71,6 +87,7 @@ def load_data() -> None:
     # Warm up the embedding model in the background so the first recommendation
     # request is instant instead of waiting 30s for PyTorch to initialise.
     threading.Thread(target=_warmup_embedding_model, daemon=True).start()
+    threading.Thread(target=_warmup_devops_cache, daemon=True).start()
     # Friday EOD: what's still unresolved before the weekend. Monday AM: what to
     # tackle first thing this week. Same digest content, different framing.
     scheduler.add_job(_send_scheduled_digest, "cron", day_of_week="fri", hour=18, minute=0, args=["this weekend"], id="friday_eod_digest")
