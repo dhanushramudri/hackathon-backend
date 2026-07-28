@@ -228,6 +228,47 @@ def composite_score(skill_score: float, competency_score: float, availability_sc
         )
     )
 
+# All 5 ranking parameters are independently selectable in Advanced Filters --
+# skill/competency/availability are the defaults (all True), the other two are
+# opt-in (default False). Whichever subset is selected has its base weights
+# renormalized to sum to 1.0, so any combination (including any of the three
+# defaults being turned off) produces a mathematically consistent composite.
+BASE_WEIGHTS = {
+    "skill": SKILL_WEIGHT,
+    "competency": COMPETENCY_WEIGHT,
+    "availability": AVAILABILITY_WEIGHT,
+    "category_match": 0.15,
+    "project_count": 0.15,
+}
+
+def composite_score_v2(
+    skill_score: float, competency_score: float, availability_score: float,
+    category_match_ratio: float, project_count_score: float,
+    include: dict[str, bool],
+) -> float:
+    """Generalized composite over all 5 parameters. `include` maps each of
+    BASE_WEIGHTS' keys to whether it's selected. Included parameters' base
+    weights are renormalized to sum to 1.0 -- e.g. skill+competency only gives
+    skill 0.5/0.8=0.625, competency 0.3/0.8=0.375. If nothing is selected
+    (should never happen -- callers must enforce at least one), falls back to
+    the plain 3-factor composite_score() rather than returning a meaningless 0."""
+    values = {
+        "skill": skill_score,
+        "competency": competency_score,
+        "availability": availability_score,
+        "category_match": category_match_ratio,
+        "project_count": project_count_score,
+    }
+    total_weight = sum(BASE_WEIGHTS[k] for k in BASE_WEIGHTS if include.get(k))
+    if total_weight <= 0:
+        return composite_score(skill_score, competency_score, availability_score)
+    return float(
+        round(
+            sum(values[k] * BASE_WEIGHTS[k] for k in BASE_WEIGHTS if include.get(k)) / total_weight,
+            3,
+        )
+    )
+
 def bucket(skill_score: float, confidence: str | None = None) -> str:
     if confidence == "no_requirement":
         return "not_assessed"
@@ -257,6 +298,7 @@ def explain_candidate(
     requested_pct: float,
     meets_requested_capacity: bool,
     competency_confidence: str | None = None,
+    experience: dict | None = None,
 ) -> str:
     matched = skill_result["matched"]
     missing = skill_result["missing"]
@@ -293,5 +335,22 @@ def explain_candidate(
         "not_assessed": "skill fit not assessed -- no skillset was specified for this role; ranked by availability and competency only",
     }[bucket_value]
 
+    experience_clause = ""
+    if experience and experience.get("experience_confidence") == "observed":
+        count = experience["relevant_project_count"]
+        total = experience["total_projects"]
+        ratio = experience["relevant_project_ratio"]
+        specialist_note = " -- a specialist match for this category" if ratio >= 0.6 else ""
+        experience_clause = f"; has {count:g} relevant project(s) out of {total} completed/active{specialist_note}"
+    elif experience and experience.get("experience_confidence") == "related_only":
+        count = experience["relevant_project_count"]
+        total = experience["total_projects"]
+        experience_clause = f"; {count:g} project(s) in a related technical area out of {total} completed/active (no exact proposition match)"
+    elif experience and experience.get("experience_confidence") == "no_history":
+        experience_clause = "; no completed/active project history on file yet"
+    elif experience and experience.get("experience_confidence") == "no_match":
+        total = experience["total_projects"]
+        experience_clause = f"; {total} completed/active project(s) on file, none in this deal's category"
+
     name = f"{employee_id} ({job_name})" if job_name else employee_id
-    return f"{name} {skill_clause}; {competency_clause}; {availability_clause}. Overall: {bucket_clause}."
+    return f"{name} {skill_clause}; {competency_clause}; {availability_clause}{experience_clause}. Overall: {bucket_clause}."

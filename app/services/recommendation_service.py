@@ -10,6 +10,7 @@ from app.engines.employee_coe import get_employee_primary_coe_map
 from app.engines.resource_code_decoder import decode_resource_code
 from app.engines.skillset_classifier import classify_skillset, classify_skillset_with_proof
 from app.engines import embedding_engine
+from app.engines import experience_engine
 
 TOP_N = 15
 MAX_FALLBACK_CANDIDATES = 5
@@ -44,6 +45,20 @@ NON_DELIVERY_ROLES: frozenset[str] = frozenset({
     # Executive / board
     "Non-executive Director", "Partner",
 })
+
+# Fallback bridge when a pipeline deal has no Solution value: classify_skillset()
+# categories use a different vocabulary (5 skillset-derived buckets) than the real
+# project data's tech_coe labels (~15 tags) -- this maps between them so the
+# experience engine can still find a *related* (lower-confidence) signal instead
+# of nothing at all. The Solution/proposition_coe match remains the primary path.
+SKILLSET_CATEGORY_TO_TECH_COE: dict[str, list[str]] = {
+    "Data Engineering": ["Data Engineering"],
+    "AI & ML": ["Data Science & ML", "Data Science", "Gen AI", "DS/AI"],
+    "Full Stack Engineering": ["Full Stack Engineering"],
+    "TechOps & Automation": ["TechOps and Automation", "TechOps And MS"],
+    "BI & Reporting": ["BI and Reporting", "Consulting"],
+}
+
 
 class RowIndexOutOfRange(Exception):
 
@@ -147,6 +162,54 @@ def find_earliest_availability(
             }
     return None
 
+# "Other options to consider" looks a full year out (vs. the 180-day window
+# above, kept as-is for the legacy best_fit_if_delayed field other callers
+# still read) -- a real "show everyone, including who frees up later this
+# year" view needs the longer horizon.
+OTHER_OPTIONS_WINDOW_DAYS = 365
+
+def _batch_earliest_availability(
+    employee_ids: list[str], allocations: pd.DataFrame, after_date: pd.Timestamp,
+    requested_pct: float, window_days: int,
+) -> dict[str, dict]:
+    """Same result as calling find_earliest_availability() once per employee_id,
+    but shares the expensive org-wide availability_as_of() computation across
+    everyone instead of recomputing it per (employee, candidate end date) pair --
+    that pair count only depends on how many DISTINCT dates exist across the
+    whole batch, not on the number of employees, so this scales to hundreds of
+    candidates instead of ~10."""
+    if not employee_ids:
+        return {}
+    window_end = after_date + pd.Timedelta(days=window_days)
+    own_active = allocations[
+        allocations["employee_id"].isin(employee_ids)
+        & (allocations["is_allocation_active"] == 1)
+        & (allocations["allocated_end_date"] > after_date)
+        & (allocations["allocated_end_date"] <= window_end)
+    ]
+    if own_active.empty:
+        return {}
+
+    check_dates = sorted(pd.to_datetime(own_active["allocated_end_date"]).dropna().unique())
+    busy_by_date = {d: availability_as_of(allocations, pd.Timestamp(d) + pd.Timedelta(days=1)) for d in check_dates}
+
+    result: dict[str, dict] = {}
+    for emp_id, group in own_active.groupby("employee_id"):
+        for end_date in sorted(group["allocated_end_date"].dropna().unique()):
+            check_date = pd.Timestamp(end_date) + pd.Timedelta(days=1)
+            busy = float(busy_by_date[end_date].get(emp_id, 0.0))
+            available_pct = max(0.0, 100.0 - busy)
+            if available_pct >= requested_pct:
+                result[emp_id] = {
+                    "earliest_available_date": check_date.strftime("%Y-%m-%d"),
+                    "proof": (
+                        f"Current allocation ends {pd.Timestamp(end_date).strftime('%Y-%m-%d')}, "
+                        f"freeing up {round(available_pct, 1)}% capacity from {check_date.strftime('%Y-%m-%d')}."
+                    ),
+                }
+                break
+    return result
+
 # Blend weights: embedding captures semantic similarity, word matching provides
 # verified skill overlap. 65/35 gives semantic the primary voice while keeping
 # the proof-backed word signal meaningful.
@@ -163,6 +226,13 @@ def get_recommendations(
     requested_designations: list[str] | None = None,
     requested_coe_categories: list[str] | None = None,
     compute_earliest_availability: bool = True,
+    # "Other options to consider" (everyone not in `top`, full filters/sort) --
+    # on by default for the single-role recommendation view this powers, but
+    # explicitly disabled by callers that don't render it (backfill, and the
+    # per-role calls inside project-team building) since it's real added work
+    # (scoring/annotating hundreds of extra candidates + a batched availability
+    # lookup) that would otherwise silently slow down unrelated features.
+    compute_other_options: bool = True,
     employees: pd.DataFrame | None = None,
     competencies: pd.DataFrame | None = None,
     allocations: pd.DataFrame | None = None,
@@ -173,6 +243,27 @@ def get_recommendations(
     # Embedding layer — pre-built by the caller for multi-role efficiency.
     # When None, built here on demand (also cached internally by embedding_engine).
     emp_embedding_index: dict | None = None,
+    # Track-record / experience layer — see app/engines/experience_engine.py.
+    # requested_solution is the deal's Solution field (proposition_coe vocabulary,
+    # the primary match target); requested_coe_categories is reused as the weaker
+    # tech_coe fallback when no Solution is set.
+    requested_solution: str | None = None,
+    experience_profiles: dict | None = None,
+    # All 5 ranking parameters are independently selectable in Advanced Filters --
+    # skill/competency/availability default on, the other two default off. See
+    # scoring.composite_score_v2 for how the selected subset gets renormalized.
+    include_skill: bool = True,
+    include_competency: bool = True,
+    include_availability: bool = True,
+    include_category_match: bool = False,
+    include_project_count: bool = False,
+    # Separate from the ranking weights above: this is a hard gate, not a score
+    # factor. Default behavior (False) never shows someone who can't actually
+    # take the requested allocation % right now -- turning it on explicitly
+    # says "I know they're over capacity, show them to me anyway" (e.g. to
+    # weigh pulling them off something else). Unlike include_availability
+    # (which only reweights the score), this changes who's even in the pool.
+    include_below_capacity: bool = False,
 ) -> dict:
     adapter = get_adapter()
     employees = adapter.get_employees() if employees is None else employees
@@ -190,6 +281,12 @@ def get_recommendations(
     if employee_coe_map is None:
         employee_coe_map = get_employee_primary_coe_map()
     busy_pct = availability_as_of(allocations, as_of_date)
+
+    if experience_profiles is None:
+        experience_profiles = experience_engine.build_employee_experience_profiles()
+    requested_tech_coes: list[str] = []
+    for cat in (requested_coe_categories or []):
+        requested_tech_coes.extend(SKILLSET_CATEGORY_TO_TECH_COE.get(cat, []))
 
     # ── Embedding layer ───────────────────────────────────────────────────────
     # Build the employee embedding index on first call (cached inside the engine).
@@ -245,9 +342,23 @@ def get_recommendations(
         competency_confidence = competency_entry["confidence"]
         available_pct = max(0.0, 100.0 - float(busy_pct.get(emp_id, 0.0)))
         availability_score = min(available_pct / 100.0, 1.0)
-        composite = scoring.composite_score(skill_result["score"], competency_score, availability_score)
         bucket_value = scoring.bucket(skill_result["score"], skill_result["confidence"])
         meets_requested_capacity = bool(available_pct >= requested_pct)
+
+        experience = experience_engine.match_experience(
+            experience_profiles.get(emp_id), requested_solution, requested_tech_coes
+        )
+        composite = scoring.composite_score_v2(
+            skill_result["score"], competency_score, availability_score,
+            experience["relevant_project_ratio"], experience["project_count_score"],
+            include={
+                "skill": include_skill,
+                "competency": include_competency,
+                "availability": include_availability,
+                "category_match": include_category_match,
+                "project_count": include_project_count,
+            },
+        )
 
         results.append(
             {
@@ -267,6 +378,7 @@ def get_recommendations(
                     requested_pct=requested_pct,
                     meets_requested_capacity=meets_requested_capacity,
                     competency_confidence=competency_confidence,
+                    experience=experience,
                 ),
                 "skill_score": skill_result["score"],
                 "matched_skills": skill_result["matched"],
@@ -277,6 +389,13 @@ def get_recommendations(
                 "competency_confidence": competency_confidence,
                 "available_pct": round(available_pct, 1),
                 "meets_requested_capacity": meets_requested_capacity,
+                "total_projects": experience["total_projects"],
+                "distinct_clients": experience["distinct_clients"],
+                "relevant_project_count": experience["relevant_project_count"],
+                "relevant_project_ratio": experience["relevant_project_ratio"],
+                "experience_confidence": experience["experience_confidence"],
+                "top_categories": experience["top_categories"],
+                "project_count_score": experience["project_count_score"],
             }
         )
 
@@ -285,19 +404,40 @@ def get_recommendations(
     # this, a 100%-available employee with only inferred/imputed skills can rank
     # above a Software Engineer with real observed (but weaker or partially busy)
     # skills purely because availability inflates their composite.
+    #
+    # Both bucket and confidence are entirely skill-derived (bucket comes from
+    # skill_score thresholds, confidence from skill_confidence) -- they must
+    # only take sort priority when skill is actually one of the RM's selected
+    # ranking parameters. If include_skill is False, the RM explicitly said
+    # "don't rank by skill match"; silently still sorting by skill-bucket first
+    # would make that toggle a no-op on ordering (only the displayed number
+    # would change), which defeats the point of excluding it.
+    #
+    # relevant_project_count / relevant_project_ratio are the final tie-breakers:
+    # two candidates equal on everything above (the "which one do I pick" case)
+    # are separated by real track record in this deal's category -- a specialist
+    # with 4/4 matching projects outranks a generalist with 1/4, even though their
+    # skill/competency/availability scores are identical. This never reorders
+    # anyone who wasn't already tied on composite_score, so it's safe by default.
     _BUCKET_RANK = {"eligible": 3, "trainable": 2, "gap": 1, "not_assessed": 0}
     _CONFIDENCE_RANK = {"observed": 2, "imputed": 1, "semantic_match": 1, "no_match": 0, "no_requirement": 0}
-    ranked = sorted(
-        results,
-        key=lambda r: (
+    if include_skill:
+        sort_key = lambda r: (
             _BUCKET_RANK.get(r["bucket"], 0),
             _CONFIDENCE_RANK.get(r["skill_confidence"], 0),
             r["composite_score"],
-        ),
-        reverse=True,
-    )
+            r["relevant_project_count"],
+            r["relevant_project_ratio"],
+        )
+    else:
+        sort_key = lambda r: (
+            r["composite_score"],
+            r["relevant_project_count"],
+            r["relevant_project_ratio"],
+        )
+    ranked = sorted(results, key=sort_key, reverse=True)
     candidates_meeting_capacity = [r for r in ranked if r["meets_requested_capacity"]]
-    pool = candidates_meeting_capacity or ranked
+    pool = ranked if include_below_capacity else (candidates_meeting_capacity or ranked)
     top = pool[:top_n]
 
     for c in top:
@@ -305,9 +445,10 @@ def get_recommendations(
         c["earliest_available_date"] = None
         c["earliest_available_proof"] = None
 
+    shown_ids = {c["employee_id"] for c in top}
+
     best_fit_if_delayed: list[dict] = []
     if compute_earliest_availability:
-        shown_ids = {c["employee_id"] for c in top}
         for c in ranked[:10]:
             if len(best_fit_if_delayed) >= 3:
                 break
@@ -323,6 +464,30 @@ def get_recommendations(
                         "earliest_available_proof": found["proof"],
                     }
                 )
+
+    # "Other options to consider" -- everyone scored who isn't already shown in
+    # the main Candidates list, full stop. No designation/skill-match gating,
+    # no arbitrary cap: same engine, same fields, same filters as the main
+    # list, just the rest of the pool. Availability lookahead is a full year
+    # (OTHER_OPTIONS_WINDOW_DAYS) so "who frees up eventually" is genuinely complete.
+    other_options: list[dict] = []
+    if compute_other_options:
+        other_options = [c for c in ranked if c["employee_id"] not in shown_ids]
+        for c in other_options:
+            c["match_tier"] = _match_tier(c, requested_designations)
+            c["earliest_available_date"] = None
+            c["earliest_available_proof"] = None
+
+        if compute_earliest_availability:
+            need_availability = [c["employee_id"] for c in other_options if not c["meets_requested_capacity"]]
+            avail_map = _batch_earliest_availability(
+                need_availability, allocations, as_of_date, requested_pct, OTHER_OPTIONS_WINDOW_DAYS
+            )
+            for c in other_options:
+                found = avail_map.get(c["employee_id"])
+                if found:
+                    c["earliest_available_date"] = found["earliest_available_date"]
+                    c["earliest_available_proof"] = found["proof"]
 
     top_signal = top[0]["staffing_signal"] if top else "hire"
     hire_vs_redeploy = top_signal == "hire"
@@ -374,10 +539,15 @@ def get_recommendations(
         "semantic_only_match_count": semantic_only_match_count,
         "fallback_candidates": fallback_candidates,
         "best_fit_if_delayed": best_fit_if_delayed,
+        "other_options": other_options,
+        "other_options_window_days": OTHER_OPTIONS_WINDOW_DAYS,
     }
 
 def get_recommendations_for_pipeline_row(
-    row_index: int, pipeline: pd.DataFrame | None = None, top_n: int = TOP_N, **prefetched
+    row_index: int, pipeline: pd.DataFrame | None = None, top_n: int = TOP_N,
+    include_skill: bool = True, include_competency: bool = True, include_availability: bool = True,
+    include_category_match: bool = False, include_project_count: bool = False,
+    include_below_capacity: bool = False, **prefetched
 ) -> dict:
     adapter = get_adapter()
     pipeline = adapter.get_pipeline_forecast() if pipeline is None else pipeline
@@ -389,6 +559,8 @@ def get_recommendations_for_pipeline_row(
     requested_coe_categories, skillset_classification_proof = classify_skillset_with_proof(row.get("skillset"))
     _skillset_raw = row.get("skillset", "")
     _skillset = _skillset_raw if isinstance(_skillset_raw, str) else ""
+    _solution = row.get("solution")
+    requested_solution = _solution if isinstance(_solution, str) and _solution.strip() else None
     result = get_recommendations(
         skillset_text=_skillset,
         likely_start_date=str(row.get("likely_start_date")),
@@ -396,6 +568,13 @@ def get_recommendations_for_pipeline_row(
         top_n=top_n,
         requested_designations=requested_designations,
         requested_coe_categories=requested_coe_categories,
+        requested_solution=requested_solution,
+        include_skill=include_skill,
+        include_competency=include_competency,
+        include_availability=include_availability,
+        include_category_match=include_category_match,
+        include_project_count=include_project_count,
+        include_below_capacity=include_below_capacity,
         **prefetched,
     )
     cluster = row.get("cluster")
@@ -774,7 +953,11 @@ def list_deals() -> list[dict]:
     return deals
 
 
-def get_project_team_recommendation(row_indices: list[int], top_n: int = 15) -> dict:
+def get_project_team_recommendation(
+    row_indices: list[int], top_n: int = 15,
+    include_skill: bool = True, include_competency: bool = True, include_availability: bool = True,
+    include_category_match: bool = False, include_project_count: bool = False,
+) -> dict:
     """Greedy conflict-aware team assignment for a set of pipeline roles.
 
     Processes roles from most-constrained (fewest candidates that meet requested capacity)
@@ -804,7 +987,9 @@ def get_project_team_recommendation(row_indices: list[int], top_n: int = 15) -> 
         "skill_index": scoring.build_employee_skill_index(_skills),
         "employee_coe_map": get_employee_primary_coe_map(),
         "emp_embedding_index": embedding_engine.build_employee_embedding_index(_skills),
+        "experience_profiles": experience_engine.build_employee_experience_profiles(),
         "compute_earliest_availability": False,
+        "compute_other_options": False,  # team-building doesn't render this list -- skip it per role
     }
 
     # Fetch all candidates for each role with a large pool so constraint ordering is accurate
@@ -813,7 +998,10 @@ def get_project_team_recommendation(row_indices: list[int], top_n: int = 15) -> 
         if row_index < 0 or row_index >= len(pipeline):
             continue
         result = get_recommendations_for_pipeline_row(
-            row_index, pipeline=pipeline, top_n=2000, **prefetched
+            row_index, pipeline=pipeline, top_n=2000,
+            include_skill=include_skill, include_competency=include_competency, include_availability=include_availability,
+            include_category_match=include_category_match, include_project_count=include_project_count,
+            **prefetched
         )
         role_data.append({
             "row_index": row_index,
@@ -969,6 +1157,7 @@ def get_backfill_candidates(employee_id: str, source_project_id: str, top_n: int
         requested_designations=[job_name] if job_name else None,
         requested_coe_categories=requested_coe_categories,
         compute_earliest_availability=True,   # populate best_fit_if_delayed
+        compute_other_options=False,          # backfill doesn't render this list -- skip the extra work
     )
 
     leaves = adapter.get_leaves()
