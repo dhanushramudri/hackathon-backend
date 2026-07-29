@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
+from app.engines.revenue_engine import get_revenue_benchmarks_by_coe
 from app.engines.role_mix_engine import get_role_mix_by_coes
 from app.engines.simple_forecast_engine import get_prediction_forecast
-from app.services.demand_forecast_service import get_new_project_forecast
+from app.services.demand_forecast_service import get_new_project_forecast, get_revenue_target_forecast
 from app.services.pipeline_outlook_service import OUTLOOK_MONTHS, get_pipeline_outlook, get_pipeline_outlook_drilldown
 
 router = APIRouter(prefix="/forecast", tags=["forecast"])
@@ -21,6 +22,18 @@ class NewProjectSpec(BaseModel):
 class RoleMixPreviewRequest(BaseModel):
     coes: list[str]
     type_of_project: str | None = None
+
+class RevenueTargetRequest(BaseModel):
+    target_revenue_usd: float
+    priority_coes: list[str] | None = None
+    start_date: str | None = None
+    duration_weeks: int | None = None
+    type_of_project: str | None = None
+    include_skill: bool = True
+    include_competency: bool = True
+    include_availability: bool = True
+    include_category_match: bool = False
+    include_project_count: bool = False
 
 @router.post("/new-projects")
 def new_projects(
@@ -48,6 +61,27 @@ def new_projects(
 @router.post("/role-mix-preview")
 def role_mix_preview(body: RoleMixPreviewRequest) -> dict:
     return get_role_mix_by_coes(body.coes, body.type_of_project)
+
+@router.get("/revenue-benchmarks")
+def revenue_benchmarks() -> dict:
+    return get_revenue_benchmarks_by_coe()
+
+@router.post("/revenue-target")
+def revenue_target(body: RevenueTargetRequest) -> dict:
+    return get_revenue_target_forecast(
+        body.target_revenue_usd,
+        priority_coes=body.priority_coes,
+        start_date=body.start_date,
+        duration_weeks=body.duration_weeks,
+        type_of_project=body.type_of_project,
+        include={
+            "skill": body.include_skill,
+            "competency": body.include_competency,
+            "availability": body.include_availability,
+            "category_match": body.include_category_match,
+            "project_count": body.include_project_count,
+        },
+    )
 
 @router.get("/prediction")
 def prediction(horizon_months: int = 24) -> dict:

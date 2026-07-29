@@ -6,11 +6,12 @@ from app.core.adapter import get_adapter
 from app.engines import availability_hold, embedding_engine, experience_engine, scoring
 from app.engines.designation_ladder import LEADERSHIP_DESIGNATIONS, adjacent_designations
 from app.engines.employee_coe import get_employee_primary_coe_map
+from app.engines.revenue_engine import get_revenue_benchmarks_by_coe
 from app.engines.role_mix_engine import CANONICAL_COE_MAP, DOCX_CATEGORY_MAP, get_role_mix_by_category, get_role_mix_by_coes
 from app.services.allocation_report_service import UNDER_UTILIZED_THRESHOLD
 from app.services.free_pool_service import get_free_pool_by_designation
 from app.services.rate_card_service import get_hourly_rate
-from app.services.recommendation_service import availability_as_of
+from app.services.recommendation_service import availability_as_of, get_recommendations
 
 STANDARD_MONTHLY_HOURS = 160
 MIN_AVAILABLE_PCT_TO_SURFACE = 100 - UNDER_UTILIZED_THRESHOLD
@@ -287,6 +288,34 @@ def get_new_project_forecast(specs: list[dict], include: dict[str, bool] | None 
             allocations_df = adapter.get_allocations()
         return employees_df, allocations_df
 
+    # Cross-role tier prefetch (see below) -- built lazily, once, only if some
+    # designation actually still has a shortfall after its own + adjacent-ladder
+    # tiers, since it's real extra cost (org-wide skill/embedding scoring via
+    # the same engine get_recommendations() uses) that most forecast runs with
+    # a healthy bench will never need.
+    cross_role_prefetch: dict | None = None
+
+    def _ensure_cross_role_prefetch() -> dict:
+        nonlocal cross_role_prefetch
+        if cross_role_prefetch is None:
+            adapter = get_adapter()
+            emp_df, alloc_df = _ensure_employee_tables()
+            _skills = adapter.get_skills()
+            cross_role_prefetch = {
+                "employees": emp_df,
+                "competencies": adapter.get_competencies(),
+                "allocations": alloc_df,
+                "pipeline_skillset": adapter.get_pipeline_skillset(),
+                "skills": _skills,
+                "skill_index": skill_index or scoring.build_employee_skill_index(_skills),
+                "employee_coe_map": employee_coe_map,
+                "emp_embedding_index": emp_embedding_index or embedding_engine.build_employee_embedding_index(_skills),
+                "experience_profiles": experience_profiles,
+                "compute_earliest_availability": False,
+                "compute_other_options": False,
+            }
+        return cross_role_prefetch
+
     # Designations sharing an adjacency relation (e.g. "Software Engineer" <->
     # "Senior Software Engineer") can otherwise each independently draw the same
     # physical people as an adjacent-level fill for two different roles' shortfalls
@@ -367,7 +396,46 @@ def get_new_project_forecast(specs: list[dict], include: dict[str, bool] | None 
                 adjacent_fill_count = min(len(adjacent_level_candidates), shortfall_at_level)
                 claimed.update(c["employee_id"] for c in adjacent_level_candidates[:adjacent_fill_count])
 
-        shortfall = max(0, shortfall_at_level - adjacent_fill_count)
+        shortfall_after_adjacent = max(0, shortfall_at_level - adjacent_fill_count)
+
+        # Cross-role tier: title-ladder adjacency (above) only catches a different
+        # seniority of the SAME track (Software Engineer <-> Senior Software
+        # Engineer). "We're short a Solutions Enabler, but do we have a Senior
+        # Software Engineer whose actual skills fit?" is a different track
+        # entirely -- so this runs the exact same org-wide skill/competency/
+        # availability search the main Recommendations page uses (get_recommendations,
+        # bucketed eligible/trainable/gap via scoring.bucket()), unrestricted by
+        # designation. `eligible` results are a real redeploy option and count
+        # toward filling the shortfall; `trainable` results are a real skill gap,
+        # not headcount, and belong in the training/upskill plan below regardless
+        # of whether the shortfall is fully covered -- surfaced but never assumed
+        # to fill a seat automatically. Hiring is only justified once this tier
+        # is exhausted too.
+        cross_role_candidates: list[dict] = []
+        training_candidates: list[dict] = []
+        cross_role_fill_count = 0
+        if all_required_skills:
+            prefetch = _ensure_cross_role_prefetch()
+            cross_role_result = get_recommendations(
+                skillset_text=" | ".join(all_required_skills),
+                likely_start_date=date_key,
+                requested_pct_raw="100",
+                top_n=200,
+                **prefetch,
+            )
+            ladder_ids = {c["employee_id"] for c in candidates} | {c["employee_id"] for c in adjacent_level_candidates}
+            for c in cross_role_result["candidates"]:
+                if c["employee_id"] in claimed or c["employee_id"] in ladder_ids:
+                    continue
+                if c["bucket"] == "eligible":
+                    cross_role_candidates.append(c)
+                elif c["bucket"] == "trainable":
+                    training_candidates.append(c)
+            if shortfall_after_adjacent > 0 and cross_role_candidates:
+                cross_role_fill_count = min(len(cross_role_candidates), shortfall_after_adjacent)
+                claimed.update(c["employee_id"] for c in cross_role_candidates[:cross_role_fill_count])
+
+        shortfall = max(0, shortfall_after_adjacent - cross_role_fill_count)
 
         recommended_start_date = None
         recommended_start_date_proof = None
@@ -401,6 +469,9 @@ def get_new_project_forecast(specs: list[dict], include: dict[str, bool] | None 
                 "redeploy_candidates": candidates,
                 "adjacent_level_candidates": adjacent_level_candidates,
                 "adjacent_fill_count": adjacent_fill_count,
+                "cross_role_candidates": cross_role_candidates,
+                "cross_role_fill_count": cross_role_fill_count,
+                "training_candidates": training_candidates[:10],
                 "shortfall": shortfall,
                 "shortfall_value_usd": shortfall_value_usd,
                 "full_role_monthly_value_usd": full_role_monthly_value_usd,
@@ -431,4 +502,104 @@ def get_new_project_forecast(specs: list[dict], include: dict[str, bool] | None 
         "total_full_role_value_usd": total_full_role_value_usd,
         "total_achievable_value_usd": total_achievable_value_usd,
         "pct_achievable_with_current_headcount": pct_achievable_with_current_headcount,
+    }
+
+# Priority weight per rank in a priority_coes list -- halves each step so the
+# top-priority CoE (Data Engineering by default, reflecting where JMAN is
+# strongest/most proven) claims roughly half the revenue target, the next
+# claims half of what's left, and so on. The last CoE in the list absorbs
+# whatever weight remains instead of being halved again, so weights always
+# sum to exactly 1.0 regardless of list length.
+def _priority_weights(n: int) -> list[float]:
+    if n <= 0:
+        return []
+    weights = [0.5 ** (i + 1) for i in range(n - 1)]
+    weights.append(1.0 - sum(weights))
+    return weights
+
+# Below this fraction of a CoE's own average project size, a "project" would
+# be a sliver too small to be a real, staffable engagement -- skipped rather
+# than reporting a nonsensical "0.1 projects".
+MIN_PROJECT_SHARE_FRACTION = 0.15
+
+def get_revenue_target_forecast(
+    target_revenue_usd: float,
+    priority_coes: list[str] | None = None,
+    start_date: str | None = None,
+    duration_weeks: int | None = None,
+    type_of_project: str | None = None,
+    include: dict[str, bool] | None = None,
+) -> dict:
+    """Reverse the usual forecast question: given a revenue target, what project
+    mix (how many of each CoE) gets us there, prioritized toward the CoEs we're
+    strongest in -- and, feeding that mix through the same get_new_project_forecast
+    pipeline (redeploy -> adjacent title -> cross-role skill match -> train ->
+    hire), what resources does that mix actually require, what do we already
+    have, and where's the real gap.
+
+    Revenue figures are synthetic (see app/engines/revenue_engine.py) -- no
+    project in the source data carries a real revenue value, so this is a
+    defensible, consistently-ranked estimate for driving the reverse math, not
+    a claim of historical billing fact.
+    """
+    benchmarks = get_revenue_benchmarks_by_coe()
+    if not benchmarks:
+        return {
+            "target_revenue_usd": target_revenue_usd,
+            "priority_coes": [],
+            "project_mix": [],
+            "total_projected_revenue_usd": 0.0,
+            "revenue_gap_usd": target_revenue_usd,
+            "pct_of_target_covered": 0.0,
+            "forecast": None,
+            "error": "No historical project revenue data available to benchmark against.",
+        }
+
+    if not priority_coes:
+        priority_coes = ["Data Engineering"] + sorted(
+            (c for c in benchmarks if c != "Data Engineering"),
+            key=lambda c: -benchmarks[c]["avg_revenue_per_project"],
+        )
+    priority_coes = [c for c in priority_coes if c in benchmarks]
+
+    weights = _priority_weights(len(priority_coes))
+    project_mix = []
+    specs = []
+    for coe, weight in zip(priority_coes, weights):
+        b = benchmarks[coe]
+        avg = b["avg_revenue_per_project"]
+        target_share = target_revenue_usd * weight
+        project_count = round(target_share / avg) if avg > 0 else 0
+        if project_count <= 0 and avg > 0 and target_share >= avg * MIN_PROJECT_SHARE_FRACTION:
+            project_count = 1
+        projected_revenue = project_count * avg
+        project_mix.append({
+            "coe": coe,
+            "weight_pct": round(weight * 100, 1),
+            "target_share_usd": round(target_share, 0),
+            "project_count": project_count,
+            "avg_revenue_per_project": avg,
+            "projected_revenue_usd": projected_revenue,
+            "sample_size": b["sample_size"],
+        })
+        if project_count > 0:
+            specs.append({
+                "coes": [coe],
+                "count": project_count,
+                "start_date": start_date,
+                "duration_weeks": duration_weeks,
+                "type_of_project": type_of_project,
+            })
+
+    forecast = get_new_project_forecast(specs, include=include) if specs else None
+    total_projected_revenue = sum(m["projected_revenue_usd"] for m in project_mix)
+
+    return {
+        "target_revenue_usd": target_revenue_usd,
+        "priority_coes": priority_coes,
+        "project_mix": project_mix,
+        "total_projected_revenue_usd": total_projected_revenue,
+        "revenue_gap_usd": round(target_revenue_usd - total_projected_revenue, 0),
+        "pct_of_target_covered": round(100 * total_projected_revenue / target_revenue_usd, 1) if target_revenue_usd > 0 else None,
+        "forecast": forecast,
     }
