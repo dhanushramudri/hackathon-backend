@@ -96,9 +96,26 @@ def backfill(
     employee_id: str,
     source_project_id: str,
     top_n: int = Query(default=15, ge=1, le=50),
+    include_skill: bool = Query(default=True),
+    include_competency: bool = Query(default=True),
+    include_availability: bool = Query(default=True),
+    include_category_match: bool = Query(default=False),
+    include_project_count: bool = Query(default=False),
+    include_coe_affinity: bool = Query(default=True),
+    include_cost_efficiency: bool = Query(default=False),
+    include_below_capacity: bool = Query(default=False),
+    near_capacity_tolerance_pct: float = Query(default=25.0, ge=0, le=100),
 ) -> dict:
     """Find replacement candidates if an employee is pulled from a project."""
-    return get_backfill_candidates(employee_id, source_project_id, top_n=top_n)
+    return get_backfill_candidates(
+        employee_id, source_project_id, top_n=top_n,
+        include_skill=include_skill, include_competency=include_competency, include_availability=include_availability,
+        include_category_match=include_category_match, include_project_count=include_project_count,
+        include_coe_affinity=include_coe_affinity,
+        include_cost_efficiency=include_cost_efficiency,
+        include_below_capacity=include_below_capacity,
+        near_capacity_tolerance_pct=near_capacity_tolerance_pct,
+    )
 
 @router.get("/search")
 def search(

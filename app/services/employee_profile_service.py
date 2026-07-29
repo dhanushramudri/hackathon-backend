@@ -2,6 +2,7 @@ import pandas as pd
 
 from app.core.adapter import get_adapter
 from app.engines.employee_coe import get_employee_primary_coe_map
+from app.engines import availability_hold
 from app.services.recommendation_service import NON_DELIVERY_ROLES
 from app.services.allocation_report_service import OVER_ALLOCATED_THRESHOLD, UNDER_UTILIZED_THRESHOLD, get_allocation_report
 from app.services.timesheet_insights_service import (
@@ -50,6 +51,7 @@ def list_employees() -> list[dict]:
     today = pd.Timestamp.now().normalize()
     coe_map = get_employee_primary_coe_map()
     alloc_pct_by_emp = {r["employee_id"]: r["employee_total_allocation_pct"] for r in get_allocation_report()}
+    hold_flags = availability_hold.get_employee_hold_flags()
 
     active_employees = employees[employees["account_status"] == 1]
 
@@ -75,6 +77,8 @@ def list_employees() -> list[dict]:
                 "status": status,
                 "coe": coe_map.get(emp_id),
                 "current_allocation_pct": alloc_pct_by_emp.get(emp_id),
+                "on_hold": emp_id in hold_flags,
+                "hold_projects": hold_flags.get(emp_id, {}).get("projects", []),
             }
         )
     return out
@@ -227,8 +231,11 @@ def get_employee_profile(employee_id: str) -> dict:
     overtime_risk = get_employee_overtime_risk().get(
         employee_id, {"overtime_days_recent": 0, "max_daily_hours_recent": 0.0, "is_sustained_overtime": False}
     )
+    hold_info = availability_hold.get_employee_hold_flags().get(employee_id)
 
     signals = {
+        "on_hold": hold_info is not None,
+        "hold_projects": hold_info["projects"] if hold_info else [],
         # Judged on client-only allocation -- internal-project work is discretionary
         # ("contribute when you have time"), not a hard commitment, so it never makes
         # someone look over capacity on its own.

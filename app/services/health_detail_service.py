@@ -1,10 +1,15 @@
 import pandas as pd
 import os
 from app.core.adapter import get_adapter
-from app.engines import embedding_engine, scoring
+from app.engines import embedding_engine, experience_engine, scoring
 from app.engines.coe_skill_engine import GENERIC_SKILL_COES, derive_skills_for_coes
 from app.engines.role_mix_engine import canonical_project_coe, get_role_mix
 from app.services.free_pool_service import get_free_pool
+from app.services.recommendation_service import (
+    COST_TIE_BAND_PCT,
+    _COE_AFFINITY_NEUTRAL,
+    _coe_affinity_rank,
+)
 from app.services.health_monitor_service import (
      OVERRUN_DAYS_THRESHOLD,
      DEMO_STATIC_DEVOPS_PROJECT_CODE,
@@ -478,7 +483,31 @@ def _estimate_extension(overrun_days: int | None, devops_risk: dict, project_end
         ),
     }
 
-def get_relief_staffing_candidates(project_code: str, top_n: int = MAX_RELIEF_CANDIDATES_SHOWN) -> dict:
+def get_relief_staffing_candidates(
+    project_code: str,
+    top_n: int = MAX_RELIEF_CANDIDATES_SHOWN,
+    *,
+    # All 5 ranking parameters are independently selectable, same defaults as
+    # get_recommendations() -- skill/competency/availability on, category_match/
+    # project_count off. See scoring.composite_score_v2 for renormalization.
+    include_skill: bool = True,
+    include_competency: bool = True,
+    include_availability: bool = True,
+    include_category_match: bool = False,
+    include_project_count: bool = False,
+    include_coe_affinity: bool = True,
+    # Off by default -- only breaks ties among already-close composite scores,
+    # same COST_TIE_BAND_PCT behavior as get_recommendations().
+    include_cost_efficiency: bool = False,
+    # NOTE: get_recommendations()'s include_below_capacity/near_capacity_tolerance_pct
+    # are intentionally NOT ported here. Both exist there because a requested
+    # allocation % is a real gate: "does this person meet the % the role needs".
+    # Relief staffing has no such target -- the whole premise is "who has real
+    # idle capacity" (fully_free/under_utilized) or a real dated free-up
+    # (ending_soon), not "who meets X% of a requested role." Forcing a capacity
+    # gate/tolerance concept onto that would be a fake knob with nothing real
+    # to gate against.
+) -> dict:
     """Who from the Free Pool could realistically be added to a project that's
     overtime-risk and/or understaffed -- the same composite (skill + competency +
     availability) scoring used everywhere else, with the required skillset derived
@@ -534,6 +563,14 @@ def get_relief_staffing_candidates(project_code: str, top_n: int = MAX_RELIEF_CA
     if emp_embedding_index is not None and job_vec is not None:
         semantic_scores = embedding_engine.batch_cosine_similarity(job_vec, emp_embedding_index)
 
+    # Track-record / experience layer -- same engine used by get_recommendations().
+    # No deal "Solution" field exists on this surface (unlike the pipeline-row
+    # recommendations flow), so requested_solution is always None here, same
+    # pattern as Leave backfill; match_experience() falls back to tech_coe-only
+    # matching against the project's own CoE when a solution isn't supplied.
+    experience_profiles = experience_engine.build_employee_experience_profiles()
+    requested_tech_coes = [project_coe] if project_coe else []
+
     def score_one(c: dict, available_now: bool) -> dict:
         emp_id = c["employee_id"]
         word_result = scoring.score_skill_match(required_phrases, skill_index.get(emp_id, {}))
@@ -552,7 +589,24 @@ def get_relief_staffing_candidates(project_code: str, top_n: int = MAX_RELIEF_CA
         # them at 0 here keeps the composite honest; available_from_date carries the
         # actual real-world timing separately instead of faking it into the score.
         availability_score = min((c.get("idle_capacity_pct") or 0.0) / 100.0, 1.0) if available_now else 0.0
-        composite = scoring.composite_score(skill_result["score"], competency_entry["score"], availability_score)
+        experience = experience_engine.match_experience(
+            experience_profiles.get(emp_id), requested_solution=None, requested_tech_coes=requested_tech_coes
+        )
+        composite = scoring.composite_score_v2(
+            skill_result["score"], competency_entry["score"], availability_score,
+            experience["relevant_project_ratio"], experience["project_count_score"],
+            include={
+                "skill": include_skill,
+                "competency": include_competency,
+                "availability": include_availability,
+                "category_match": include_category_match,
+                "project_count": include_project_count,
+            },
+        )
+        coe_affinity_rank = (
+            _coe_affinity_rank(c.get("primary_coe"), [project_coe] if project_coe else None)
+            if include_coe_affinity else _COE_AFFINITY_NEUTRAL
+        )
         return {
             **c,
             "composite_score": composite,
@@ -564,13 +618,43 @@ def get_relief_staffing_candidates(project_code: str, top_n: int = MAX_RELIEF_CA
             "competency_confidence": competency_entry["confidence"],
             "skill_bucket": scoring.bucket(skill_result["score"], skill_result["confidence"]),
             "coe_matches_project": bool(project_coe) and c.get("primary_coe") == project_coe,
+            "coe_affinity_rank": coe_affinity_rank,
+            "total_projects": experience["total_projects"],
+            "distinct_clients": experience["distinct_clients"],
+            "relevant_project_count": experience["relevant_project_count"],
+            "relevant_project_ratio": experience["relevant_project_ratio"],
+            "experience_confidence": experience["experience_confidence"],
+            "top_categories": experience["top_categories"],
+            "project_count_score": experience["project_count_score"],
         }
+
+    # Cost-efficiency tie-break -- same shape as get_recommendations()'s
+    # _cost_key/_composite_for_sort: only breaks ties among candidates whose
+    # composite scores already sit within COST_TIE_BAND_PCT of each other, never
+    # lets a cheap poor match outrank a genuinely stronger one. hourly_rate_usd
+    # is already present on every free-pool candidate (see free_pool_service.py).
+    def _cost_key(c: dict) -> float:
+        rate = c.get("hourly_rate_usd")
+        return -(rate if rate is not None else float("inf"))
+
+    def _composite_for_sort(c: dict) -> float:
+        if not include_cost_efficiency:
+            return c["composite_score"]
+        return round(c["composite_score"] * 100 / COST_TIE_BAND_PCT)
+
+    def _sort_key(c: dict) -> tuple:
+        return (
+            c["coe_affinity_rank"],
+            _composite_for_sort(c),
+            _cost_key(c) if include_cost_efficiency else 0,
+            c["composite_score"],
+        )
 
     free_pool = get_free_pool()
     now_pool = [c for c in free_pool if c["reason"] in ("fully_free", "under_utilized") and c["employee_id"] not in roster_ids]
     soon_pool = [c for c in free_pool if c["reason"] == "ending_soon" and c["employee_id"] not in roster_ids]
 
-    candidates = sorted((score_one(c, True) for c in now_pool), key=lambda c: -c["composite_score"])
+    candidates = sorted((score_one(c, True) for c in now_pool), key=_sort_key, reverse=True)
 
     available_soon = []
     for c in soon_pool:
@@ -579,7 +663,13 @@ def get_relief_staffing_candidates(project_code: str, top_n: int = MAX_RELIEF_CA
         scored["days_to_available"] = days
         scored["available_from_date"] = (today + pd.Timedelta(days=days)).strftime("%Y-%m-%d") if days is not None else None
         available_soon.append(scored)
-    available_soon.sort(key=lambda c: (-c["composite_score"], c.get("days_to_available") if c.get("days_to_available") is not None else 999))
+    # Final tiebreaker (after coe_affinity/cost/composite, same as `candidates`):
+    # soonest real free date wins among otherwise-equal candidates. Missing days
+    # sort last, matching the previous fallback of 999.
+    available_soon.sort(
+        key=lambda c: (*_sort_key(c), -(c.get("days_to_available") if c.get("days_to_available") is not None else 999)),
+        reverse=True,
+    )
 
     return {
         "project_code": project_code,

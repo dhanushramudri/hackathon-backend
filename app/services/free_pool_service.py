@@ -2,6 +2,7 @@ import pandas as pd
 
 from app.core.adapter import get_adapter
 from app.engines.employee_coe import get_employee_primary_coe_map
+from app.engines import availability_hold
 from app.services.allocation_report_service import INTERNAL_PROJECT_TYPE, UNDER_UTILIZED_THRESHOLD, get_allocation_report
 from app.services.rate_card_service import get_hourly_rate
 
@@ -87,11 +88,15 @@ def get_free_pool(include_redeploy_summary: bool = True) -> list[dict]:
             "location": row["location"], "reason": "fully_free", "project_id": None, "current_allocation_pct": 0.0,
         })
 
+    hold_flags = availability_hold.get_employee_hold_flags()
     for emp_id, c in pool.items():
         if c["reason"] == "ending_soon":
             idle_pct = max(0.0, min(100.0, c.get("ending_allocation_pct") or 0.0))
         else:
             idle_pct = max(0.0, 100.0 - (c.get("current_allocation_pct") or 0.0))
+        hold_info = hold_flags.get(emp_id)
+        c["on_hold"] = hold_info is not None
+        c["hold_projects"] = hold_info["projects"] if hold_info else []
         c["primary_coe"] = coe_map.get(emp_id)
         c["idle_capacity_pct"] = round(idle_pct, 1)
         c["hourly_rate_usd"] = get_hourly_rate(c["job_name"])

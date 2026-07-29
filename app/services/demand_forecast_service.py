@@ -3,10 +3,10 @@ import math
 import pandas as pd
 
 from app.core.adapter import get_adapter
-from app.engines import embedding_engine, scoring
+from app.engines import availability_hold, embedding_engine, experience_engine, scoring
 from app.engines.designation_ladder import LEADERSHIP_DESIGNATIONS, adjacent_designations
 from app.engines.employee_coe import get_employee_primary_coe_map
-from app.engines.role_mix_engine import get_role_mix_by_category, get_role_mix_by_coes
+from app.engines.role_mix_engine import CANONICAL_COE_MAP, get_role_mix_by_category, get_role_mix_by_coes
 from app.services.allocation_report_service import UNDER_UTILIZED_THRESHOLD
 from app.services.free_pool_service import get_free_pool_by_designation
 from app.services.rate_card_service import get_hourly_rate
@@ -16,19 +16,35 @@ STANDARD_MONTHLY_HOURS = 160
 MIN_AVAILABLE_PCT_TO_SURFACE = 100 - UNDER_UTILIZED_THRESHOLD
 RECOMMENDED_DATE_SEARCH_DAYS = 180
 
+# Same 5-parameter ranking flexibility as get_recommendations (see
+# scoring.composite_score_v2 / BASE_WEIGHTS) -- one selection for the whole
+# forecast run (all specs in the same request share one Advanced Filters
+# panel), since role-mix candidates are already pooled/scored per designation
+# rather than per spec.
+DEFAULT_FORECAST_INCLUDE: dict[str, bool] = {
+    "skill": True, "competency": True, "availability": True,
+    "category_match": False, "project_count": False,
+}
+
 def get_redeploy_candidates_as_of(designation: str, as_of_date: pd.Timestamp, employees: pd.DataFrame, allocations: pd.DataFrame) -> list[dict]:
     busy_pct = availability_as_of(allocations, as_of_date)
     active_in_role = employees[(employees["account_status"] == 1) & (employees["job_name"] == designation)]
+    # Same hold/doubt signal surfaced everywhere else a candidate is shown (see
+    # app/engines/availability_hold.py) -- someone who looks free today may still
+    # be tied to a project the Health monitor expects to run long.
+    hold_flags = availability_hold.get_employee_hold_flags()
 
     candidates = []
     for _, emp in active_in_role.iterrows():
-        busy = float(busy_pct.get(emp["employee_id"], 0.0))
+        emp_id = emp["employee_id"]
+        busy = float(busy_pct.get(emp_id, 0.0))
         available_pct = max(0.0, 100.0 - busy)
         if busy > 0 and available_pct < MIN_AVAILABLE_PCT_TO_SURFACE:
             continue
+        hold_info = hold_flags.get(emp_id)
         candidates.append(
             {
-                "employee_id": emp["employee_id"],
+                "employee_id": emp_id,
                 "job_name": designation,
                 "department_name": emp.get("department_name"),
                 "location": emp.get("location"),
@@ -36,6 +52,8 @@ def get_redeploy_candidates_as_of(designation: str, as_of_date: pd.Timestamp, em
                 "project_id": None,
                 "current_allocation_pct": round(busy, 1),
                 "available_pct_as_of": round(available_pct, 1),
+                "on_hold": hold_info is not None,
+                "hold_projects": hold_info["projects"] if hold_info else [],
             }
         )
     candidates.sort(key=lambda c: -c["available_pct_as_of"])
@@ -45,9 +63,19 @@ def _tag_coe(candidates: list[dict], employee_coe_map: dict[str, str]) -> None:
     for c in candidates:
         c["coe"] = employee_coe_map.get(c["employee_id"])
 
-def _score_candidates(candidates: list[dict], required_skills: list[str], skill_index: dict | None, competency_index: dict | None = None, emp_embedding_index: dict | None = None) -> None:
+def _score_candidates(
+    candidates: list[dict], required_skills: list[str], skill_index: dict | None, competency_index: dict | None = None,
+    emp_embedding_index: dict | None = None,
+    # Same 5-parameter ranking flexibility as get_recommendations -- see
+    # scoring.composite_score_v2. One selection per forecast run (see
+    # DEFAULT_FORECAST_INCLUDE above).
+    include: dict[str, bool] | None = None,
+    experience_profiles: dict | None = None,
+    requested_tech_coes: list[str] | None = None,
+) -> None:
     if skill_index is None:
         return
+    include = include or DEFAULT_FORECAST_INCLUDE
     # Semantic layer — embed required_skills once, batch cosine-sim (same 65/35 blend as /recommendations)
     semantic_scores: dict[str, float] = {}
     if emp_embedding_index is not None and required_skills:
@@ -76,7 +104,21 @@ def _score_candidates(candidates: list[dict], required_skills: list[str], skill_
             comp_entry = competency_index.get(c["employee_id"], {"score": scoring.DEFAULT_COMPETENCY_SCORE, "confidence": "imputed"})
             avail_score = min((c.get("available_pct_as_of") or c.get("idle_capacity_pct") or 0.0) / 100.0, 1.0)
             c["competency_score"] = comp_entry["score"]
-            c["composite_score"] = scoring.composite_score(skill_result["score"], comp_entry["score"], avail_score)
+            experience = experience_engine.match_experience(
+                (experience_profiles or {}).get(c["employee_id"]), None, requested_tech_coes or []
+            )
+            c["relevant_project_count"] = experience["relevant_project_count"]
+            c["relevant_project_ratio"] = experience["relevant_project_ratio"]
+            c["total_projects"] = experience["total_projects"]
+            c["distinct_clients"] = experience["distinct_clients"]
+            c["experience_confidence"] = experience["experience_confidence"]
+            c["top_categories"] = experience["top_categories"]
+            c["project_count_score"] = experience["project_count_score"]
+            c["composite_score"] = scoring.composite_score_v2(
+                skill_result["score"], comp_entry["score"], avail_score,
+                experience["relevant_project_ratio"], experience["project_count_score"],
+                include=include,
+            )
     if competency_index is not None:
         candidates.sort(key=lambda c: -c.get("composite_score", 0))
     else:
@@ -92,6 +134,9 @@ def _find_recommended_start_date(
     skill_index: dict | None,
     competency_index: dict | None = None,
     emp_embedding_index: dict | None = None,
+    include: dict[str, bool] | None = None,
+    experience_profiles: dict | None = None,
+    requested_tech_coes: list[str] | None = None,
 ) -> dict | None:
     ladder = [designation] + [d for d, _ in adjacent_designations(designation)]
     relevant_ids = set(
@@ -115,7 +160,10 @@ def _find_recommended_start_date(
         fill: list[dict] = []
         for d in ladder:
             pool = get_redeploy_candidates_as_of(d, check_date, employees, allocations)
-            _score_candidates(pool, required_skills, skill_index, competency_index, emp_embedding_index)
+            _score_candidates(
+                pool, required_skills, skill_index, competency_index, emp_embedding_index,
+                include=include, experience_profiles=experience_profiles, requested_tech_coes=requested_tech_coes,
+            )
             if d != designation:
                 if skill_index is None:
                     continue
@@ -148,13 +196,22 @@ def _resolve_role_mix(spec: dict) -> dict:
         return get_role_mix_by_category(spec["category"])
     return get_role_mix_by_coes(spec.get("coes") or [], spec.get("type_of_project"))
 
-def get_new_project_forecast(specs: list[dict]) -> dict:
+def get_new_project_forecast(specs: list[dict], include: dict[str, bool] | None = None) -> dict:
+    include = include or DEFAULT_FORECAST_INCLUDE
     today = pd.Timestamp.now().normalize()
     today_key = today.strftime("%Y-%m-%d")
     pool_by_designation = get_free_pool_by_designation()
     employee_coe_map = get_employee_primary_coe_map()
     employees_df: pd.DataFrame | None = None
     allocations_df: pd.DataFrame | None = None
+    # Experience/track-record layer (category_match / project_count), built once
+    # for the whole call -- not per candidate/spec. Each spec's `coes` selection
+    # (expanded through the same CANONICAL_COE_MAP get_role_mix_by_coes() uses)
+    # becomes the requested_tech_coes for every designation it contributes need
+    # to -- role-mix candidates are pooled per designation, not per spec, so this
+    # is request-level granularity same as all_required_skills below.
+    experience_profiles = experience_engine.build_employee_experience_profiles()
+    tech_coes_by_key: dict[tuple[str, str], set[str]] = {}
 
     all_required_skills = sorted({s.lower() for spec in specs for s in (spec.get("required_skills") or [])})
     skill_index = None
@@ -183,6 +240,7 @@ def get_new_project_forecast(specs: list[dict]) -> dict:
         )
         date_key = spec.get("start_date") or today_key
         duration_weeks_by_date.setdefault(date_key, spec.get("duration_weeks"))
+        spec_tech_coes = {alias for coe in (spec.get("coes") or []) for alias in CANONICAL_COE_MAP.get(coe, [coe])}
         # role_mix carries every designation ever seen on a past project, even ones that
         # showed up on a single one-off engagement (prevalence_pct in the low single
         # digits). Rounding even a 5% historical fte need up to "you must hire 1 of
@@ -203,6 +261,8 @@ def get_new_project_forecast(specs: list[dict]) -> dict:
                 continue
             key = (designation, date_key)
             total_need[key] = total_need.get(key, 0) + fte * spec["count"]
+            if spec_tech_coes:
+                tech_coes_by_key.setdefault(key, set()).update(spec_tech_coes)
 
     def _ensure_employee_tables() -> tuple[pd.DataFrame, pd.DataFrame]:
         nonlocal employees_df, allocations_df
@@ -215,13 +275,17 @@ def get_new_project_forecast(specs: list[dict]) -> dict:
     breakdown = []
     for (designation, date_key), needed_fte in sorted(total_need.items(), key=lambda x: -x[1]):
         needed_headcount = math.ceil(needed_fte)
+        requested_tech_coes = list(tech_coes_by_key.get((designation, date_key), []))
 
         if date_key == today_key:
             candidates = [dict(c) for c in pool_by_designation.get(designation, [])]
         else:
             emp_df, alloc_df = _ensure_employee_tables()
             candidates = get_redeploy_candidates_as_of(designation, pd.to_datetime(date_key), emp_df, alloc_df)
-        _score_candidates(candidates, all_required_skills, skill_index, competency_index, emp_embedding_index)
+        _score_candidates(
+            candidates, all_required_skills, skill_index, competency_index, emp_embedding_index,
+            include=include, experience_profiles=experience_profiles, requested_tech_coes=requested_tech_coes,
+        )
         _tag_coe(candidates, employee_coe_map)
 
         # Holding the exact designation only means availability, not skill fit -- without this
@@ -246,7 +310,10 @@ def get_new_project_forecast(specs: list[dict]) -> dict:
                 else:
                     emp_df, alloc_df = _ensure_employee_tables()
                     pool = get_redeploy_candidates_as_of(adj_designation, pd.to_datetime(date_key), emp_df, alloc_df)
-                _score_candidates(pool, all_required_skills, skill_index, competency_index, emp_embedding_index)
+                _score_candidates(
+                    pool, all_required_skills, skill_index, competency_index, emp_embedding_index,
+                    include=include, experience_profiles=experience_profiles, requested_tech_coes=requested_tech_coes,
+                )
                 for c in pool:
                     c["source_designation"] = adj_designation
                     c["level_offset"] = offset
@@ -267,7 +334,8 @@ def get_new_project_forecast(specs: list[dict]) -> dict:
         if shortfall > 0:
             emp_df, alloc_df = _ensure_employee_tables()
             found = _find_recommended_start_date(
-                designation, pd.to_datetime(date_key), needed_headcount, emp_df, alloc_df, all_required_skills, skill_index, competency_index, emp_embedding_index
+                designation, pd.to_datetime(date_key), needed_headcount, emp_df, alloc_df, all_required_skills, skill_index, competency_index, emp_embedding_index,
+                include=include, experience_profiles=experience_profiles, requested_tech_coes=requested_tech_coes,
             )
             if found:
                 recommended_start_date = found["recommended_start_date"]

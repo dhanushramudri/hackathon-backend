@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
 from app.engines.role_mix_engine import get_role_mix_by_coes
@@ -23,8 +23,27 @@ class RoleMixPreviewRequest(BaseModel):
     type_of_project: str | None = None
 
 @router.post("/new-projects")
-def new_projects(specs: list[NewProjectSpec]) -> dict:
-    return get_new_project_forecast([s.model_dump() for s in specs])
+def new_projects(
+    specs: list[NewProjectSpec],
+    # Same 5-parameter ranking flexibility as get_recommendations -- one
+    # selection for the whole forecast run (see DEFAULT_FORECAST_INCLUDE in
+    # demand_forecast_service.py for why this is call-level, not per-spec).
+    include_skill: bool = Query(default=True),
+    include_competency: bool = Query(default=True),
+    include_availability: bool = Query(default=True),
+    include_category_match: bool = Query(default=False),
+    include_project_count: bool = Query(default=False),
+) -> dict:
+    return get_new_project_forecast(
+        [s.model_dump() for s in specs],
+        include={
+            "skill": include_skill,
+            "competency": include_competency,
+            "availability": include_availability,
+            "category_match": include_category_match,
+            "project_count": include_project_count,
+        },
+    )
 
 @router.post("/role-mix-preview")
 def role_mix_preview(body: RoleMixPreviewRequest) -> dict:

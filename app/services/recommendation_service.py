@@ -11,6 +11,7 @@ from app.engines.resource_code_decoder import decode_resource_code
 from app.engines.skillset_classifier import classify_skillset, classify_skillset_with_proof
 from app.engines import embedding_engine
 from app.engines import experience_engine
+from app.engines import availability_hold
 from app.services.rate_card_service import get_hourly_rate
 
 from app.engines.employee_coe import get_employee_primary_coe_map
@@ -329,6 +330,12 @@ def get_recommendations(
     # tech_coe fallback when no Solution is set.
     requested_solution: str | None = None,
     experience_profiles: dict | None = None,
+    # Employee -> {"on_hold": True, "projects": [...]} for anyone currently actively
+    # allocated to a project the Health monitor flags as likely to extend past its
+    # end date (is_extension_risk / devops_extension_risk). Lets the RM see "this
+    # person looks free, but their current project might run long" up front instead
+    # of finding out only after assigning them. See app/engines/availability_hold.py.
+    employee_hold_flags: dict | None = None,
     # All 5 ranking parameters are independently selectable in Advanced Filters --
     # skill/competency/availability default on, the other two default off. See
     # scoring.composite_score_v2 for how the selected subset gets renormalized.
@@ -378,6 +385,8 @@ def get_recommendations(
 
     if experience_profiles is None:
         experience_profiles = experience_engine.build_employee_experience_profiles()
+    if employee_hold_flags is None:
+        employee_hold_flags = availability_hold.get_employee_hold_flags()
     requested_tech_coes: list[str] = []
     for cat in (requested_coe_categories or []):
         requested_tech_coes.extend(SKILLSET_CATEGORY_TO_TECH_COE.get(cat, []))
@@ -447,6 +456,7 @@ def get_recommendations(
         experience = experience_engine.match_experience(
             experience_profiles.get(emp_id), requested_solution, requested_tech_coes
         )
+        hold_info = employee_hold_flags.get(emp_id)
         composite = scoring.composite_score_v2(
             skill_result["score"], competency_score, availability_score,
             experience["relevant_project_ratio"], experience["project_count_score"],
@@ -504,6 +514,8 @@ def get_recommendations(
                 "top_categories": experience["top_categories"],
                 "project_count_score": experience["project_count_score"],
                 "hourly_rate_usd": hourly_rate,
+                "on_hold": hold_info is not None,
+                "hold_projects": hold_info["projects"] if hold_info else [],
             }
         )
 
@@ -882,6 +894,7 @@ def _open_pipeline_rows_enriched() -> list[dict]:
         required_phrases = scoring.enrich_required_phrases(required_phrases, pipeline_skillset)
         if not required_phrases:
             continue
+        _solution_raw = row.get("solution")
         enriched.append(
             {
                 "row_index": int(idx),
@@ -891,6 +904,7 @@ def _open_pipeline_rows_enriched() -> list[dict]:
                 "likely_start_date": _fmt_date(row.get("likely_start_date")),
                 "status": row.get("status"),
                 "priority": row.get("priority"),
+                "solution": _solution_raw if isinstance(_solution_raw, str) and _solution_raw.strip() else None,
                 "required_phrases": required_phrases,
                 # Pre-split once here instead of inside score_skill_match -- that function
                 # re.split()s every phrase on every call, which is fine for one employee
@@ -904,12 +918,36 @@ def _open_pipeline_rows_enriched() -> list[dict]:
     _open_rows_fingerprint = fingerprint
     return enriched
 
-def get_redeploy_matches_for_employee(employee_id: str, top_n: int = 20) -> list[dict]:
+def get_redeploy_matches_for_employee(
+    employee_id: str, top_n: int = 20,
+    *,
+    experience_profiles: dict | None = None,
+    employee_coe_map: dict | None = None,
+    employee_hold_flags: dict | None = None,
+    # Same 5 ranking parameters as get_recommendations/composite_score_v2, reversed
+    # direction (one employee, ranked against every open pipeline deal).
+    include_skill: bool = True,  # word+semantic skill match against each deal's requirement
+    include_competency: bool = True,  # this employee's own competency score (constant across rows)
+    include_availability: bool = True,  # free capacity as of each deal's likely_start_date
+    include_category_match: bool = False,  # track-record overlap with the deal's Solution/tech_coe
+    include_project_count: bool = False,  # reward for a broader real project history
+    include_coe_affinity: bool = True,  # prefer deals whose requested category matches this employee's home CoE
+    # Included for API symmetry with get_recommendations/get_backfill_candidates.
+    # Has no effect on ORDER here: there's only one employee, so hourly_rate_usd
+    # is the same constant on every row -- nothing to tiebreak. Still returned
+    # on each match so the frontend can render/label it consistently.
+    include_cost_efficiency: bool = False,
+    # Hard pool gate + tolerance, exactly like get_recommendations: each pipeline
+    # row has its own real requested_pct, so this is meaningful here too.
+    include_below_capacity: bool = False,
+    near_capacity_tolerance_pct: float = DEFAULT_NEAR_CAPACITY_TOLERANCE_PCT,
+) -> list[dict]:
     """Reverse direction of get_recommendations: for one specific employee, every open
-    pipeline deal they could redeploy into, ranked by the same composite_score (skill +
-    competency + availability) used everywhere else in the app -- not skill alone, so a
-    candidate who's a perfect skill match but already busy or weak on competency doesn't
-    outrank someone who's a genuinely better overall fit."""
+    pipeline deal they could redeploy into, ranked by the same composite_score_v2 (skill,
+    competency, availability, category_match, project_count -- each independently
+    toggleable) used everywhere else in the app -- not skill alone, so a candidate who's
+    a perfect skill match but already busy or weak on competency doesn't outrank someone
+    who's a genuinely better overall fit."""
     adapter = get_adapter()
     skills = adapter.get_skills()
     skill_index = scoring.build_employee_skill_index(skills)
@@ -924,6 +962,23 @@ def get_redeploy_matches_for_employee(employee_id: str, top_n: int = 20) -> list
     competency_index = scoring.build_employee_competency_index(adapter.get_competencies())
     competency_entry = competency_index.get(employee_id, {"score": scoring.DEFAULT_COMPETENCY_SCORE, "confidence": "imputed"})
     allocations = adapter.get_allocations()
+
+    if experience_profiles is None:
+        experience_profiles = experience_engine.build_employee_experience_profiles()
+    profile = experience_profiles.get(employee_id)
+
+    if employee_coe_map is None:
+        employee_coe_map = get_employee_primary_coe_map()
+    employee_coe = employee_coe_map.get(employee_id)
+
+    if employee_hold_flags is None:
+        employee_hold_flags = availability_hold.get_employee_hold_flags()
+    hold_info = employee_hold_flags.get(employee_id)
+    on_hold = hold_info is not None
+    hold_projects = hold_info["projects"] if hold_info else []
+
+    job_name = adapter.get_employees().set_index("employee_id")["job_name"].to_dict().get(employee_id)
+    hourly_rate = get_hourly_rate(job_name) if job_name else None
 
     matches = []
     for row in _open_pipeline_rows_enriched():
@@ -947,7 +1002,32 @@ def get_redeploy_matches_for_employee(employee_id: str, top_n: int = 20) -> list
         busy_pct = float(availability_as_of(allocations, as_of_date).get(employee_id, 0.0))
         available_pct = max(0.0, 100.0 - busy_pct)
         availability_score = min(available_pct / 100.0, 1.0)
-        composite = scoring.composite_score(skill_result["score"], competency_entry["score"], availability_score)
+
+        requested_pct = scoring.parse_requested_pct(row["requested_pct"])
+        meets_requested_capacity = bool(available_pct >= requested_pct)
+        near_capacity = bool(available_pct >= requested_pct - near_capacity_tolerance_pct)
+        if not include_below_capacity and not near_capacity:
+            continue
+
+        requested_tech_coes = [
+            coe for cat in (row["skill_areas"] or []) for coe in SKILLSET_CATEGORY_TO_TECH_COE.get(cat, [])
+        ]
+        experience = experience_engine.match_experience(profile, row["solution"], requested_tech_coes)
+
+        composite = scoring.composite_score_v2(
+            skill_result["score"], competency_entry["score"], availability_score,
+            experience["relevant_project_ratio"], experience["project_count_score"],
+            include={
+                "skill": include_skill,
+                "competency": include_competency,
+                "availability": include_availability,
+                "category_match": include_category_match,
+                "project_count": include_project_count,
+            },
+        )
+        coe_affinity_rank = (
+            _coe_affinity_rank(employee_coe, row["skill_areas"]) if include_coe_affinity else _COE_AFFINITY_NEUTRAL
+        )
         matches.append(
             {
                 "row_index": row["row_index"],
@@ -957,6 +1037,7 @@ def get_redeploy_matches_for_employee(employee_id: str, top_n: int = 20) -> list
                 "likely_start_date": row["likely_start_date"],
                 "status": row["status"],
                 "priority": row["priority"],
+                "solution": row["solution"],
                 "skill_areas": row["skill_areas"],
                 "skill_score": skill_result["score"],
                 "matched_skills": skill_result["matched"],
@@ -965,11 +1046,26 @@ def get_redeploy_matches_for_employee(employee_id: str, top_n: int = 20) -> list
                 "competency_score": competency_entry["score"],
                 "competency_confidence": competency_entry["confidence"],
                 "available_pct": round(available_pct, 1),
+                "meets_requested_capacity": meets_requested_capacity,
+                "near_capacity": near_capacity,
+                "total_projects": experience["total_projects"],
+                "distinct_clients": experience["distinct_clients"],
+                "relevant_project_count": experience["relevant_project_count"],
+                "relevant_project_ratio": experience["relevant_project_ratio"],
+                "experience_confidence": experience["experience_confidence"],
+                "top_categories": experience["top_categories"],
+                "project_count_score": experience["project_count_score"],
+                "coe": employee_coe,
+                "coe_preferred": coe_affinity_rank == _COE_AFFINITY_MATCH,
+                "coe_affinity_rank": coe_affinity_rank,
+                "hourly_rate_usd": hourly_rate,
+                "on_hold": on_hold,
+                "hold_projects": hold_projects,
                 "composite_score": composite,
                 "bucket": scoring.bucket(skill_result["score"], skill_result["confidence"]),
             }
         )
-    matches.sort(key=lambda m: -m["composite_score"])
+    matches.sort(key=lambda m: (m["coe_affinity_rank"], m["composite_score"]), reverse=True)
     return matches[:top_n]
 
 def _fast_skill_score(phrase_tokens_list: list[list[str]], employee_tokens: dict[str, dict]) -> float:
@@ -1222,6 +1318,7 @@ def get_project_team_recommendation(
         "employee_coe_map": get_employee_primary_coe_map(),
         "emp_embedding_index": embedding_engine.build_employee_embedding_index(_skills),
         "experience_profiles": experience_engine.build_employee_experience_profiles(),
+        "employee_hold_flags": availability_hold.get_employee_hold_flags(),
         "compute_earliest_availability": False,
         "compute_other_options": False,  # team-building doesn't render this list -- skip it per role
     }
@@ -1336,7 +1433,22 @@ def get_project_team_recommendation(
     }
 
 
-def get_backfill_candidates(employee_id: str, source_project_id: str, top_n: int = 15) -> dict:
+def get_backfill_candidates(
+    employee_id: str, source_project_id: str, top_n: int = 15,
+    *,
+    # All 5 ranking parameters, plus coe_affinity/cost_efficiency and the
+    # below-capacity pool gate/tolerance -- forwarded straight into
+    # get_recommendations(), same defaults as that function's own.
+    include_skill: bool = True,
+    include_competency: bool = True,
+    include_availability: bool = True,
+    include_category_match: bool = False,
+    include_project_count: bool = False,
+    include_coe_affinity: bool = True,
+    include_cost_efficiency: bool = False,
+    include_below_capacity: bool = False,
+    near_capacity_tolerance_pct: float = DEFAULT_NEAR_CAPACITY_TOLERANCE_PCT,
+) -> dict:
     """Find who can replace an employee if they are pulled from source_project_id.
 
     Returns the full recommendation payload (candidates, best_fit_if_delayed,
@@ -1393,6 +1505,15 @@ def get_backfill_candidates(employee_id: str, source_project_id: str, top_n: int
         requested_coe_categories=requested_coe_categories,
         compute_earliest_availability=True,   # populate best_fit_if_delayed
         compute_other_options=False,          # backfill doesn't render this list -- skip the extra work
+        include_skill=include_skill,
+        include_competency=include_competency,
+        include_availability=include_availability,
+        include_category_match=include_category_match,
+        include_project_count=include_project_count,
+        include_coe_affinity=include_coe_affinity,
+        include_cost_efficiency=include_cost_efficiency,
+        include_below_capacity=include_below_capacity,
+        near_capacity_tolerance_pct=near_capacity_tolerance_pct,
     )
 
     leaves = adapter.get_leaves()

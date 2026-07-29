@@ -50,6 +50,17 @@ _PIPELINE_FORECAST_FFILL_COLUMNS = [
     "sow_signed",
 ]
 
+def _strip_string_values(df: pd.DataFrame) -> pd.DataFrame:
+    # Source CSVs are occasionally regenerated in a fixed-width-padded style
+    # (e.g. allocations' "employee_id" arriving as " EMP233     " instead of
+    # "EMP1"), which silently breaks every join against a clean id column in
+    # another table. Strip all string cells so ids/status codes compare equal
+    # regardless of padding in the raw file.
+    df = df.copy()
+    for col in df.select_dtypes(include="object").columns:
+        df[col] = df[col].str.strip()
+    return df
+
 def _sanitize_columns(df: pd.DataFrame) -> pd.DataFrame:
     def clean(col: str) -> str:
         col = col.strip().lower()
@@ -80,12 +91,23 @@ def get_connection() -> duckdb.DuckDBPyConnection:
 def _load_all(con: duckdb.DuckDBPyConnection) -> None:
     for table, filename in _CSV_TABLES.items():
         path = TRANSFORMED_DIR / filename
-        df = pd.read_csv(path, low_memory=False, parse_dates=_DATE_COLUMNS.get(table))
+        # Don't pass parse_dates to read_csv -- it needs an exact header-name match,
+        # and source CSVs occasionally carry stray whitespace padding in the header
+        # row (e.g. "allocated_start_date" stored as " allocated_start_date"), which
+        # makes parse_dates raise before _sanitize_columns ever gets a chance to
+        # clean it up. Sanitize first, then parse dates by the clean column name --
+        # robust regardless of whitespace/casing in the raw file.
+        df = pd.read_csv(path, low_memory=False)
+        df = _sanitize_columns(df)
+        df = _strip_string_values(df)
+        for col in _DATE_COLUMNS.get(table, []):
+            if col in df.columns:
+                df[col] = pd.to_datetime(df[col], errors="coerce")
         if table in _EXPLICIT_FORMAT_DATE_COLUMNS:
             cols, fmt = _EXPLICIT_FORMAT_DATE_COLUMNS[table]
             for col in cols:
-                df[col] = pd.to_datetime(df[col], format=fmt, errors="coerce")
-        df = _sanitize_columns(df)
+                if col in df.columns:
+                    df[col] = pd.to_datetime(df[col], format=fmt, errors="coerce")
         con.register("df_tmp", df)
         con.execute(f"CREATE OR REPLACE TABLE {table} AS SELECT * FROM df_tmp")
         con.unregister("df_tmp")
@@ -93,6 +115,7 @@ def _load_all(con: duckdb.DuckDBPyConnection) -> None:
     sheets = pd.read_excel(PIPELINE_XLSX, sheet_name=None)
     for sheet_name, table in _PIPELINE_SHEETS.items():
         df = _sanitize_columns(sheets[sheet_name])
+        df = _strip_string_values(df)
         if table == "pipeline_forecast":
             df = df.rename(columns={"col_15": "requested_pct"})
             df["original_requested_start_date"] = pd.to_datetime(df["original_requested_start_date"], errors="coerce")
