@@ -6,7 +6,7 @@ from app.core.adapter import get_adapter
 from app.engines import availability_hold, embedding_engine, experience_engine, scoring
 from app.engines.designation_ladder import LEADERSHIP_DESIGNATIONS, adjacent_designations
 from app.engines.employee_coe import get_employee_primary_coe_map
-from app.engines.role_mix_engine import CANONICAL_COE_MAP, get_role_mix_by_category, get_role_mix_by_coes
+from app.engines.role_mix_engine import CANONICAL_COE_MAP, DOCX_CATEGORY_MAP, get_role_mix_by_category, get_role_mix_by_coes
 from app.services.allocation_report_service import UNDER_UTILIZED_THRESHOLD
 from app.services.free_pool_service import get_free_pool_by_designation
 from app.services.rate_card_service import get_hourly_rate
@@ -137,7 +137,12 @@ def _find_recommended_start_date(
     include: dict[str, bool] | None = None,
     experience_profiles: dict | None = None,
     requested_tech_coes: list[str] | None = None,
+    # Same date_key-scoped claimed-employee set as get_new_project_forecast's
+    # main loop -- someone already committed to a concurrent role at this same
+    # requested_date shouldn't also be projected as this role's future fill.
+    claimed_ids: set[str] | None = None,
 ) -> dict | None:
+    claimed_ids = claimed_ids or set()
     ladder = [designation] + [d for d, _ in adjacent_designations(designation)]
     relevant_ids = set(
         employees[(employees["account_status"] == 1) & (employees["job_name"].isin(ladder))]["employee_id"]
@@ -159,7 +164,7 @@ def _find_recommended_start_date(
         check_date = pd.Timestamp(end_date) + pd.Timedelta(days=1)
         fill: list[dict] = []
         for d in ladder:
-            pool = get_redeploy_candidates_as_of(d, check_date, employees, allocations)
+            pool = [c for c in get_redeploy_candidates_as_of(d, check_date, employees, allocations) if c["employee_id"] not in claimed_ids]
             _score_candidates(
                 pool, required_skills, skill_index, competency_index, emp_embedding_index,
                 include=include, experience_profiles=experience_profiles, requested_tech_coes=requested_tech_coes,
@@ -241,6 +246,16 @@ def get_new_project_forecast(specs: list[dict], include: dict[str, bool] | None 
         date_key = spec.get("start_date") or today_key
         duration_weeks_by_date.setdefault(date_key, spec.get("duration_weeks"))
         spec_tech_coes = {alias for coe in (spec.get("coes") or []) for alias in CANONICAL_COE_MAP.get(coe, [coe])}
+        # "Quick-fill from a project category" specs never carry `coes` (frontend
+        # sends coes=undefined whenever category is set -- see toForecastSpec in
+        # forecast/new-project/page.tsx), so without this fallback every
+        # category-based spec silently got zero category_match/project_count
+        # signal no matter what Advanced Filters selected. DOCX_CATEGORY_MAP's
+        # tech_coe_any is already raw tech_coe vocabulary -- no further mapping
+        # needed (unlike CANONICAL_COE_MAP above, which bridges canonical CoE
+        # names to that same vocabulary for the `coes` case).
+        if not spec_tech_coes and spec.get("category"):
+            spec_tech_coes = set(DOCX_CATEGORY_MAP.get(spec["category"], {}).get("tech_coe_any", []))
         # role_mix carries every designation ever seen on a past project, even ones that
         # showed up on a single one-off engagement (prevalence_pct in the low single
         # digits). Rounding even a 5% historical fte need up to "you must hire 1 of
@@ -272,16 +287,30 @@ def get_new_project_forecast(specs: list[dict], include: dict[str, bool] | None 
             allocations_df = adapter.get_allocations()
         return employees_df, allocations_df
 
+    # Designations sharing an adjacency relation (e.g. "Software Engineer" <->
+    # "Senior Software Engineer") can otherwise each independently draw the same
+    # physical people as an adjacent-level fill for two different roles' shortfalls
+    # in the same forecast run -- silently double-counting real capacity when
+    # multiple specs need adjacent titles at the same date_key. Tracked per
+    # date_key (not globally) so a person claimed for a role starting today
+    # doesn't wrongly block a different role starting months later, when they'd
+    # be free again.
+    claimed_ids_by_date: dict[str, set[str]] = {}
+
     breakdown = []
     for (designation, date_key), needed_fte in sorted(total_need.items(), key=lambda x: -x[1]):
         needed_headcount = math.ceil(needed_fte)
         requested_tech_coes = list(tech_coes_by_key.get((designation, date_key), []))
+        claimed = claimed_ids_by_date.setdefault(date_key, set())
 
         if date_key == today_key:
-            candidates = [dict(c) for c in pool_by_designation.get(designation, [])]
+            candidates = [dict(c) for c in pool_by_designation.get(designation, []) if c["employee_id"] not in claimed]
         else:
             emp_df, alloc_df = _ensure_employee_tables()
-            candidates = get_redeploy_candidates_as_of(designation, pd.to_datetime(date_key), emp_df, alloc_df)
+            candidates = [
+                c for c in get_redeploy_candidates_as_of(designation, pd.to_datetime(date_key), emp_df, alloc_df)
+                if c["employee_id"] not in claimed
+            ]
         _score_candidates(
             candidates, all_required_skills, skill_index, competency_index, emp_embedding_index,
             include=include, experience_profiles=experience_profiles, requested_tech_coes=requested_tech_coes,
@@ -300,16 +329,26 @@ def get_new_project_forecast(specs: list[dict], include: dict[str, bool] | None 
         else:
             qualifying_candidates = candidates
 
+        # Candidates are already best-first (sorted by composite/skill score in
+        # _score_candidates, or by availability if unscored) -- claim exactly the
+        # ones this designation's own need would actually draw on, so a sibling
+        # designation's adjacent-level fallback below can't also count them.
+        own_fill_count = min(len(qualifying_candidates), needed_headcount)
+        claimed.update(c["employee_id"] for c in qualifying_candidates[:own_fill_count])
+
         shortfall_at_level = max(0, needed_headcount - len(qualifying_candidates))
         adjacent_level_candidates: list[dict] = []
         adjacent_fill_count = 0
         if shortfall_at_level > 0:
             for adj_designation, offset in adjacent_designations(designation):
                 if date_key == today_key:
-                    pool = [dict(c) for c in pool_by_designation.get(adj_designation, [])]
+                    pool = [dict(c) for c in pool_by_designation.get(adj_designation, []) if c["employee_id"] not in claimed]
                 else:
                     emp_df, alloc_df = _ensure_employee_tables()
-                    pool = get_redeploy_candidates_as_of(adj_designation, pd.to_datetime(date_key), emp_df, alloc_df)
+                    pool = [
+                        c for c in get_redeploy_candidates_as_of(adj_designation, pd.to_datetime(date_key), emp_df, alloc_df)
+                        if c["employee_id"] not in claimed
+                    ]
                 _score_candidates(
                     pool, all_required_skills, skill_index, competency_index, emp_embedding_index,
                     include=include, experience_profiles=experience_profiles, requested_tech_coes=requested_tech_coes,
@@ -323,8 +362,10 @@ def get_new_project_forecast(specs: list[dict], include: dict[str, bool] | None 
             if skill_index is not None and designation not in LEADERSHIP_DESIGNATIONS:
                 qualifying = [c for c in adjacent_level_candidates if c.get("skill_score", 0) >= scoring.ELIGIBLE_THRESHOLD]
                 adjacent_fill_count = min(len(qualifying), shortfall_at_level)
+                claimed.update(c["employee_id"] for c in qualifying[:adjacent_fill_count])
             else:
                 adjacent_fill_count = min(len(adjacent_level_candidates), shortfall_at_level)
+                claimed.update(c["employee_id"] for c in adjacent_level_candidates[:adjacent_fill_count])
 
         shortfall = max(0, shortfall_at_level - adjacent_fill_count)
 
@@ -336,6 +377,7 @@ def get_new_project_forecast(specs: list[dict], include: dict[str, bool] | None 
             found = _find_recommended_start_date(
                 designation, pd.to_datetime(date_key), needed_headcount, emp_df, alloc_df, all_required_skills, skill_index, competency_index, emp_embedding_index,
                 include=include, experience_profiles=experience_profiles, requested_tech_coes=requested_tech_coes,
+                claimed_ids=claimed,
             )
             if found:
                 recommended_start_date = found["recommended_start_date"]
