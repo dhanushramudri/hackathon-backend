@@ -1,21 +1,18 @@
 import pandas as pd
 
 from app.core.adapter import get_adapter
-from app.engines.coe_skill_engine import COE_SKILL_MAP, GENERIC_SKILL_COES
-
-_REVERSE_COE_MAP: dict[str, str] = {
-    skill_coe.strip().lower(): canonical for canonical, mapping in COE_SKILL_MAP.items() for skill_coe in mapping["skill_coes"]
-}
+from app.engines.coe_skill_engine import GENERIC_SKILL_COES
+from app.engines.coe_taxonomy import resolve_coe_label
 
 _cache: dict[str, str] | None = None
 _cache_fingerprint: tuple | None = None
 
 def _canonicalize(raw_coe: str) -> str:
-    mapped = _REVERSE_COE_MAP.get(raw_coe.strip().lower())
-    if mapped:
-        return mapped
-    cleaned = raw_coe.strip()
-    return cleaned.title() if cleaned.islower() else cleaned
+    # Delegates to coe_taxonomy, which builds its alias map from
+    # COE_SKILL_MAP (the same source this function used to read directly) --
+    # kept as a thin wrapper here so callers/tests that import _canonicalize
+    # from this module keep working unchanged.
+    return resolve_coe_label(raw_coe) or raw_coe.strip()
 
 def _fingerprint(skills_df: pd.DataFrame) -> tuple:
     return (len(skills_df), int(pd.util.hash_pandas_object(skills_df, index=False).sum()))

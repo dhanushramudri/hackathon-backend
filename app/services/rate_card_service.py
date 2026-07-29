@@ -6,12 +6,12 @@ _BANDS: list[tuple[str, float]] = [
     (r"\bpartner\b", 240.0),
     (r"\b(principal|technology solutions architect)\b", 145.0),
     (r"\b(senior solutions consultant|technical solutions architect|manager)\b", 110.0),
-    (r"\bsenior software engineer\b", 65.0),
-    (r"\bsenior associate consultant\b", 65.0),
-    (r"\b(solutions consultant|senior consultant)\b", 85.0),
-    (r"\bassociate consultant\b", 45.0),
+    (r"\bsolutions enabler\b", 65.0),
+    (r"\bsenior associate consultant\b", 85.0),
+    (r"\b(solutions consultant |senior consultant)\b", 70.0),
     (r"\bconsultant\b", 65.0),
-    (r"\b(solutions enabler|software engineer)\b", 45.0),
+    (r"\bassociate consultant\b", 45.0),
+    (r"\b(senior software engineer |software engineer)\b", 45.0),
 ]
 
 NON_BILLABLE_RATE = None

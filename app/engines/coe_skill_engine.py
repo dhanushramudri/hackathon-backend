@@ -44,6 +44,16 @@ def _aggregate_skills(rows: pd.DataFrame, top_n: int) -> list[dict]:
     ]
 
 def derive_skills_for_coes(coes: list[str], top_n: int = TOP_N_SKILLS) -> dict:
+    # Canonicalize incoming CoE names before lookup -- callers may pass a
+    # slightly different spelling/casing of the canonical name itself (not
+    # just a skill_coe variant), which would otherwise silently miss
+    # COE_SKILL_MAP and fall through to the "none"/org-wide-fallback branch.
+    # Imported here (not at module top) because coe_taxonomy imports
+    # COE_SKILL_MAP from this module -- a top-level import back here would be
+    # circular; by call time both modules are fully loaded so this is safe.
+    from app.engines.coe_taxonomy import resolve_coe_label
+    canonical_coes = [resolve_coe_label(c) or c for c in coes]
+
     adapter = get_adapter()
     skills = adapter.get_skills()
     real_skills = skills[(~skills["coe"].isin(GENERIC_SKILL_COES)) & (skills["score"] > 0)]
@@ -51,7 +61,7 @@ def derive_skills_for_coes(coes: list[str], top_n: int = TOP_N_SKILLS) -> dict:
     org_wide_fallback = _aggregate_skills(real_skills, top_n)
 
     by_coe: dict[str, dict] = {}
-    for coe in coes:
+    for original_coe, coe in zip(coes, canonical_coes):
         mapping = COE_SKILL_MAP.get(coe, {"skill_coes": [], "confidence": "none"})
         skill_coes = mapping["skill_coes"]
         if skill_coes:
@@ -78,11 +88,11 @@ def derive_skills_for_coes(coes: list[str], top_n: int = TOP_N_SKILLS) -> dict:
     # selection silently showed only one CoE's skills.
     combined_seen: set[tuple] = set()
     combined: list[dict] = []
-    max_rounds = max((len(by_coe[c]["skills"]) for c in coes), default=0)
+    max_rounds = max((len(by_coe[c]["skills"]) for c in by_coe), default=0)
     for i in range(max_rounds):
         if len(combined) >= top_n:
             break
-        for coe in coes:
+        for coe in by_coe:
             skills_list = by_coe[coe]["skills"]
             if i >= len(skills_list):
                 continue

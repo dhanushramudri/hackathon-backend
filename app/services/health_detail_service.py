@@ -8,6 +8,10 @@ from app.services.free_pool_service import get_free_pool
 from app.services.health_monitor_service import (
      OVERRUN_DAYS_THRESHOLD,
      DEMO_STATIC_DEVOPS_PROJECT_CODE,
+     EXTENSION_DAILY_HOURS,         
+     count_working_days,
+     add_working_days,
+     extension_duration_label,
      SHADOW_SHARE_THRESHOLD,
      STANDARD_MONTHLY_HOURS,
      UNDERSTAFFED_RATIO_THRESHOLD,
@@ -126,6 +130,94 @@ def get_project_health_detail(project_code: str) -> dict:
                 "allocated_end_date": _date_str(r["allocated_end_date"]),
             }
             for _, r in shadow_rows.sort_values(["employee_id", "allocated_start_date"]).iterrows()
+        ],
+    }
+
+    extension_rows = active_allocs[
+        (active_allocs["allocated_end_date"] > project_end)
+        & (~active_allocs["resourcing_status"].isin(["SHADOW", "UNBILLED"]))
+    ].copy() if pd.notna(project_end) else active_allocs.iloc[0:0].copy()
+
+    if extension_rows.empty:
+        extension_rows["hourly_rate_usd"] = pd.Series(dtype=float)
+        extension_rows["overrun_working_days"] = pd.Series(dtype=int)
+        extension_rows["extension_unbilled_value_usd"] = pd.Series(dtype=float)
+    else:
+        extension_rows["hourly_rate_usd"] = extension_rows["job_name"].apply(get_hourly_rate)
+        _today = pd.Timestamp.now().normalize()
+        def _accrued_days(end):
+            if pd.isna(project_end) or pd.isna(end) or end <= project_end:
+                return 0
+            accrual_end = min(_today, end)
+            if accrual_end <= project_end:
+                return 0
+            return count_working_days(project_end + pd.Timedelta(days=1), accrual_end)
+        extension_rows["overrun_working_days"] = extension_rows["allocated_end_date"].apply(_accrued_days)
+        extension_rows["extension_unbilled_value_usd"] = (
+            extension_rows["overrun_working_days"]
+            * (extension_rows["allocation_by_percentage"] / 100)
+            * extension_rows["hourly_rate_usd"].fillna(0)
+            * EXTENSION_DAILY_HOURS
+        ).round(0)
+
+    proj_end_for_calc = project_end
+    billable_active = active_allocs[~active_allocs["resourcing_status"].isin(["SHADOW", "UNBILLED"])].copy()
+    if not billable_active.empty:
+        billable_active["hourly_rate_usd"] = billable_active["job_name"].apply(get_hourly_rate)
+        _proj_days = summary["projected_extension_days"] or 0
+        billable_active["predicted_additional_usd"] = (
+            (billable_active["allocation_by_percentage"] / 100) * billable_active["hourly_rate_usd"].fillna(0)
+            * EXTENSION_DAILY_HOURS * _proj_days
+        ).round(0)
+    else:
+        billable_active["hourly_rate_usd"] = pd.Series(dtype=float)
+        billable_active["predicted_additional_usd"] = pd.Series(dtype=float)
+
+    predicted_breakdown = [
+        {
+            "employee_id": r["employee_id"],
+            "job_name": r.get("job_name") if pd.notna(r.get("job_name")) else None,
+            "resourcing_status": r["resourcing_status"],
+            "allocation_by_percentage": float(r["allocation_by_percentage"]),
+            "hourly_rate_usd": float(r["hourly_rate_usd"]) if pd.notna(r["hourly_rate_usd"]) else None,
+            "predicted_additional_usd": float(r["predicted_additional_usd"]),
+        }
+        for _, r in billable_active.sort_values("predicted_additional_usd", ascending=False).iterrows()
+        if r["predicted_additional_usd"] > 0
+    ]
+
+    extension_revenue_proof = {
+        "fired": "overrunning" in root_causes or "devops_extension_risk" in root_causes,
+        "daily_hours_basis": EXTENSION_DAILY_HOURS,
+        "extension_unbilled_value_usd": summary["extension_unbilled_value_usd"],
+        "team_daily_extension_cost_usd": summary["team_daily_extension_cost_usd"],
+        "projected_extension_days": summary["projected_extension_days"],
+        "projected_extension_weeks": summary["projected_extension_weeks"],
+        "projected_extension_confidence": summary["projected_extension_confidence"],
+        "predicted_extension_revenue_loss_usd": summary["predicted_extension_revenue_loss_usd"],
+        "predicted_extension_start_date": summary.get("predicted_extension_start_date"),
+        "predicted_extension_end_date": summary.get("predicted_extension_end_date"),
+        "projected_extension_duration_label": summary.get("projected_extension_duration_label"),
+        "note": (
+            "Accrued value is a fact: working days (Mon-Fri) already elapsed past this project's end date, "
+            "at 8h/day x current allocation % x rate card, for anyone not already marked SHADOW/UNBILLED "
+            "(to avoid double-counting with the shadow-work total). Predicted value is a forecast: the "
+            "DevOps-capacity-based day estimate (same as the Overview tab's Extension outlook), applied to "
+            "every currently-active billable team member's own allocation % and rate, projected forward from today."
+        ),
+        "predicted_breakdown": predicted_breakdown,
+        "qualifying_allocations": [
+            {
+                "employee_id": r["employee_id"],
+                "job_name": r.get("job_name") if pd.notna(r.get("job_name")) else None,
+                "resourcing_status": r["resourcing_status"],
+                "allocation_by_percentage": float(r["allocation_by_percentage"]),
+                "hourly_rate_usd": float(r["hourly_rate_usd"]) if pd.notna(r["hourly_rate_usd"]) else None,
+                "overrun_working_days": int(r["overrun_working_days"]),
+                "extension_unbilled_value_usd": float(r["extension_unbilled_value_usd"]),
+                "allocated_end_date": _date_str(r["allocated_end_date"]),
+            }
+            for _, r in extension_rows.sort_values("extension_unbilled_value_usd", ascending=False).iterrows()
         ],
     }
 
@@ -269,6 +361,7 @@ def get_project_health_detail(project_code: str) -> dict:
         "working_days_in_window": summary["devops_working_days_in_window"],
         "team_capacity_hours": summary["devops_team_capacity_hours"],
         "team_capacity_hours_after_leave": summary["devops_team_capacity_hours_after_leave"],
+        "team_daily_capacity_hours": summary.get("devops_team_daily_capacity_hours", 0.0),
         "capacity_surplus_hours": summary["devops_capacity_surplus_hours"],
         "is_overdue": summary["devops_is_overdue"],
         "tickets_missing_remaining_estimate": summary["devops_tickets_missing_remaining_estimate"],
@@ -288,20 +381,102 @@ def get_project_health_detail(project_code: str) -> dict:
         "risk_score": summary["risk_score"],
         "risk_band": summary["risk_band"],
         "root_causes": root_causes,
+        "root_cause_categories": summary.get("root_cause_categories", {}),
+        "is_extension_risk": summary.get("is_extension_risk", False),
+        "is_escalation_risk": summary.get("is_escalation_risk", False),
         "overrun": overrun_proof,
         "shadow_heavy": shadow_proof,
+         "extension_revenue": extension_revenue_proof,
         "high_churn": churn_proof,
         "understaffed": understaffed_proof,
         "overtime_risk": overtime_proof,
         "effort_spike": effort_spike_proof,
         "wsr": wsr_proof,
         "devops": devops_proof,
+        "extension_estimate": _estimate_extension(summary["overrun_days"], devops_proof, project_end),
         "allocations_roster": roster,
     }
 
 TOP_N_RELIEF_REQUIRED_SKILLS = 8
 MIN_ROSTER_FOR_RELIEF_SKILLS = 2
 MAX_RELIEF_CANDIDATES_SHOWN = 30
+
+def _estimate_extension(overrun_days: int | None, devops_risk: dict, project_end_date: pd.Timestamp) -> dict:
+    """Best-effort estimate of how much longer the project may run, from two
+    independent signals:
+      1. committed_overrun_days -- allocations already booked past the
+         official end date TODAY. A fact from current resourcing data, not a
+         projection.
+      2. projected_additional_days -- derived from DevOps ticket data using
+         team_daily_capacity_hours (steady-state hours/weekday for this
+         project's active team, independent of the risk window -- see
+         _team_daily_capacity_hours in devops_insights_service.py). Two cases:
+           - Overdue (is_overdue=True): the entire remaining_effort_hours is
+             now past-due work; additional_days = remaining_hours / daily_rate.
+           - Within the risk window but not yet overdue: only the SHORTFALL
+             matters -- work that won't fit in the days left --
+             additional_days = shortfall_hours / daily_rate, where
+             shortfall_hours = max(0, remaining_hours - capacity_after_leave).
+      This is a projection: it assumes ticket effort estimates are accurate,
+      no new scope appears, and the team's current daily rate holds steady --
+      none of which are guaranteed, hence the explicit confidence field."""
+    committed_days = overrun_days if (overrun_days is not None and overrun_days > 0) else 0
+
+    daily_rate = devops_risk.get("team_daily_capacity_hours") or 0.0
+    remaining_hours = devops_risk.get("remaining_effort_hours") or 0.0
+    is_overdue = devops_risk.get("is_overdue", False)
+    within_window = devops_risk.get("within_risk_window", False)
+    capacity_after_leave = devops_risk.get("team_capacity_hours_after_leave") or 0.0
+    predicted_extension_start_date = None
+    predicted_extension_end_date = None
+    duration_label = None
+
+    projected_days = None
+    projected_basis = None
+    projection_confidence = "none"
+
+    if daily_rate > 0 and (is_overdue or within_window):
+        if is_overdue:
+            shortfall_hours = remaining_hours
+            projected_basis = "all remaining ticket effort, since the project end date has already passed"
+        else:
+            shortfall_hours = max(0.0, remaining_hours - capacity_after_leave)
+            projected_basis = (
+                "remaining ticket effort that exceeds team capacity within the risk window"
+                if shortfall_hours > 0 else None
+            )
+
+        if shortfall_hours > 0:
+            projected_days = round(shortfall_hours / daily_rate, 1)
+            open_count = devops_risk.get("open_ticket_count") or 0
+            gap = (devops_risk.get("tickets_missing_remaining_estimate", 0)
+                   + devops_risk.get("tickets_with_no_effort_data", 0))
+            gap_ratio = gap / open_count if open_count else 1.0
+            projection_confidence = "low" if gap_ratio > 0.3 else "medium"
+
+            anchor = pd.Timestamp.now().normalize() if is_overdue else project_end_date
+            predicted_extension_start_date = _date_str(anchor)
+            predicted_extension_end_date = _date_str(add_working_days(anchor, projected_days))
+            duration_label = extension_duration_label(projected_days)
+
+    return {
+        "committed_overrun_days": committed_days,
+        "committed_overrun_source": "allocations already scheduled past project_end_date",
+        "projected_additional_days": projected_days,
+        "projected_additional_weeks": round(projected_days / 5, 1) if projected_days is not None else None,
+        "projected_additional_days_confidence": projection_confidence,
+        "projected_basis": projected_basis,
+        "predicted_extension_start_date": predicted_extension_start_date,
+        "predicted_extension_end_date": predicted_extension_end_date,
+        "projected_extension_duration_label": duration_label,
+        "note": (
+            "committed_overrun_days is a fact from current resourcing data; "
+            "projected_additional_days/weeks is an estimate based on DevOps "
+            "ticket effort and the team's current daily capacity, and assumes "
+            "no new scope and a stable daily rate -- treat it as a planning "
+            "signal, not a guarantee."
+        ),
+    }
 
 def get_relief_staffing_candidates(project_code: str, top_n: int = MAX_RELIEF_CANDIDATES_SHOWN) -> dict:
     """Who from the Free Pool could realistically be added to a project that's

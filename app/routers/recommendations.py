@@ -28,6 +28,8 @@ class ProjectTeamRequest(BaseModel):
     include_availability: bool = True
     include_category_match: bool = False
     include_project_count: bool = False
+    include_project_count: bool = False
+    include_coe_affinity: bool = True
 
 
 @router.get("/coverage-summary")
@@ -48,8 +50,9 @@ def project_team(req: ProjectTeamRequest) -> dict:
         include_skill=req.include_skill, include_competency=req.include_competency,
         include_availability=req.include_availability,
         include_category_match=req.include_category_match, include_project_count=req.include_project_count,
+        include_coe_affinity=req.include_coe_affinity,
+    
     )
-
 
 @router.get("/pipeline-row/{row_index}")
 def for_pipeline_row(
@@ -60,14 +63,21 @@ def for_pipeline_row(
     include_availability: bool = Query(default=True),
     include_category_match: bool = Query(default=False),
     include_project_count: bool = Query(default=False),
+    include_coe_affinity: bool = Query(default=True),
+    include_cost_efficiency: bool = Query(default=False),
     include_below_capacity: bool = Query(default=False),
+    near_capacity_tolerance_pct: float = Query(default=25.0, ge=0, le=100),
+
 ) -> dict:
     try:
         return get_recommendations_for_pipeline_row(
             row_index, top_n=top_n,
             include_skill=include_skill, include_competency=include_competency, include_availability=include_availability,
             include_category_match=include_category_match, include_project_count=include_project_count,
+            include_coe_affinity=include_coe_affinity,
+            include_cost_efficiency=include_cost_efficiency,
             include_below_capacity=include_below_capacity,
+            near_capacity_tolerance_pct=near_capacity_tolerance_pct,
         )
     except RowIndexOutOfRange as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -90,7 +100,6 @@ def backfill(
     """Find replacement candidates if an employee is pulled from a project."""
     return get_backfill_candidates(employee_id, source_project_id, top_n=top_n)
 
-
 @router.get("/search")
 def search(
     skillset_text: str,
@@ -103,6 +112,7 @@ def search(
     include_availability: bool = Query(default=True),
     include_category_match: bool = Query(default=False),
     include_project_count: bool = Query(default=False),
+    near_capacity_tolerance_pct: float = Query(default=25.0, ge=0, le=100),
     min_relevant_projects: float = Query(default=0.0, ge=0.0),
     min_total_projects: int = Query(default=0, ge=0),
 ) -> dict:
@@ -111,11 +121,5 @@ def search(
         requested_solution=solution,
         include_skill=include_skill, include_competency=include_competency, include_availability=include_availability,
         include_category_match=include_category_match, include_project_count=include_project_count,
+        near_capacity_tolerance_pct=near_capacity_tolerance_pct,
     )
-    if min_relevant_projects > 0 or min_total_projects > 0:
-        result["candidates"] = [
-            c for c in result["candidates"]
-            if c["relevant_project_count"] >= min_relevant_projects
-            and c["total_projects"] >= min_total_projects
-        ]
-    return result

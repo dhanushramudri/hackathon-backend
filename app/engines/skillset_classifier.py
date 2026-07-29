@@ -1,13 +1,15 @@
 import pandas as pd
 
 from app.core.adapter import get_adapter
+from app.engines.coe_taxonomy import resolve_coe_label
 
 def classify_skillset_with_proof(skillset_text: str | None) -> tuple[list[str], list[dict]]:
-    """Returns (categories, proof_rows). categories is the same exact-match result
-    classify_skillset() has always returned. proof_rows is the literal reference-sheet
-    row(s) that matched -- including coe_skills_list alongside coe_skill, since the two
-    columns don't always agree in the source spreadsheet, so callers that need to show
-    their work (not just the resulting label) have the real row to point at."""
+    """Returns (categories, proof_rows). categories is resolved to the 5
+    canonical CoE labels via coe_taxonomy -- the reference sheet's coe_skill
+    column has inconsistent spellings across rows (e.g. "Data Science & AI"
+    vs "AI & ML"), so raw values are never returned directly; proof_rows still
+    carries the original raw coe_skill/coe_skills_list so callers that need to
+    show their work have the real row, not just the resolved label."""
     if not skillset_text or not str(skillset_text).strip():
         return [], []
     sheet = get_adapter().get_pipeline_skillset()
@@ -15,7 +17,8 @@ def classify_skillset_with_proof(skillset_text: str | None) -> tuple[list[str], 
     matches = sheet[sheet["skills_combined"].astype(str).str.strip().str.lower() == norm]
     if matches.empty:
         return [], []
-    categories = sorted(matches["coe_skill"].dropna().unique().tolist())
+    raw_categories = matches["coe_skill"].dropna().tolist()
+    categories = sorted({resolve_coe_label(c) for c in raw_categories if resolve_coe_label(c)})
     proof = [
         {
             "coe_skill": r["coe_skill"] if pd.notna(r["coe_skill"]) else None,

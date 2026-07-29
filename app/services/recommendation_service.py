@@ -11,9 +11,27 @@ from app.engines.resource_code_decoder import decode_resource_code
 from app.engines.skillset_classifier import classify_skillset, classify_skillset_with_proof
 from app.engines import embedding_engine
 from app.engines import experience_engine
+from app.services.rate_card_service import get_hourly_rate
+
+from app.engines.employee_coe import get_employee_primary_coe_map
+from app.engines.coe_taxonomy import normalize_coe_label
 
 TOP_N = 15
 MAX_FALLBACK_CANDIDATES = 5
+
+# Kept for readability at call sites. Data Engineering is no longer exempt
+# from affinity ranking -- it follows the same MATCH > NEUTRAL > TECHOPS_LAST
+# rule as every other CoE (see _coe_affinity_rank): Data-Engineering-home
+# people are preferred first, then any other CoE, with TechOps & Automation as
+# the last resort since they're mostly not staffed against Data Engineering
+# work either.
+DATA_ENGINEERING_COE = "Data Engineering"
+
+# Composite scores within this many percentage points are treated as "tied" for
+# budget-friendly sorting -- e.g. 49% and 48% land in the same band, so the
+# cheaper role wins the tiebreak instead of a fractional-percent skill edge
+# silently recommending the more expensive title.
+COST_TIE_BAND_PCT = 2.0
 
 # Roles that are never valid internal candidates for client delivery work.
 # Confirmed by resource management — Finance, HR/People, Operations, IT support,
@@ -105,6 +123,67 @@ def _match_tier(candidate: dict, requested_designations: list[str] | None) -> st
         return "adjacent_level_fallback"
     return None
 
+_COE_AFFINITY_MATCH = 2
+_COE_AFFINITY_NEUTRAL = 1
+# TechOps & Automation people are much less flexible than the other CoEs in
+# practice -- they mainly work platform-engineering/TechOps projects and
+# aren't a natural fit for e.g. a DS or BI request the way a generalist CoE
+# member might be. So outside of an actual TechOps request (or the Data
+# Engineering exemption below), they sort LAST among non-preferred candidates
+# -- still shown, never excluded, just the last resort if nobody from any
+# other CoE ranks higher.
+_COE_AFFINITY_TECHOPS_LAST = 0
+TECHOPS_COE = "TechOps & Automation"
+
+def _normalize_coe_label(value: str | None) -> str:
+    """Normalizes a CoE label for comparison: whitespace/casing collapsed AND
+    known alias spellings (e.g. "Data Science & AI", "Gen AI") resolved to one
+    of the 5 canonical categories, via the shared coe_taxonomy module.
+    classify_skillset_with_proof() resolves aliases at the source too, so this
+    is a safety net for callers that pass a raw label directly."""
+    return normalize_coe_label(value)
+
+def _coe_affinity_rank(candidate_coe: str | None, requested_coe_categories: list[str] | None) -> int:
+    """Soft COE-affinity preference, three tiers:
+      2 (MATCH)        -- candidate's home CoE matches what this role is asking
+                           for. Applies to Data Engineering requests too: a
+                           Data-Engineering-home employee is preferred first,
+                           same as every other CoE prefers its own people first.
+      1 (NEUTRAL)       -- any other CoE (not requested, not TechOps).
+      0 (TECHOPS_LAST)  -- TechOps & Automation candidates, whenever TechOps
+                           isn't itself the requested CoE. They mainly work
+                           platform-engineering/TechOps projects and aren't
+                           typically staffed against other CoEs' work --
+                           including Data Engineering -- so they sort last
+                           among non-preferred candidates (still shown, never
+                           excluded, just the last resort).
+
+    For a Data Engineering request specifically, this produces:
+      1st -- Data Engineering-home candidates (MATCH)
+      2nd -- every other CoE except TechOps (NEUTRAL)
+      3rd -- TechOps & Automation (TECHOPS_LAST), last resort only.
+    """
+    if not requested_coe_categories:
+        return _COE_AFFINITY_NEUTRAL
+    # requested_coe_categories can contain a single comma-joined entry (e.g.
+    # "BI & Reporting, Consulting" as ONE list element) instead of separate
+    # list items -- split every entry on commas so each individual category is
+    # compared on its own.
+    wanted: set[str] = set()
+    for entry in requested_coe_categories:
+        for part in entry.split(","):
+            normalized = _normalize_coe_label(part)
+            if normalized:
+                wanted.add(normalized)
+
+    candidate_normalized = _normalize_coe_label(candidate_coe)
+    if candidate_normalized in wanted:
+        return _COE_AFFINITY_MATCH
+    if candidate_normalized == _normalize_coe_label(TECHOPS_COE):
+        return _COE_AFFINITY_TECHOPS_LAST
+    return _COE_AFFINITY_NEUTRAL
+    
+
 def _build_fallback_candidates(ranked: list[dict], requested_designations: list[str], requested_coe_categories: list[str]) -> dict:
     coe_wanted = {c.strip().lower() for c in requested_coe_categories}
 
@@ -167,6 +246,7 @@ def find_earliest_availability(
 # still read) -- a real "show everyone, including who frees up later this
 # year" view needs the longer horizon.
 OTHER_OPTIONS_WINDOW_DAYS = 365
+DEFAULT_NEAR_CAPACITY_TOLERANCE_PCT = 25.0
 
 def _batch_earliest_availability(
     employee_ids: list[str], allocations: pd.DataFrame, after_date: pd.Timestamp,
@@ -257,6 +337,11 @@ def get_recommendations(
     include_availability: bool = True,
     include_category_match: bool = False,
     include_project_count: bool = False,
+    include_coe_affinity: bool = True,
+    # Off by default -- see COST_TIE_BAND_PCT above. Only breaks ties among
+    # candidates whose composite scores are already close; never lets a
+    # cheap, poorly-matched candidate outrank a genuinely stronger one.
+    include_cost_efficiency: bool = False,
     # Separate from the ranking weights above: this is a hard gate, not a score
     # factor. Default behavior (False) never shows someone who can't actually
     # take the requested allocation % right now -- turning it on explicitly
@@ -264,7 +349,15 @@ def get_recommendations(
     # weigh pulling them off something else). Unlike include_availability
     # (which only reweights the score), this changes who's even in the pool.
     include_below_capacity: bool = False,
+    # How many points below the requested % still counts as "near enough" to
+    # show in the main Candidates list (not a fixed 25 -- fully adjustable per
+    # request, e.g. from an Advanced Filters slider). 0 means "only exact/over
+    # matches", 100 means "show everyone regardless of shortfall" (same
+    # practical effect as include_below_capacity, but ranked/labelled as
+    # near-capacity rather than as an explicit override).
+    near_capacity_tolerance_pct: float = DEFAULT_NEAR_CAPACITY_TOLERANCE_PCT,
 ) -> dict:
+
     adapter = get_adapter()
     employees = adapter.get_employees() if employees is None else employees
     competencies = adapter.get_competencies() if competencies is None else competencies
@@ -280,6 +373,7 @@ def get_recommendations(
         skill_index = scoring.build_employee_skill_index(skills)
     if employee_coe_map is None:
         employee_coe_map = get_employee_primary_coe_map()
+        print(list(set(employee_coe_map.values()))[:50])
     busy_pct = availability_as_of(allocations, as_of_date)
 
     if experience_profiles is None:
@@ -311,8 +405,12 @@ def get_recommendations(
     default_competency = {"score": scoring.DEFAULT_COMPETENCY_SCORE, "confidence": "imputed"}
 
     results = []
+    _rate_cache: dict[str, float | None] = {}
     for emp_id in active_employees["employee_id"]:
         job_name = job_name_by_id.get(emp_id)
+        if job_name not in _rate_cache:
+            _rate_cache[job_name] = get_hourly_rate(job_name)
+        hourly_rate = _rate_cache[job_name]
         # Word-token matching — always runs; provides proof (matched/missing lists)
         word_result = scoring.score_skill_match(required_phrases, skill_index.get(emp_id, {}))
 
@@ -344,6 +442,7 @@ def get_recommendations(
         availability_score = min(available_pct / 100.0, 1.0)
         bucket_value = scoring.bucket(skill_result["score"], skill_result["confidence"])
         meets_requested_capacity = bool(available_pct >= requested_pct)
+        near_capacity = bool(available_pct >= requested_pct - near_capacity_tolerance_pct)
 
         experience = experience_engine.match_experience(
             experience_profiles.get(emp_id), requested_solution, requested_tech_coes
@@ -359,12 +458,19 @@ def get_recommendations(
                 "project_count": include_project_count,
             },
         )
+        print("requested_coe_categories (raw):", repr(requested_coe_categories))
+        coe_affinity_rank = (
+            _coe_affinity_rank(employee_coe_map.get(emp_id), requested_coe_categories)
+            if include_coe_affinity else _COE_AFFINITY_NEUTRAL
+        )
 
         results.append(
             {
                 "employee_id": emp_id,
                 "job_name": job_name,
-                "coe": employee_coe_map.get(emp_id),
+                 "coe": employee_coe_map.get(emp_id),
+                "coe_preferred": coe_affinity_rank == _COE_AFFINITY_MATCH,
+                "coe_affinity_rank": coe_affinity_rank,
                 "composite_score": composite,
                 "bucket": bucket_value,
                 "staffing_signal": scoring.staffing_signal(bucket_value),
@@ -389,6 +495,7 @@ def get_recommendations(
                 "competency_confidence": competency_confidence,
                 "available_pct": round(available_pct, 1),
                 "meets_requested_capacity": meets_requested_capacity,
+                "near_capacity": near_capacity,
                 "total_projects": experience["total_projects"],
                 "distinct_clients": experience["distinct_clients"],
                 "relevant_project_count": experience["relevant_project_count"],
@@ -396,6 +503,7 @@ def get_recommendations(
                 "experience_confidence": experience["experience_confidence"],
                 "top_categories": experience["top_categories"],
                 "project_count_score": experience["project_count_score"],
+                "hourly_rate_usd": hourly_rate,
             }
         )
 
@@ -419,25 +527,129 @@ def get_recommendations(
     # with 4/4 matching projects outranks a generalist with 1/4, even though their
     # skill/competency/availability scores are identical. This never reorders
     # anyone who wasn't already tied on composite_score, so it's safe by default.
-    _BUCKET_RANK = {"eligible": 3, "trainable": 2, "gap": 1, "not_assessed": 0}
+    # Collapse eligible/trainable/gap into one sort tier -- all three mean the
+    # person's skill was genuinely scored (just at different levels), so the
+    # *degree* of fit should be expressed through composite_score (which now
+    # weighs availability more heavily per the rebalance above), not a hard
+    # wall that can override a large, real difference in overall match (e.g.
+    # a 51%-match "gap" candidate previously ranked below a 34%-match
+    # "trainable" candidate purely because of the bucket label).
+    # "not_assessed" (no skillset was ever supplied) stays separate and lowest
+    # -- that's a genuinely different situation with no fit signal at all.
+    _BUCKET_RANK = {"eligible": 1, "trainable": 1, "gap": 1, "not_assessed": 0}
     _CONFIDENCE_RANK = {"observed": 2, "imputed": 1, "semantic_match": 1, "no_match": 0, "no_requirement": 0}
-    if include_skill:
-        sort_key = lambda r: (
-            _BUCKET_RANK.get(r["bucket"], 0),
-            _CONFIDENCE_RANK.get(r["skill_confidence"], 0),
-            r["composite_score"],
-            r["relevant_project_count"],
-            r["relevant_project_ratio"],
-        )
+    # available_pct is inserted right after skill eligibility/confidence and BEFORE
+    # composite_score. This makes availability a real, continuous sort priority
+    # (100% -> 0%, any exact value in between) instead of a minor ingredient
+    # diluted inside composite_score. Among candidates who are equally eligible on
+    # skill, the person with more free capacity always ranks first -- no fixed
+    # bands (100/75/50/25), just a direct numeric sort on the real percentage.
+
+
+    # Unknown/non-billable rates sort as "most expensive" so they never win a
+    # cost tiebreak by accident (a missing rate isn't the same as free).
+    _FALLBACK_RATE = float("inf")
+
+    def _cost_key(r: dict) -> float:
+        rate = r.get("hourly_rate_usd")
+        return -(rate if rate is not None else _FALLBACK_RATE)
+
+    def _apply_cost_tiebreak(ranked: list[dict]) -> list[dict]:
+        """Post-process pass for Budget-friendly mode: groups consecutive candidates
+        whose composite_score sits within COST_TIE_BAND_PCT points of the group's own
+        top score, then re-sorts each group by hourly rate (cheapest first). A fixed
+        rounding grid (composite_score // COST_TIE_BAND_PCT) would split two nearly
+        identical scores -- e.g. 48.9% and 49.1% -- into different bands whenever they
+        straddle a rounding boundary, silently disabling the cost tiebreak for exactly
+        the near-ties it exists to catch. `ranked` must already be sorted by
+        composite_score (descending), which it is by the time this is called."""
+        result: list[dict] = []
+        i, n = 0, len(ranked)
+        while i < n:
+            top_score = ranked[i]["composite_score"] * 100
+            j = i + 1
+            while j < n and (top_score - ranked[j]["composite_score"] * 100) <= COST_TIE_BAND_PCT:
+                j += 1
+            group = sorted(ranked[i:j], key=_cost_key, reverse=True)
+            result.extend(group)
+            i = j
+        return result
+
+    def _composite_for_sort(r: dict) -> float:
+        if not include_cost_efficiency:
+            return r["composite_score"]
+        # Band the score so near-tied matches (e.g. 49% vs 48%) become
+        # genuinely equal for sorting purposes, letting cost decide between
+        # them. The exact composite_score is still used as a later tiebreaker
+        # (see below), so within the same cost, the sharper match still wins.
+        return round(r["composite_score"] * 100 / COST_TIE_BAND_PCT)
+
+
+    if include_availability:
+        if include_skill:
+            sort_key = lambda r: (
+                _BUCKET_RANK.get(r["bucket"], 0),
+                _CONFIDENCE_RANK.get(r["skill_confidence"], 0),
+                r["coe_affinity_rank"],
+                r["available_pct"],
+                _composite_for_sort(r),
+                _cost_key(r) if include_cost_efficiency else 0,
+                r["composite_score"],
+                r["relevant_project_count"],
+                r["relevant_project_ratio"],
+            )
+        else:
+            sort_key = lambda r: (
+                r["coe_affinity_rank"],
+                r["available_pct"],
+                _composite_for_sort(r),
+                _cost_key(r) if include_cost_efficiency else 0,
+                r["composite_score"],
+                r["relevant_project_count"],
+                r["relevant_project_ratio"],
+            )
     else:
-        sort_key = lambda r: (
-            r["composite_score"],
-            r["relevant_project_count"],
-            r["relevant_project_ratio"],
-        )
+        # RM explicitly excluded availability from the ranking parameters --
+        # fall back to the original composite-driven order so that toggle
+        # isn't silently a no-op.
+        if include_skill:
+            sort_key = lambda r: (
+                _BUCKET_RANK.get(r["bucket"], 0),
+                _CONFIDENCE_RANK.get(r["skill_confidence"], 0),
+                r["coe_affinity_rank"],
+                _composite_for_sort(r),
+                _cost_key(r) if include_cost_efficiency else 0,
+                r["composite_score"],
+                r["relevant_project_count"],
+                r["relevant_project_ratio"],
+            )
+        else:
+            sort_key = lambda r: (
+                r["coe_affinity_rank"],
+                _composite_for_sort(r),
+                _cost_key(r) if include_cost_efficiency else 0,
+                r["composite_score"],
+                r["relevant_project_count"],
+                r["relevant_project_ratio"],
+            )
+
     ranked = sorted(results, key=sort_key, reverse=True)
+    bi_candidates = [r for r in ranked if (r.get("coe") or "").strip().lower() == "bi & reporting"]
+    print(f"BI & Reporting candidates: {len(bi_candidates)}, "
+    f"near_capacity={sum(1 for r in bi_candidates if r['near_capacity'])}, "
+    f"meets_capacity={sum(1 for r in bi_candidates if r['meets_requested_capacity'])}")
+    print([(r['employee_id'], r['available_pct'], r['bucket'], r['skill_confidence'], r['coe_affinity_rank']) for r in bi_candidates[:10]])
+
+
+    if include_cost_efficiency:
+        ranked = _apply_cost_tiebreak(ranked)
     candidates_meeting_capacity = [r for r in ranked if r["meets_requested_capacity"]]
-    pool = ranked if include_below_capacity else (candidates_meeting_capacity or ranked)
+    candidates_near_capacity = [r for r in ranked if r["near_capacity"]]
+    # Default pool now includes near-miss candidates within the caller-chosen
+    # tolerance, not just exact-or-above matches -- a real, actionable
+    # shortlist instead of an all-or-nothing cliff. Exact/over-capacity fits
+    # still rank first since available_pct is already part of the sort key.
+    pool = ranked if include_below_capacity else (candidates_near_capacity or candidates_meeting_capacity or ranked)
     top = pool[:top_n]
 
     for c in top:
@@ -489,8 +701,21 @@ def get_recommendations(
                     c["earliest_available_date"] = found["earliest_available_date"]
                     c["earliest_available_proof"] = found["proof"]
 
+    # Whether to show "hire signal" vs "recommended: X" now needs to reflect
+    # the same overall picture the ranking itself uses -- not just raw skill
+    # bucket in isolation. Since availability's weight increase (and the
+    # collapsed bucket sort) can legitimately put a "gap"-bucket candidate at
+    # #1 on overall fit, staffing_signal alone would show a contradictory
+    # "hire signal, no internal fit" banner right above a "Recommended: X, 60%
+    # match" card for the same person. A candidate counts as a real internal
+    # option if EITHER their skill bucket already says so, OR their overall
+    # composite score clears a minimum bar -- so a strong 100%-available,
+    # decent-competency, borderline-skill person isn't waved off as a hire
+    # signal while simultaneously being top-ranked and recommended.
+    HIRE_SIGNAL_COMPOSITE_FLOOR = 0.45
     top_signal = top[0]["staffing_signal"] if top else "hire"
-    hire_vs_redeploy = top_signal == "hire"
+    top_composite = top[0]["composite_score"] if top else 0.0
+    hire_vs_redeploy = bool(top) and top_signal == "hire" and top_composite < HIRE_SIGNAL_COMPOSITE_FLOOR
     has_skillset = bool(required_phrases)
     # top_n is a fixed display cap (TOP_N), not a measure of how many people genuinely
     # match -- without these, "Candidates (15/15)" looks identical whether 15 people
@@ -525,6 +750,7 @@ def get_recommendations(
             "required_phrases": required_phrases,
             "likely_start_date": likely_start_date,
             "requested_pct": requested_pct,
+            "near_capacity_tolerance_pct": near_capacity_tolerance_pct,
         },
         "candidates": top,
         "hire_vs_redeploy_flag": hire_vs_redeploy,
@@ -547,7 +773,11 @@ def get_recommendations_for_pipeline_row(
     row_index: int, pipeline: pd.DataFrame | None = None, top_n: int = TOP_N,
     include_skill: bool = True, include_competency: bool = True, include_availability: bool = True,
     include_category_match: bool = False, include_project_count: bool = False,
-    include_below_capacity: bool = False, **prefetched
+    include_coe_affinity: bool = True,
+    include_cost_efficiency: bool = False,
+    include_below_capacity: bool = False,
+    near_capacity_tolerance_pct: float = DEFAULT_NEAR_CAPACITY_TOLERANCE_PCT,
+    **prefetched
 ) -> dict:
     adapter = get_adapter()
     pipeline = adapter.get_pipeline_forecast() if pipeline is None else pipeline
@@ -574,7 +804,10 @@ def get_recommendations_for_pipeline_row(
         include_availability=include_availability,
         include_category_match=include_category_match,
         include_project_count=include_project_count,
+        include_cost_efficiency=include_cost_efficiency,
         include_below_capacity=include_below_capacity,
+        include_coe_affinity=include_coe_affinity,
+        near_capacity_tolerance_pct=near_capacity_tolerance_pct,
         **prefetched,
     )
     cluster = row.get("cluster")
@@ -957,6 +1190,7 @@ def get_project_team_recommendation(
     row_indices: list[int], top_n: int = 15,
     include_skill: bool = True, include_competency: bool = True, include_availability: bool = True,
     include_category_match: bool = False, include_project_count: bool = False,
+    include_coe_affinity: bool = True,
 ) -> dict:
     """Greedy conflict-aware team assignment for a set of pipeline roles.
 
@@ -1001,6 +1235,7 @@ def get_project_team_recommendation(
             row_index, pipeline=pipeline, top_n=2000,
             include_skill=include_skill, include_competency=include_competency, include_availability=include_availability,
             include_category_match=include_category_match, include_project_count=include_project_count,
+            include_coe_affinity=include_coe_affinity,
             **prefetched
         )
         role_data.append({

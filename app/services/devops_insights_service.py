@@ -256,9 +256,9 @@ def fetch_iteration_dates() -> dict[str, dict]:
     # _walk(resp.json(), azure_proj)
     _walk(resp.json(), "")
 
-    logger.info(f"[DEVOPS INSIGHTS][DEBUG] Fetched {len(dates_by_path)} iteration date entries.")
-    for _p, _d in list(dates_by_path.items())[:15]:
-        logger.info(f"[DEVOPS INSIGHTS][DEBUG]   {_p!r} -> start={_d['start_date']} finish={_d['finish_date']}")
+    # logger.info(f"[DEVOPS INSIGHTS][DEBUG] Fetched {len(dates_by_path)} iteration date entries.")
+    # for _p, _d in list(dates_by_path.items())[:15]:
+        # logger.info(f"[DEVOPS INSIGHTS][DEBUG]   {_p!r} -> start={_d['start_date']} finish={_d['finish_date']}")
 
     # Fallback map: leaf sprint name -> dates, only when that name is unambiguous
     # across the whole tree (e.g. "Sprint 28" appearing under exactly one node).
@@ -518,7 +518,26 @@ def compute_sprint_breakdown(
     return rows
 
 
-
+def _team_daily_capacity_hours(project_code: str) -> float:
+    """Team's steady-state capacity in hours/weekday, independent of the
+    EXTENSION_RISK_WINDOW_DAYS window. Unlike _team_capacity_hours() (which
+    is only computed when a project is within its risk window, and returns
+    0.0 for overdue projects since working_days_in_window is 0 there), this
+    is always available -- it's the daily rate needed to project how many
+    MORE days an overdue project's remaining work will take, since an
+    overdue project has no "window" left to measure against."""
+    adapter = get_adapter()
+    allocations = adapter.get_allocations()
+    active_allocs = allocations[
+        (allocations["project_id"] == project_code) & (allocations["is_allocation_active"] == 1)
+    ]
+    if active_allocs.empty:
+        return 0.0
+    total = sum(
+        STANDARD_WORKDAY_HOURS * (float(a["allocation_by_percentage"]) / 100.0)
+        for _, a in active_allocs.iterrows()
+    )
+    return round(total, 1)
 
 
 def _count_working_days(start: "pd.Timestamp", end: "pd.Timestamp") -> int:
@@ -576,6 +595,26 @@ def _team_capacity_hours(
 
     return round(capacity_before, 1), round(max(capacity_after, 0.0), 1)
 
+def _team_daily_capacity_hours(project_code: str) -> float:
+    """Team's steady-state capacity in hours/weekday, independent of the
+    EXTENSION_RISK_WINDOW_DAYS window. Unlike _team_capacity_hours() (which is
+    only computed when a project is within its risk window, and returns 0.0
+    for overdue projects since working_days_in_window is 0 there), this is
+    always available -- it's the daily rate needed to project how many MORE
+    days an overdue project's remaining work will take, since an overdue
+    project has no "window" left to measure against."""
+    adapter = get_adapter()
+    allocations = adapter.get_allocations()
+    active_allocs = allocations[
+        (allocations["project_id"] == project_code) & (allocations["is_allocation_active"] == 1)
+    ]
+    if active_allocs.empty:
+        return 0.0
+    total = sum(
+        STANDARD_WORKDAY_HOURS * (float(a["allocation_by_percentage"]) / 100.0)
+        for _, a in active_allocs.iterrows()
+    )
+    return round(total, 1)
 
 def _is_effort_inconsistent(fields: dict, today: "pd.Timestamp") -> bool:
     """Flag an in-progress ticket with no completed work logged despite having
@@ -708,6 +747,7 @@ def compute_devops_extension_risk(
             "working_days_in_window": working_days_in_window,
             "team_capacity_hours": capacity_before_leave,
             "team_capacity_hours_after_leave": capacity_after_leave,
+            "team_daily_capacity_hours": _team_daily_capacity_hours(project_code),
             "capacity_surplus_hours": None,
             "tickets_missing_remaining_estimate": 0,
             "tickets_with_no_effort_data": 0,
@@ -768,6 +808,7 @@ def compute_devops_extension_risk(
         "working_days_in_window":       working_days_in_window,
         "team_capacity_hours":          capacity_before_leave,
         "team_capacity_hours_after_leave": capacity_after_leave,
+        "team_daily_capacity_hours":     _team_daily_capacity_hours(project_code),
         "capacity_surplus_hours":       capacity_surplus_hours,
         "tickets_missing_remaining_estimate": stats["missing_remaining_estimate"],
         "tickets_with_no_effort_data": stats["no_effort_data_count"],
@@ -798,6 +839,8 @@ def no_devops_config_risk() -> dict:
         "working_days_in_window":       0,
         "team_capacity_hours":          0.0,
         "team_capacity_hours_after_leave": 0.0,
+        "team_daily_capacity_hours":     0.0,
+         "team_daily_capacity_hours":    0.0,
         "capacity_surplus_hours":       None,
         "tickets_missing_remaining_estimate": 0,
         "tickets_with_no_effort_data": 0,

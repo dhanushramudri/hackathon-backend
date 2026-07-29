@@ -2,9 +2,15 @@ import re
 
 import pandas as pd
 
-SKILL_WEIGHT = 0.5
-COMPETENCY_WEIGHT = 0.3
-AVAILABILITY_WEIGHT = 0.2
+# Rebalanced from 50/30/20: in a fast-moving delivery org, a person who can
+# actually start now is often the deciding factor over a marginally-better
+# skill match who's tied up elsewhere. Skill still leads (it determines
+# whether the person can do the job at all), but availability's voice is
+# raised from 20% to 35% to reflect how much staffing decisions in practice
+# hinge on real, immediate capacity -- not just theoretical fit.
+SKILL_WEIGHT = 0.40
+COMPETENCY_WEIGHT = 0.25
+AVAILABILITY_WEIGHT = 0.35
 
 ELIGIBLE_THRESHOLD = 0.6
 TRAINABLE_THRESHOLD = 0.3
