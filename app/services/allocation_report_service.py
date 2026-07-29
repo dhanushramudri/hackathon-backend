@@ -1,8 +1,11 @@
+import uuid
 import numpy as np
 import pandas as pd
 import logging
 logger = logging.getLogger(__name__)
 from app.core.adapter import get_adapter
+from app.core.config import TRANSFORMED_DIR
+from app.core import db as db_module
 from app.engines.role_mix_engine import canonical_project_coe
 
 ENDING_SOON_DAYS = 30
@@ -11,6 +14,45 @@ UNDER_UTILIZED_THRESHOLD = 70
 STANDARD_HOURS_PER_DAY = 8
 UNPLANNED_ABSENCE_WINDOW_DAYS = 14
 INTERNAL_PROJECT_TYPE = "Internal Project"
+
+ALLOCATIONS_CSV = TRANSFORMED_DIR / "03_Project_Allocation_clean.csv"
+
+def create_allocation(
+    employee_id: str, project_id: str, allocation_pct: float,
+    start_date: str, end_date: str, resourcing_status: str = "BILLABLE",
+) -> dict:
+    """Assign an employee to a project -- appends a new allocation row to the
+    source CSV (source of truth for every other read in this app) and reloads
+    the in-memory DB so it's immediately queryable.
+    ponytail: whole-file read/rewrite per assign, fine at this data size (~17k
+    rows); move to a real DB/append-only store if assign volume ever matters."""
+    adapter = get_adapter()
+    if employee_id not in set(adapter.get_employees()["employee_id"]):
+        raise ValueError(f"Employee {employee_id!r} not found")
+    if project_id not in set(adapter.get_projects()["project_code"]):
+        raise ValueError(f"Project {project_id!r} not found")
+    if not (0 < allocation_pct <= 100):
+        raise ValueError("allocation_pct must be between 0 and 100")
+    if pd.to_datetime(end_date) < pd.to_datetime(start_date):
+        raise ValueError("end_date cannot be before start_date")
+
+    df = pd.read_csv(ALLOCATIONS_CSV)
+    df.columns = [c.strip() for c in df.columns]
+    new_row = {
+        "project_rolebased_user_id": str(uuid.uuid4()).upper(),
+        "project_id": project_id,
+        "employee_id": employee_id,
+        "resourcing_status": resourcing_status,
+        "allocated_start_date": start_date,
+        "allocated_end_date": end_date,
+        "is_allocation_active": 1,
+        "allocation_by_percentage": allocation_pct,
+        "is_active_version": 1,
+    }
+    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+    df.to_csv(ALLOCATIONS_CSV, index=False)
+    db_module.reload()
+    return new_row
 
 def _utilization_band(total_pct: float, client_pct: float) -> str:
     # Over-allocation is judged on client_pct (Client Project/Managed Services/BAU/Sales),

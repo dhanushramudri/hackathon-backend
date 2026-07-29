@@ -1,10 +1,28 @@
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 import pandas as pd
 
 
-from app.services.allocation_report_service import AllocationNotFound, get_allocation_report, get_allocation_timesheet,get_availability_as_of
+from app.services.allocation_report_service import (
+    AllocationNotFound, create_allocation, get_allocation_report, get_allocation_timesheet, get_availability_as_of,
+)
 
 router = APIRouter(prefix="/allocations", tags=["allocations"])
+
+class AssignRequest(BaseModel):
+    employee_id: str
+    project_id: str
+    allocation_pct: float
+    start_date: str
+    end_date: str
+    resourcing_status: str = "BILLABLE"
+
+@router.post("/assign")
+def assign(body: AssignRequest) -> dict:
+    try:
+        return create_allocation(**body.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 @router.get("/current")
 def current() -> list[dict]:
