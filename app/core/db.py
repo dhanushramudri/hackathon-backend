@@ -16,6 +16,7 @@ _DATE_COLUMNS = {
 
 _EXPLICIT_FORMAT_DATE_COLUMNS = {
     "employees": (["date_of_join", "date_of_resignation"], "%d-%m-%Y"),
+    "weekly_pulse": (["week_start_date", "week_end_date", "submitted_on", "created_at", "updated_at", "data_loaded_at"], "%d-%m-%Y"),
 }
 
 _CSV_TABLES = {
@@ -27,6 +28,9 @@ _CSV_TABLES = {
     "competencies": "06_Competency_Details_clean.csv",
     "wsr_reports": "08_WSR_Report_clean.csv",
     "leaves": "09_Leave_Details_synthetic.csv",
+    # Hackathon team didn't provide real weekly-pulse survey data -- generated
+    # synthetic set (see weekly_pulse_generator.py) so this feature can exist.
+    "weekly_pulse": "10_Weekly_Pulse_dummy.csv",
 }
 
 _PIPELINE_SHEETS = {

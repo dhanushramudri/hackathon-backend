@@ -4,7 +4,7 @@ from app.core.adapter import get_adapter
 
 MAX_PLAUSIBLE_DAILY_HOURS = 24
 
-OVERTIME_DAILY_HOURS_THRESHOLD = 9
+OVERTIME_DAILY_HOURS_THRESHOLD = 11
 SUSTAINED_OVERTIME_WINDOW_DAYS = 14
 SUSTAINED_OVERTIME_MIN_DAYS = 4
 
@@ -15,16 +15,22 @@ def _clean_daily_hours(timesheets: pd.DataFrame) -> pd.Series:
     daily = timesheets.groupby(["employee_id", "date"])["time"].sum()
     return daily[daily <= MAX_PLAUSIBLE_DAILY_HOURS]
 
+def _latest_timesheet_date(timesheets: pd.DataFrame) -> pd.Timestamp:
+    """Anchored on the data's own latest entry, not wall-clock "now" -- these
+    are fixed snapshots that stop well before "today" ever ticks past them, so
+    a calendar-relative window would silently go empty once real time moves on."""
+    return timesheets["date"].max().normalize()
+
 def get_employee_overtime_risk() -> dict[str, dict]:
     adapter = get_adapter()
     timesheets = adapter.get_timesheets()
     daily = _clean_daily_hours(timesheets).reset_index(name="hours")
 
-    today = pd.Timestamp.now().normalize()
+    today = _latest_timesheet_date(timesheets)
     window_start = today - pd.Timedelta(days=SUSTAINED_OVERTIME_WINDOW_DAYS)
     recent = daily[(daily["date"] >= window_start) & (daily["date"] <= today)]
 
-    is_overtime = recent["hours"] > OVERTIME_DAILY_HOURS_THRESHOLD
+    is_overtime = recent["hours"] >= OVERTIME_DAILY_HOURS_THRESHOLD
     overtime_days = recent[is_overtime].groupby("employee_id").size().rename("overtime_days_recent")
     max_hours = recent.groupby("employee_id")["hours"].max().rename("max_daily_hours_recent")
 
@@ -71,7 +77,7 @@ def get_employee_recent_daily_hours(employee_id: str) -> list[dict]:
     timesheets = adapter.get_timesheets()
     daily = _clean_daily_hours(timesheets).reset_index(name="hours")
 
-    today = pd.Timestamp.now().normalize()
+    today = _latest_timesheet_date(timesheets)
     window_start = today - pd.Timedelta(days=SUSTAINED_OVERTIME_WINDOW_DAYS)
     rows = daily[
         (daily["employee_id"] == employee_id) & (daily["date"] >= window_start) & (daily["date"] <= today)
@@ -81,7 +87,7 @@ def get_employee_recent_daily_hours(employee_id: str) -> list[dict]:
         {
             "date": d.strftime("%Y-%m-%d"),
             "hours": float(round(h, 1)),
-            "is_overtime": bool(h > OVERTIME_DAILY_HOURS_THRESHOLD),
+            "is_overtime": bool(h >= OVERTIME_DAILY_HOURS_THRESHOLD),
         }
         for d, h in zip(rows["date"], rows["hours"])
     ]
@@ -95,7 +101,7 @@ def get_employee_recent_projects(employee_id: str) -> list[dict]:
     ts = timesheets.dropna(subset=["date", "project_id"])
     ts = ts[ts["employee_id"] == employee_id]
 
-    today = pd.Timestamp.now().normalize()
+    today = _latest_timesheet_date(timesheets)
     window_start = today - pd.Timedelta(days=SUSTAINED_OVERTIME_WINDOW_DAYS)
     recent = ts[(ts["date"] >= window_start) & (ts["date"] <= today)]
 

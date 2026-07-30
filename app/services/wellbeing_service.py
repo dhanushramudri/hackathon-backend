@@ -1,4 +1,5 @@
 from app.core.adapter import get_adapter
+from app.engines.pulse_engine import get_employee_pulse_table
 from app.services.health_monitor_service import get_health_report
 from app.services.timesheet_insights_service import (
     get_employee_overtime_risk,
@@ -37,6 +38,12 @@ def get_employee_burnout_overview() -> dict:
         r["project_code"] for r in health_report if "overtime_risk" in r["root_causes"] or "understaffed" in r["root_causes"]
     }
 
+    # Weekly Pulse: a separate signal from timesheet-hours burnout, not blended
+    # into it -- someone can be "Not happy" with no overtime at all (or vice
+    # versa). "Not happy" fires from a single Disagree/Strongly disagree answer
+    # on q1/q2/q5 in any recent response, not an average -- see pulse_engine.
+    pulse_table = get_employee_pulse_table()
+
     risk = get_employee_overtime_risk()
     overtime_employees = []
     for emp_id, r in risk.items():
@@ -58,7 +65,20 @@ def get_employee_burnout_overview() -> dict:
         )
     overtime_employees.sort(key=lambda e: -e["max_daily_hours_recent"])
 
+    not_happy_employees = []
+    if not pulse_table.empty:
+        for emp_id in pulse_table[pulse_table["is_not_happy"]].index:
+            not_happy_employees.append(
+                {
+                    "employee_id": emp_id,
+                    "job_name": job_name_by_id.get(emp_id),
+                    "department_name": dept_by_id.get(emp_id),
+                }
+            )
+
     return {
         "overtime_employee_count": len(overtime_employees),
         "overtime_employees": overtime_employees,
+        "not_happy_count": len(not_happy_employees),
+        "not_happy_employees": not_happy_employees,
     }

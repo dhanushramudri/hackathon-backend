@@ -595,27 +595,6 @@ def _team_capacity_hours(
 
     return round(capacity_before, 1), round(max(capacity_after, 0.0), 1)
 
-def _team_daily_capacity_hours(project_code: str) -> float:
-    """Team's steady-state capacity in hours/weekday, independent of the
-    EXTENSION_RISK_WINDOW_DAYS window. Unlike _team_capacity_hours() (which is
-    only computed when a project is within its risk window, and returns 0.0
-    for overdue projects since working_days_in_window is 0 there), this is
-    always available -- it's the daily rate needed to project how many MORE
-    days an overdue project's remaining work will take, since an overdue
-    project has no "window" left to measure against."""
-    adapter = get_adapter()
-    allocations = adapter.get_allocations()
-    active_allocs = allocations[
-        (allocations["project_id"] == project_code) & (allocations["is_allocation_active"] == 1)
-    ]
-    if active_allocs.empty:
-        return 0.0
-    total = sum(
-        STANDARD_WORKDAY_HOURS * (float(a["allocation_by_percentage"]) / 100.0)
-        for _, a in active_allocs.iterrows()
-    )
-    return round(total, 1)
-
 def _is_effort_inconsistent(fields: dict, today: "pd.Timestamp") -> bool:
     """Flag an in-progress ticket with no completed work logged despite having
     started several calendar days ago."""
@@ -749,6 +728,7 @@ def compute_devops_extension_risk(
             "team_capacity_hours_after_leave": capacity_after_leave,
             "team_daily_capacity_hours": _team_daily_capacity_hours(project_code),
             "capacity_surplus_hours": None,
+            "days_to_clear_backlog": 0.0,
             "tickets_missing_remaining_estimate": 0,
             "tickets_with_no_effort_data": 0,
             "sprint_breakdown": [],
@@ -784,11 +764,22 @@ def compute_devops_extension_risk(
         round(capacity_after_leave - stats["remaining_hours"], 1) if (within_risk_window or is_overdue) else None
     )
 
+    daily_rate = _team_daily_capacity_hours(project_code)
+    days_to_clear_backlog = round(stats["remaining_hours"] / daily_rate, 1) if daily_rate > 0 else None
+
+    # Extension risk is fundamentally a TIMELINE problem -- blocked tickets and
+    # past-due tickets are only a meaningful signal for it once the project is
+    # actually near its end (within_risk_window) or already overdue. A project
+    # with a month of runway left having one blocked ticket is normal, not an
+    # extension risk.
     has_risk = bool(
-        stats["blocked_count"] > 0
-        or tickets_past_due > 0
-        or (within_risk_window and stats["remaining_hours"] > capacity_after_leave)
-        or (is_overdue and stats["open_count"] > 0)
+        (within_risk_window or is_overdue)
+        and (
+            stats["blocked_count"] > 0
+            or tickets_past_due > 0
+            or (within_risk_window and stats["remaining_hours"] > capacity_after_leave)
+            or (is_overdue and stats["open_count"] > 0)
+        )
     )
 
     return {
@@ -808,8 +799,9 @@ def compute_devops_extension_risk(
         "working_days_in_window":       working_days_in_window,
         "team_capacity_hours":          capacity_before_leave,
         "team_capacity_hours_after_leave": capacity_after_leave,
-        "team_daily_capacity_hours":     _team_daily_capacity_hours(project_code),
+        "team_daily_capacity_hours":     daily_rate,
         "capacity_surplus_hours":       capacity_surplus_hours,
+        "days_to_clear_backlog":        days_to_clear_backlog,
         "tickets_missing_remaining_estimate": stats["missing_remaining_estimate"],
         "tickets_with_no_effort_data": stats["no_effort_data_count"],
         "sprint_breakdown": sprint_breakdown,
@@ -840,13 +832,12 @@ def no_devops_config_risk() -> dict:
         "team_capacity_hours":          0.0,
         "team_capacity_hours_after_leave": 0.0,
         "team_daily_capacity_hours":     0.0,
-         "team_daily_capacity_hours":    0.0,
         "capacity_surplus_hours":       None,
+        "days_to_clear_backlog":        0.0,
         "tickets_missing_remaining_estimate": 0,
         "tickets_with_no_effort_data": 0,
         "sprint_breakdown": [],
         "likely_needs_new_sprint": False,
-
     }
 
 def list_devops_tickets_for_display(

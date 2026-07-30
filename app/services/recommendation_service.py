@@ -1478,6 +1478,8 @@ def get_backfill_candidates(
         & (allocations["project_id"] == source_project_id)
     ].sort_values("is_allocation_active", ascending=False)
     alloc_pct = float(emp_alloc.iloc[0]["allocation_by_percentage"]) if not emp_alloc.empty else 100.0
+    vacated_start_date = _fmt_date(emp_alloc.iloc[0]["allocated_start_date"]) if not emp_alloc.empty else None
+    vacated_end_date = _fmt_date(emp_alloc.iloc[0]["allocated_end_date"]) if not emp_alloc.empty else None
 
     emp_skills = skills[skills["employee_id"] == employee_id]
     terms: list[str] = []
@@ -1555,6 +1557,8 @@ def get_backfill_candidates(
         "pulled_employee_coe": emp_coe,
         "source_project_id": source_project_id,
         "vacated_allocation_pct": alloc_pct,
+        "vacated_start_date": vacated_start_date,
+        "vacated_end_date": vacated_end_date,
         "skill_basis": terms[:15],
     }
     return result

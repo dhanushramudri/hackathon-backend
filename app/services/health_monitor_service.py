@@ -17,6 +17,7 @@ import math
 import pandas as pd
 
 from app.core.adapter import get_adapter
+from app.engines.pulse_engine import get_project_pulse_table
 from app.engines.role_mix_engine import build_role_mix_templates, canonical_project_coe, get_role_mix
 from app.engines.sentiment_engine import analyze_comment, summarize_project_sentiment
 from app.services.rate_card_service import get_hourly_rate
@@ -75,6 +76,7 @@ ROOT_CAUSE_CATEGORY: dict[str, str] = {
     "understaffed": "staffing",
     "high_churn": "staffing",
     "overtime_risk": "people",
+    "pulse_risk": "people",
 }
 
 def categorize_root_causes(root_causes: list[str]) -> dict[str, list[str]]:
@@ -346,6 +348,8 @@ def get_health_report() -> list[dict]:
     active = active.merge(unbilled_value, left_on="project_code", right_index=True, how="left")
     active = active.merge(extension_unbilled_value, left_on="project_code", right_index=True, how="left")
     active = active.merge(team_daily_extension_cost, left_on="project_code", right_index=True, how="left")
+    active = active.merge(get_project_pulse_table(), left_on="project_code", right_index=True, how="left")
+    active["is_pulse_risk"] = active["is_pulse_risk"].fillna(False)
 
     duration_days = (active["project_end_date"] - active["project_start_date"]).dt.days.clip(lower=1)
     active["churn_per_month"] = (active["n_employees"] / (duration_days / 30)).round(2)
@@ -513,6 +517,8 @@ def get_health_report() -> list[dict]:
             root_causes.append("wsr_long_term_decline")
         if is_devops_extension_risk:                                          # ← NEW
             root_causes.append("devops_extension_risk")                       # ← NEW
+        if bool(row.get("is_pulse_risk")):
+            root_causes.append("pulse_risk")
 
         risk_score = len(root_causes)
         risk_band = "high" if risk_score >= 3 else ("medium" if risk_score == 2 else "low")
@@ -555,6 +561,9 @@ def get_health_report() -> list[dict]:
                 "root_cause_categories": categorize_root_causes(root_causes),
                 "is_extension_risk": any(ROOT_CAUSE_CATEGORY.get(c) == "extension" for c in root_causes),
                 "is_escalation_risk": any(ROOT_CAUSE_CATEGORY.get(c) == "escalation" for c in root_causes),
+                "is_pulse_risk": bool(row.get("is_pulse_risk")),
+                "pulse_avg_score": round(row["pulse_avg_score"], 2) if pd.notna(row.get("pulse_avg_score")) else None,
+                "pulse_response_count": int(row["pulse_response_count"]) if pd.notna(row.get("pulse_response_count")) else 0,
                 "is_ramp_down_candidate": bool(row["is_ramp_down_candidate"]),
                 "days_to_ramp_down": int(row["days_to_ramp_down"]) if pd.notna(row["days_to_ramp_down"]) else None,
                 "wsr_data_available": bool(row["wsr_data_available"]),
@@ -578,6 +587,7 @@ def get_health_report() -> list[dict]:
                 "devops_team_capacity_hours_after_leave": devops_risk["team_capacity_hours_after_leave"],
                 "devops_team_daily_capacity_hours": devops_risk.get("team_daily_capacity_hours", 0.0),
                 "devops_capacity_surplus_hours":    devops_risk["capacity_surplus_hours"],
+                "devops_days_to_clear_backlog":     devops_risk.get("days_to_clear_backlog"),
                 "devops_is_overdue":                devops_risk["is_overdue"],
                 "devops_tickets_missing_remaining_estimate": devops_risk["tickets_missing_remaining_estimate"],
                 "devops_tickets_with_no_effort_data": devops_risk["tickets_with_no_effort_data"],
