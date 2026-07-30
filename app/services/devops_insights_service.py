@@ -399,15 +399,15 @@ def group_tickets_by_project_code(
         else:
             unmatched += 1
 
-    if unmatched:
-        print(
-            f"[DEVOPS INSIGHTS] {unmatched} work items had no recognisable "
-            f"project code in AreaPath — they won't contribute to any risk signal."
-        )
-    print(
-        f"[DEVOPS INSIGHTS] Tickets grouped into {len(grouped)} project codes: "
-        f"{sorted(grouped.keys())}"
-    )
+    # if unmatched:
+    #     print(
+    #         f"[DEVOPS INSIGHTS] {unmatched} work items had no recognisable "
+    #         f"project code in AreaPath — they won't contribute to any risk signal."
+    #     )
+    # print(
+    #     f"[DEVOPS INSIGHTS] Tickets grouped into {len(grouped)} project codes: "
+    #     f"{sorted(grouped.keys())}"
+    # )
 
     _counts = sorted(((code, len(tix)) for code, tix in grouped.items()), key=lambda x: -x[1])
     # logger.info("[DEVOPS INSIGHTS][DEBUG] Open ticket count by project code (busiest first):")

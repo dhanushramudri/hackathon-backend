@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
+from app.engines.headcount_prediction_engine import get_headcount_prediction, get_raw_table, list_raw_tables
 from app.engines.revenue_engine import get_revenue_benchmarks_by_coe
 from app.engines.role_mix_engine import get_role_mix_by_coes
 from app.engines.simple_forecast_engine import get_prediction_forecast
@@ -86,6 +87,21 @@ def revenue_target(body: RevenueTargetRequest) -> dict:
 @router.get("/prediction")
 def prediction(horizon_months: int = 24) -> dict:
     return get_prediction_forecast(horizon_months)
+
+@router.get("/headcount-prediction")
+def headcount_prediction(horizon_months: int = 12) -> dict:
+    return get_headcount_prediction(horizon_months)
+
+@router.get("/headcount-prediction/tables")
+def headcount_prediction_tables() -> list[dict]:
+    return list_raw_tables()
+
+@router.get("/headcount-prediction/raw-data")
+def headcount_prediction_raw_data(table: str) -> dict:
+    try:
+        return get_raw_table(table)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 @router.get("/six-month-outlook")
 def six_month_outlook(start_date: str | None = None, horizon_months: int = OUTLOOK_MONTHS, granularity: str = "month") -> dict:

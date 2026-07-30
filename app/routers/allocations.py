@@ -4,7 +4,9 @@ import pandas as pd
 
 
 from app.services.allocation_report_service import (
-    AllocationNotFound, create_allocation, get_allocation_report, get_allocation_timesheet, get_availability_as_of,
+    AllocationNotFound, AllocationRowNotFound, ProjectNotFoundForExtension,
+    create_allocation, extend_allocation_end_date, extend_project_end_date,
+    get_allocation_report, get_allocation_timesheet, get_availability_as_of,
 )
 
 router = APIRouter(prefix="/allocations", tags=["allocations"])
@@ -21,6 +23,32 @@ class AssignRequest(BaseModel):
 def assign(body: AssignRequest) -> dict:
     try:
         return create_allocation(**body.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+class ExtendEndDateRequest(BaseModel):
+    extended_end_date: str | None = None
+    status: str | None = None
+
+@router.post("/{allocation_id}/extend")
+def extend_allocation(allocation_id: str, body: ExtendEndDateRequest) -> dict:
+    try:
+        return extend_allocation_end_date(allocation_id, body.extended_end_date or "", body.status)
+    except AllocationRowNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+class ExtendProjectEndDateRequest(BaseModel):
+    extended_end_date: str | None = None
+    status: str | None = None
+
+@router.post("/projects/{project_code}/extend")
+def extend_project(project_code: str, body: ExtendProjectEndDateRequest) -> dict:
+    try:
+        return extend_project_end_date(project_code, body.extended_end_date or "", body.status)
+    except ProjectNotFoundForExtension as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

@@ -2,6 +2,9 @@ import pandas as pd
 
 from app.core.adapter import get_adapter
 
+def _date_str(value) -> str | None:
+    return value.strftime("%Y-%m-%d") if pd.notna(value) else None
+
 def get_project_roster(project_code: str) -> dict:
     adapter = get_adapter()
     allocations = adapter.get_allocations()
@@ -18,12 +21,16 @@ def get_project_roster(project_code: str) -> dict:
     for _, r in rows.iterrows():
         roster.append(
             {
+                "allocation_id": r["project_rolebased_user_id"],
                 "employee_id": r["employee_id"],
                 "job_name": r["job_name"],
                 "resourcing_status": r["resourcing_status"],
                 "allocation_by_percentage": r["allocation_by_percentage"],
-                "allocated_start_date": r["allocated_start_date"].strftime("%Y-%m-%d") if pd.notna(r["allocated_start_date"]) else None,
-                "allocated_end_date": r["allocated_end_date"].strftime("%Y-%m-%d") if pd.notna(r["allocated_end_date"]) else None,
+                "allocated_start_date": _date_str(r["allocated_start_date"]),
+                "allocated_end_date": _date_str(r["allocated_end_date"]),
+                "extended_start_date": _date_str(r.get("extended_start_date")),
+                "extended_end_date": _date_str(r.get("extended_end_date")),
+                "extended_status": r.get("extended_status") if pd.notna(r.get("extended_status")) else None,
                 "is_allocation_active": bool(r["is_allocation_active"]),
             }
         )

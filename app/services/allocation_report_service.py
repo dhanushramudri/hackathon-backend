@@ -16,6 +16,127 @@ UNPLANNED_ABSENCE_WINDOW_DAYS = 14
 INTERNAL_PROJECT_TYPE = "Internal Project"
 
 ALLOCATIONS_CSV = TRANSFORMED_DIR / "03_Project_Allocation_clean.csv"
+PROJECTS_CSV = TRANSFORMED_DIR / "02_Project_Details_clean.csv"
+
+class AllocationRowNotFound(Exception):
+    def __init__(self, allocation_id: str):
+        self.allocation_id = allocation_id
+        super().__init__(f"allocation {allocation_id!r} not found")
+
+class ProjectNotFoundForExtension(Exception):
+    def __init__(self, project_code: str):
+        self.project_code = project_code
+        super().__init__(f"project_code {project_code!r} not found")
+
+EXTENSION_STATUSES = {"BILLABLE", "UNBILLABLE"}
+ALLOCATION_EXTENSION_STATUSES = {"BILLABLE", "UNBILLABLE", "SHADOW"}
+
+def extend_allocation_end_date(allocation_id: str, extended_end_date: str, status: str | None = None) -> dict:
+    """Sets (or clears, when extended_end_date is falsy) the extended_end_date on a
+    single allocation row -- the resource manager's own record of a real-world
+    extension for that person on that project, kept separate from the original
+    allocated_end_date so both remain visible. Setting a date requires a status
+    for the extension period (billable/unbillable/shadow -- unlike a project,
+    an individual allocation can be shadow work), stored separately from the
+    row's own resourcing_status so the original allocation's status is untouched.
+
+    Gated on the PROJECT already having its own extended_end_date set: a person
+    can't be extended past a project that hasn't itself been formally extended,
+    and can't be extended further out than the project's own extension covers."""
+    alloc_df = pd.read_csv(ALLOCATIONS_CSV, dtype=str)
+    alloc_df.columns = [c.strip() for c in alloc_df.columns]
+    ids = alloc_df["project_rolebased_user_id"].str.strip()
+    matches = alloc_df[ids == allocation_id.strip()]
+    if matches.empty:
+        raise AllocationRowNotFound(allocation_id)
+    row_idx = matches.index[0]
+
+    if extended_end_date:
+        if status not in ALLOCATION_EXTENSION_STATUSES:
+            raise ValueError(f"status must be one of {sorted(ALLOCATION_EXTENSION_STATUSES)}")
+
+        project_id = str(alloc_df.at[row_idx, "project_id"]).strip()
+        proj_df = pd.read_csv(PROJECTS_CSV, dtype=str)
+        proj_df.columns = [c.strip() for c in proj_df.columns]
+        proj_matches = proj_df[proj_df["project_code"].str.strip() == project_id]
+        project_extended_end = (
+            pd.to_datetime(str(proj_matches.iloc[0]["extended_end_date"]).strip(), errors="coerce")
+            if not proj_matches.empty else pd.NaT
+        )
+        if pd.isna(project_extended_end):
+            raise ValueError(
+                f"Project {project_id!r} has not been extended yet -- extend the project's end date first."
+            )
+
+        current_end = pd.to_datetime(str(alloc_df.at[row_idx, "allocated_end_date"]).strip(), errors="coerce")
+        new_end = pd.to_datetime(extended_end_date, errors="coerce")
+        if pd.isna(new_end):
+            raise ValueError(f"invalid extended_end_date {extended_end_date!r}")
+        if pd.notna(current_end) and new_end < current_end:
+            raise ValueError("extended_end_date cannot be before the current allocated_end_date")
+        if new_end > project_extended_end:
+            raise ValueError(
+                f"extended_end_date cannot be later than the project's extended end date "
+                f"({project_extended_end.strftime('%Y-%m-%d')})"
+            )
+        # extended_start_date is never entered -- it's always the day right after
+        # this allocation's own current end date, i.e. where the extension period
+        # begins. Computed here, not by the caller, so it can't drift out of sync.
+        extended_start = current_end + pd.Timedelta(days=1) if pd.notna(current_end) else new_end
+        alloc_df.at[row_idx, "extended_end_date"] = new_end.strftime("%Y-%m-%d")
+        alloc_df.at[row_idx, "extended_start_date"] = extended_start.strftime("%Y-%m-%d")
+        alloc_df.at[row_idx, "extended_status"] = status
+    else:
+        alloc_df.at[row_idx, "extended_end_date"] = ""
+        alloc_df.at[row_idx, "extended_start_date"] = ""
+        alloc_df.at[row_idx, "extended_status"] = ""
+
+    alloc_df.to_csv(ALLOCATIONS_CSV, index=False)
+    db_module.reload()
+    return {
+        "allocation_id": allocation_id,
+        "extended_start_date": alloc_df.at[row_idx, "extended_start_date"] or None,
+        "extended_end_date": alloc_df.at[row_idx, "extended_end_date"] or None,
+        "extended_status": alloc_df.at[row_idx, "extended_status"] or None,
+    }
+
+def extend_project_end_date(project_code: str, extended_end_date: str, status: str | None = None) -> dict:
+    """Sets (or clears) the extended_end_date on a project -- an explicit,
+    resource-manager-entered override of the project's currently-expected end
+    date, kept separate from the original project_end_date. Setting a date
+    requires a billable/unbillable status for that extension period (a project
+    has no SHADOW concept -- that's an individual allocation's resourcing_status,
+    not a whole project's)."""
+    df = pd.read_csv(PROJECTS_CSV, dtype=str)
+    df.columns = [c.strip() for c in df.columns]
+    codes = df["project_code"].str.strip()
+    matches = df[codes == project_code.strip()]
+    if matches.empty:
+        raise ProjectNotFoundForExtension(project_code)
+    row_idx = matches.index[0]
+
+    if extended_end_date:
+        if status not in EXTENSION_STATUSES:
+            raise ValueError(f"status must be one of {sorted(EXTENSION_STATUSES)}")
+        current_end = pd.to_datetime(str(df.at[row_idx, "project_end_date"]).strip(), errors="coerce")
+        new_end = pd.to_datetime(extended_end_date, errors="coerce")
+        if pd.isna(new_end):
+            raise ValueError(f"invalid extended_end_date {extended_end_date!r}")
+        if pd.notna(current_end) and new_end < current_end:
+            raise ValueError("extended_end_date cannot be before the current project_end_date")
+        df.at[row_idx, "extended_end_date"] = new_end.strftime("%Y-%m-%d")
+        df.at[row_idx, "extended_end_status"] = status
+    else:
+        df.at[row_idx, "extended_end_date"] = ""
+        df.at[row_idx, "extended_end_status"] = ""
+
+    df.to_csv(PROJECTS_CSV, index=False)
+    db_module.reload()
+    return {
+        "project_code": project_code,
+        "extended_end_date": df.at[row_idx, "extended_end_date"] or None,
+        "extended_end_status": df.at[row_idx, "extended_end_status"] or None,
+    }
 
 def create_allocation(
     employee_id: str, project_id: str, allocation_pct: float,
@@ -199,7 +320,12 @@ def get_allocation_report() -> list[dict]:
     ].copy()
 
     active = active.merge(
-        projects[["project_code", "type_of_project", "tech_coe"]].rename(columns={"project_code": "project_id"}),
+        projects[["project_code", "type_of_project", "tech_coe", "project_end_date", "extended_end_date", "extended_end_status"]]
+        .rename(columns={
+            "project_code": "project_id",
+            "extended_end_date": "project_extended_end_date",
+            "extended_end_status": "project_extended_end_status",
+        }),
         on="project_id", how="left",
     )
 
@@ -236,9 +362,11 @@ def get_allocation_report() -> list[dict]:
     active["ending_soon"] = active["days_to_end"].between(0, ENDING_SOON_DAYS)
 
     cols = [
-        "employee_id", "job_name", "department_name", "location", "project_id", "type_of_project",
+        "project_rolebased_user_id", "employee_id", "job_name", "department_name", "location", "project_id", "type_of_project",
         "resourcing_status", "allocation_by_percentage", "allocated_start_date",
-        "allocated_end_date", "employee_total_allocation_pct", "employee_client_allocation_pct",
+        "allocated_end_date", "extended_start_date", "extended_end_date", "extended_status", "project_end_date", "project_extended_end_date",
+        "project_extended_end_status",
+        "employee_total_allocation_pct", "employee_client_allocation_pct",
         "employee_internal_allocation_pct", "over_allocated_due_to_internal", "utilization_band",
         "actual_hours_logged", "expected_hours", "hours_utilization_pct", "hours_data_available",
         "possible_unplanned_absence", "days_to_end", "ending_soon",
@@ -248,8 +376,13 @@ def get_allocation_report() -> list[dict]:
     out = active[cols].copy()
     for date_col in ["allocated_start_date", "allocated_end_date"]:
         out[date_col] = out[date_col].dt.strftime("%Y-%m-%d")
+    for nullable_date_col in ["extended_start_date", "extended_end_date", "project_end_date", "project_extended_end_date"]:
+        out[nullable_date_col] = out[nullable_date_col].dt.strftime("%Y-%m-%d").where(out[nullable_date_col].notna(), None)
     out["hours_utilization_pct"] = out["hours_utilization_pct"].where(out["hours_utilization_pct"].notna(), None)
     out["type_of_project"] = out["type_of_project"].where(out["type_of_project"].notna(), None)
+    out["project_extended_end_status"] = out["project_extended_end_status"].where(out["project_extended_end_status"].notna(), None)
+    out["extended_status"] = out["extended_status"].where(out["extended_status"].notna(), None)
+    out = out.rename(columns={"project_rolebased_user_id": "allocation_id"})
     records = out.to_dict(orient="records")
     for record, coe in zip(records, coe_values):
         record["coe"] = coe

@@ -7,8 +7,8 @@ import pandas as pd
 from app.core.config import DUCKDB_PATH, PIPELINE_XLSX, TRANSFORMED_DIR
 
 _DATE_COLUMNS = {
-    "projects": ["project_start_date", "project_end_date"],
-    "allocations": ["allocated_start_date", "allocated_end_date"],
+    "projects": ["project_start_date", "project_end_date", "extended_end_date"],
+    "allocations": ["allocated_start_date", "allocated_end_date", "extended_end_date", "extended_start_date"],
     "leaves": ["leave_start_date", "leave_end_date"],
     "timesheets": ["date", "created_at", "updated_at"],
     "wsr_reports": ["week_start_date", "week_end_date"],

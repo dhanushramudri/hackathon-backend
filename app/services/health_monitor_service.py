@@ -258,7 +258,18 @@ def get_health_report() -> list[dict]:
     )
 
     n_employees = allocations.groupby("project_id")["employee_id"].nunique().rename("n_employees")
-    max_alloc_end = allocations.groupby("project_id")["allocated_end_date"].max().rename("max_alloc_end")
+    # Only active, billable allocations count as evidence of a "current commitment".
+    # Each row's own effective end date is its RM-entered extended_end_date when set
+    # (explicit, gated on the project already being extended -- see
+    # allocation_report_service.extend_allocation_end_date), else its allocated_end_date.
+    billable_active_allocs = allocations[
+        (allocations["is_allocation_active"] == 1)
+        & (~allocations["resourcing_status"].isin(["SHADOW", "UNBILLED"]))
+    ].copy()
+    billable_active_allocs["_effective_alloc_end"] = billable_active_allocs["extended_end_date"].where(
+        billable_active_allocs["extended_end_date"].notna(), billable_active_allocs["allocated_end_date"]
+    )
+    max_alloc_end = billable_active_allocs.groupby("project_id")["_effective_alloc_end"].max().rename("max_alloc_end")
     shadow_share = (
         allocations.assign(is_shadow_unbilled=allocations["resourcing_status"].isin(["SHADOW", "UNBILLED"]))
         .groupby("project_id")["is_shadow_unbilled"]
@@ -340,13 +351,35 @@ def get_health_report() -> list[dict]:
     active["churn_per_month"] = (active["n_employees"] / (duration_days / 30)).round(2)
     churn_p75 = active["churn_per_month"].quantile(0.75)
 
-    active["overrun_days"] = (active["max_alloc_end"] - active["project_end_date"]).dt.days
+    # effective_end_date is the project's real current commitment, the latest of:
+    #   1. project_end_date -- the original plan
+    #   2. extended_end_date -- an explicit, RM-entered project extension (see
+    #      allocation_report_service.extend_project_end_date)
+    #   3. max_alloc_end -- the latest active billable allocation's own effective end
+    #      (allocation-level extended_end_date if set, else allocated_end_date),
+    #      which catches extensions already reflected in resourcing before this
+    #      explicit-extension feature existed.
+    # planned_extension_days is purely informational -- how far #2/#3 already
+    # pushed past the original plan, not a risk signal on its own.
+    def _row_max(a: pd.Series, b: pd.Series) -> pd.Series:
+        return a.where(b.isna() | (b <= a), b)
+
+    active["effective_end_date"] = _row_max(active["project_end_date"], active["extended_end_date"])
+    active["effective_end_date"] = _row_max(active["effective_end_date"], active["max_alloc_end"])
+    active["planned_extension_days"] = (active["effective_end_date"] - active["project_end_date"]).dt.days
+
+    today = pd.Timestamp.now().normalize()
+
+    # "Overrunning" now means: even the latest currently-booked allocation has
+    # lapsed and nothing further is scheduled -- a real, CURRENT gap. It no longer
+    # fires just because allocations were pushed past the stale original end date,
+    # since that's an already-known, already-resourced extension, not a risk.
+    active["overrun_days"] = (today - active["effective_end_date"]).dt.days
     active["is_overrunning"] = active["overrun_days"] > OVERRUN_DAYS_THRESHOLD
     active["is_shadow_heavy"] = active["shadow_unbilled_share"] > SHADOW_SHARE_THRESHOLD
     active["is_high_churn"] = active["churn_per_month"] > churn_p75
 
-    today = pd.Timestamp.now().normalize()
-    active["days_to_ramp_down"] = (active["project_end_date"] - today).dt.days
+    active["days_to_ramp_down"] = (active["effective_end_date"] - today).dt.days
     active["is_ramp_down_candidate"] = active["days_to_ramp_down"].between(0, RAMP_DOWN_WINDOW_DAYS)
 
     wsr_worst = wsr.copy()
@@ -431,7 +464,7 @@ def get_health_report() -> list[dict]:
         devops_tickets = _demo_devops_tickets
 
         devops_risk = (
-             compute_devops_extension_risk(devops_tickets, row["project_end_date"], project_code, ticket_stats=_demo_devops_ticket_stats)
+             compute_devops_extension_risk(devops_tickets, row["effective_end_date"], project_code, ticket_stats=_demo_devops_ticket_stats)
              if _devops_enabled
              else no_devops_config_risk()
          )
@@ -450,8 +483,8 @@ def get_health_report() -> list[dict]:
         # Anchor date the projected extra days count FROM: if already overdue,
         # the extra work continues from today; if still within the risk
         # window (not yet overdue), the shortfall spills over starting right
-        # after the project's own end date.
-        _extension_anchor = today if devops_risk.get("is_overdue") else row["project_end_date"]
+        # after the project's currently-resourced (effective) end date.
+        _extension_anchor = today if devops_risk.get("is_overdue") else row["effective_end_date"]
         predicted_extension_start_date = _date_str(_extension_anchor) if projected_extension_days else None
         predicted_extension_end_date = (
             _date_str(add_working_days(_extension_anchor, projected_extension_days))
@@ -495,6 +528,8 @@ def get_health_report() -> list[dict]:
                 "expected_headcount": round(expected_headcount, 1) if expected_headcount else None,
                 "is_understaffed": is_understaffed,
                 "overrun_days": int(row["overrun_days"]) if pd.notna(row["overrun_days"]) else None,
+                "effective_end_date": _date_str(row["effective_end_date"]),
+                "planned_extension_days": int(row["planned_extension_days"]) if pd.notna(row["planned_extension_days"]) else None,
                 "shadow_unbilled_share": round(row["shadow_unbilled_share"], 2) if pd.notna(row["shadow_unbilled_share"]) else None,
                 "monthly_unbilled_value_usd": round(row["monthly_unbilled_value_usd"], 0) if pd.notna(row.get("monthly_unbilled_value_usd")) else 0,
                 "extension_unbilled_value_usd": round(row["extension_unbilled_value_usd"], 0) if pd.notna(row.get("extension_unbilled_value_usd")) else 0,

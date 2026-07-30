@@ -1,0 +1,19 @@
+{
+  "forecast_horizon_months": 3,
+  "n_rows_used": 15,
+  "final_features": [
+    "unbillable_fte_total_roll6_mean",
+    "unbillable_fte_total_roll6_std",
+    "total_active_headcount",
+    "shadow_unbilled_count_lag6",
+    "completions_on_time_roll6_std",
+    "resignations_total_roll6_mean",
+    "free_pool_headcount_roll6_std",
+    "completions_on_time_roll6_mean",
+    "total_logged_hours_roll6_std",
+    "avg_q1_motivation_roll6_mean",
+    "extensions_billable_roll6_std",
+    "total_active_headcount_roll6_std"
+  ],
+  "correlation_drop_threshold": 0.85
+}

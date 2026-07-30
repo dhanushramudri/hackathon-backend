@@ -1,0 +1,597 @@
+employee_id,resignation_date,notice_start_date,month,months_into_notice,role,coe,location,pulse_score_current_month,pulse_score_3mo_before_notice
+SYN_EMP_0009,2024-09-03,2024-06-03,2024-08-01,3,Software Engineer,full_stack,chennai,2.51,2.82
+SYN_EMP_0010,2024-09-08,2024-06-08,2024-08-01,3,Trainee Software Engineer,ai_ml,uk,2.73,3.39
+SYN_EMP_0011,2024-09-09,2024-06-09,2024-08-01,3,Software Engineer,full_stack,uk,2.66,2.98
+SYN_EMP_0012,2024-09-10,2024-06-10,2024-08-01,3,Trainee Software Engineer,data_engineering,chennai,2.94,3.58
+SYN_EMP_0013,2024-09-11,2024-06-11,2024-08-01,3,Trainee Software Engineer,data_engineering,chennai,2.26,2.8
+SYN_EMP_0014,2024-09-15,2024-06-15,2024-08-01,3,Solutions Consultant,full_stack,chennai,1.93,2.63
+SYN_EMP_0015,2024-09-06,2024-06-06,2024-08-01,3,Trainee Software Engineer,techops,uk,2.5,3.19
+SYN_EMP_0016,2024-09-12,2024-06-12,2024-08-01,3,Trainee Software Engineer,full_stack,chennai,2.34,2.96
+SYN_EMP_0017,2024-10-22,2024-07-22,2024-08-01,2,Senior Associate Consultant,data_engineering,chennai,2.74,3.19
+SYN_EMP_0017,2024-10-22,2024-07-22,2024-09-01,3,Senior Associate Consultant,data_engineering,chennai,2.51,3.19
+SYN_EMP_0018,2024-10-27,2024-07-27,2024-08-01,2,Software Engineer,ai_ml,chennai,2.35,2.9
+SYN_EMP_0018,2024-10-27,2024-07-27,2024-09-01,3,Software Engineer,ai_ml,chennai,2.07,2.9
+SYN_EMP_0019,2024-10-08,2024-07-08,2024-08-01,2,Trainee Software Engineer,full_stack,chennai,2.32,2.75
+SYN_EMP_0019,2024-10-08,2024-07-08,2024-09-01,3,Trainee Software Engineer,full_stack,chennai,2.1,2.75
+SYN_EMP_0020,2024-10-03,2024-07-03,2024-08-01,2,Trainee Software Engineer,data_engineering,chennai,2.85,3.22
+SYN_EMP_0020,2024-10-03,2024-07-03,2024-09-01,3,Trainee Software Engineer,data_engineering,chennai,2.67,3.22
+SYN_EMP_0021,2024-10-09,2024-07-09,2024-08-01,2,Trainee Software Engineer,techops,uk,2.46,2.82
+SYN_EMP_0021,2024-10-09,2024-07-09,2024-09-01,3,Trainee Software Engineer,techops,uk,2.28,2.82
+SYN_EMP_0022,2024-10-26,2024-07-26,2024-08-01,2,Solutions Enabler,ai_ml,chennai,2.79,2.98
+SYN_EMP_0022,2024-10-26,2024-07-26,2024-09-01,3,Solutions Enabler,ai_ml,chennai,2.7,2.98
+SYN_EMP_0023,2024-10-26,2024-07-26,2024-08-01,2,Solutions Consultant,bi_reporting,chennai,2.67,3.02
+SYN_EMP_0023,2024-10-26,2024-07-26,2024-09-01,3,Solutions Consultant,bi_reporting,chennai,2.49,3.02
+SYN_EMP_0024,2024-10-17,2024-07-17,2024-08-01,2,Senior Software Engineer,bi_reporting,chennai,2.74,3.11
+SYN_EMP_0024,2024-10-17,2024-07-17,2024-09-01,3,Senior Software Engineer,bi_reporting,chennai,2.56,3.11
+SYN_EMP_0025,2024-10-02,2024-07-02,2024-08-01,2,Trainee Software Engineer,data_engineering,chennai,3.18,3.32
+SYN_EMP_0025,2024-10-02,2024-07-02,2024-09-01,3,Trainee Software Engineer,data_engineering,chennai,3.1,3.32
+SYN_EMP_0026,2024-10-28,2024-07-28,2024-08-01,2,Solutions Enabler,techops,chennai,3.05,3.36
+SYN_EMP_0026,2024-10-28,2024-07-28,2024-09-01,3,Solutions Enabler,techops,chennai,2.89,3.36
+SYN_EMP_0027,2024-10-07,2024-07-07,2024-08-01,2,Software Engineer,data_engineering,chennai,3.07,3.28
+SYN_EMP_0027,2024-10-07,2024-07-07,2024-09-01,3,Software Engineer,data_engineering,chennai,2.96,3.28
+SYN_EMP_0028,2024-10-08,2024-07-08,2024-08-01,2,Software Engineer,bi_reporting,chennai,2.7,2.9
+SYN_EMP_0028,2024-10-08,2024-07-08,2024-09-01,3,Software Engineer,bi_reporting,chennai,2.61,2.9
+SYN_EMP_0029,2024-10-13,2024-07-13,2024-08-01,2,Manager,data_engineering,chennai,2.83,3.05
+SYN_EMP_0029,2024-10-13,2024-07-13,2024-09-01,3,Manager,data_engineering,chennai,2.72,3.05
+SYN_EMP_0030,2024-10-19,2024-07-19,2024-08-01,2,Software Engineer,bi_reporting,chennai,3.11,3.5
+SYN_EMP_0030,2024-10-19,2024-07-19,2024-09-01,3,Software Engineer,bi_reporting,chennai,2.91,3.5
+SYN_EMP_0031,2024-10-09,2024-07-09,2024-08-01,2,Trainee Software Engineer,data_engineering,chennai,2.7,2.96
+SYN_EMP_0031,2024-10-09,2024-07-09,2024-09-01,3,Trainee Software Engineer,data_engineering,chennai,2.57,2.96
+SYN_EMP_0032,2024-11-24,2024-08-24,2024-08-01,1,Trainee Software Engineer,bi_reporting,chennai,2.94,3.11
+SYN_EMP_0032,2024-11-24,2024-08-24,2024-09-01,2,Trainee Software Engineer,bi_reporting,chennai,2.76,3.11
+SYN_EMP_0032,2024-11-24,2024-08-24,2024-10-01,3,Trainee Software Engineer,bi_reporting,chennai,2.58,3.11
+SYN_EMP_0033,2024-11-22,2024-08-22,2024-08-01,1,Trainee Software Engineer,data_engineering,uk,2.49,2.64
+SYN_EMP_0033,2024-11-22,2024-08-22,2024-09-01,2,Trainee Software Engineer,data_engineering,uk,2.34,2.64
+SYN_EMP_0033,2024-11-22,2024-08-22,2024-10-01,3,Trainee Software Engineer,data_engineering,uk,2.19,2.64
+SYN_EMP_0034,2024-11-19,2024-08-19,2024-08-01,1,Senior Consultant,techops,chennai,2.83,2.97
+SYN_EMP_0034,2024-11-19,2024-08-19,2024-09-01,2,Senior Consultant,techops,chennai,2.68,2.97
+SYN_EMP_0034,2024-11-19,2024-08-19,2024-10-01,3,Senior Consultant,techops,chennai,2.54,2.97
+SYN_EMP_0035,2024-11-20,2024-08-20,2024-08-01,1,Trainee Software Engineer,data_engineering,chennai,2.46,2.62
+SYN_EMP_0035,2024-11-20,2024-08-20,2024-09-01,2,Trainee Software Engineer,data_engineering,chennai,2.3,2.62
+SYN_EMP_0035,2024-11-20,2024-08-20,2024-10-01,3,Trainee Software Engineer,data_engineering,chennai,2.14,2.62
+SYN_EMP_0036,2024-11-22,2024-08-22,2024-08-01,1,Senior Software Engineer,full_stack,uk,2.36,2.53
+SYN_EMP_0036,2024-11-22,2024-08-22,2024-09-01,2,Senior Software Engineer,full_stack,uk,2.2,2.53
+SYN_EMP_0036,2024-11-22,2024-08-22,2024-10-01,3,Senior Software Engineer,full_stack,uk,2.04,2.53
+SYN_EMP_0037,2024-11-03,2024-08-03,2024-08-01,1,Software Engineer,data_engineering,uk,3.26,3.42
+SYN_EMP_0037,2024-11-03,2024-08-03,2024-09-01,2,Software Engineer,data_engineering,uk,3.09,3.42
+SYN_EMP_0037,2024-11-03,2024-08-03,2024-10-01,3,Software Engineer,data_engineering,uk,2.93,3.42
+SYN_EMP_0038,2024-11-08,2024-08-08,2024-08-01,1,Senior Associate Consultant,techops,chennai,3.1,3.33
+SYN_EMP_0038,2024-11-08,2024-08-08,2024-09-01,2,Senior Associate Consultant,techops,chennai,2.87,3.33
+SYN_EMP_0038,2024-11-08,2024-08-08,2024-10-01,3,Senior Associate Consultant,techops,chennai,2.64,3.33
+SYN_EMP_0039,2024-11-05,2024-08-05,2024-08-01,1,Software Engineer,bi_reporting,chennai,3.47,3.62
+SYN_EMP_0039,2024-11-05,2024-08-05,2024-09-01,2,Software Engineer,bi_reporting,chennai,3.32,3.62
+SYN_EMP_0039,2024-11-05,2024-08-05,2024-10-01,3,Software Engineer,bi_reporting,chennai,3.16,3.62
+SYN_EMP_0040,2024-12-12,2024-09-12,2024-09-01,1,Software Engineer,full_stack,chennai,2.92,3.15
+SYN_EMP_0040,2024-12-12,2024-09-12,2024-10-01,2,Software Engineer,full_stack,chennai,2.7,3.15
+SYN_EMP_0040,2024-12-12,2024-09-12,2024-11-01,3,Software Engineer,full_stack,chennai,2.47,3.15
+SYN_EMP_0041,2024-12-07,2024-09-07,2024-09-01,1,Trainee Software Engineer,full_stack,chennai,3.1,3.29
+SYN_EMP_0041,2024-12-07,2024-09-07,2024-10-01,2,Trainee Software Engineer,full_stack,chennai,2.92,3.29
+SYN_EMP_0041,2024-12-07,2024-09-07,2024-11-01,3,Trainee Software Engineer,full_stack,chennai,2.73,3.29
+SYN_EMP_0042,2024-12-14,2024-09-14,2024-09-01,1,Solutions Enabler,full_stack,chennai,2.96,3.07
+SYN_EMP_0042,2024-12-14,2024-09-14,2024-10-01,2,Solutions Enabler,full_stack,chennai,2.85,3.07
+SYN_EMP_0042,2024-12-14,2024-09-14,2024-11-01,3,Solutions Enabler,full_stack,chennai,2.73,3.07
+SYN_EMP_0043,2024-12-26,2024-09-26,2024-09-01,1,Solutions Enabler,full_stack,usa,3.02,3.17
+SYN_EMP_0043,2024-12-26,2024-09-26,2024-10-01,2,Solutions Enabler,full_stack,usa,2.87,3.17
+SYN_EMP_0043,2024-12-26,2024-09-26,2024-11-01,3,Solutions Enabler,full_stack,usa,2.72,3.17
+SYN_EMP_0044,2024-12-23,2024-09-23,2024-09-01,1,Associate Consultant,bi_reporting,uk,2.84,3.12
+SYN_EMP_0044,2024-12-23,2024-09-23,2024-10-01,2,Associate Consultant,bi_reporting,uk,2.56,3.12
+SYN_EMP_0044,2024-12-23,2024-09-23,2024-11-01,3,Associate Consultant,bi_reporting,uk,2.28,3.12
+SYN_EMP_0045,2024-12-16,2024-09-16,2024-09-01,1,Trainee Software Engineer,full_stack,chennai,2.98,3.1
+SYN_EMP_0045,2024-12-16,2024-09-16,2024-10-01,2,Trainee Software Engineer,full_stack,chennai,2.85,3.1
+SYN_EMP_0045,2024-12-16,2024-09-16,2024-11-01,3,Trainee Software Engineer,full_stack,chennai,2.73,3.1
+SYN_EMP_0046,2024-12-03,2024-09-03,2024-09-01,1,Software Engineer,full_stack,uk,3.01,3.26
+SYN_EMP_0046,2024-12-03,2024-09-03,2024-10-01,2,Software Engineer,full_stack,uk,2.76,3.26
+SYN_EMP_0046,2024-12-03,2024-09-03,2024-11-01,3,Software Engineer,full_stack,uk,2.51,3.26
+SYN_EMP_0047,2024-12-11,2024-09-11,2024-09-01,1,Solutions Enabler,bi_reporting,chennai,2.37,2.59
+SYN_EMP_0047,2024-12-11,2024-09-11,2024-10-01,2,Solutions Enabler,bi_reporting,chennai,2.15,2.59
+SYN_EMP_0047,2024-12-11,2024-09-11,2024-11-01,3,Solutions Enabler,bi_reporting,chennai,1.93,2.59
+SYN_EMP_0048,2024-12-14,2024-09-14,2024-09-01,1,Software Engineer,bi_reporting,uk,3.25,3.46
+SYN_EMP_0048,2024-12-14,2024-09-14,2024-10-01,2,Software Engineer,bi_reporting,uk,3.03,3.46
+SYN_EMP_0048,2024-12-14,2024-09-14,2024-11-01,3,Software Engineer,bi_reporting,uk,2.81,3.46
+SYN_EMP_0049,2025-01-19,2024-10-19,2024-10-01,1,Senior Associate Consultant,data_engineering,chennai,2.9,3.01
+SYN_EMP_0049,2025-01-19,2024-10-19,2024-11-01,2,Senior Associate Consultant,data_engineering,chennai,2.78,3.01
+SYN_EMP_0049,2025-01-19,2024-10-19,2024-12-01,3,Senior Associate Consultant,data_engineering,chennai,2.66,3.01
+SYN_EMP_0050,2025-01-23,2024-10-23,2024-10-01,1,Trainee Software Engineer,ai_ml,chennai,2.84,3.07
+SYN_EMP_0050,2025-01-23,2024-10-23,2024-11-01,2,Trainee Software Engineer,ai_ml,chennai,2.61,3.07
+SYN_EMP_0050,2025-01-23,2024-10-23,2024-12-01,3,Trainee Software Engineer,ai_ml,chennai,2.37,3.07
+SYN_EMP_0051,2025-01-11,2024-10-11,2024-10-01,1,Senior Associate Consultant,techops,uk,3.1,3.22
+SYN_EMP_0051,2025-01-11,2024-10-11,2024-11-01,2,Senior Associate Consultant,techops,uk,2.98,3.22
+SYN_EMP_0051,2025-01-11,2024-10-11,2024-12-01,3,Senior Associate Consultant,techops,uk,2.85,3.22
+SYN_EMP_0052,2025-01-11,2024-10-11,2024-10-01,1,Trainee Software Engineer,bi_reporting,uk,2.75,2.9
+SYN_EMP_0052,2025-01-11,2024-10-11,2024-11-01,2,Trainee Software Engineer,bi_reporting,uk,2.6,2.9
+SYN_EMP_0052,2025-01-11,2024-10-11,2024-12-01,3,Trainee Software Engineer,bi_reporting,uk,2.44,2.9
+SYN_EMP_0053,2025-01-01,2024-10-01,2024-10-01,1,Solutions Consultant,ai_ml,chennai,2.91,3.01
+SYN_EMP_0053,2025-01-01,2024-10-01,2024-11-01,2,Solutions Consultant,ai_ml,chennai,2.81,3.01
+SYN_EMP_0053,2025-01-01,2024-10-01,2024-12-01,3,Solutions Consultant,ai_ml,chennai,2.71,3.01
+SYN_EMP_0054,2025-01-11,2024-10-11,2024-10-01,1,Trainee Software Engineer,ai_ml,usa,2.51,2.79
+SYN_EMP_0054,2025-01-11,2024-10-11,2024-11-01,2,Trainee Software Engineer,ai_ml,usa,2.23,2.79
+SYN_EMP_0054,2025-01-11,2024-10-11,2024-12-01,3,Trainee Software Engineer,ai_ml,usa,1.95,2.79
+SYN_EMP_0055,2025-01-01,2024-10-01,2024-10-01,1,Trainee Software Engineer,bi_reporting,usa,2.89,3.12
+SYN_EMP_0055,2025-01-01,2024-10-01,2024-11-01,2,Trainee Software Engineer,bi_reporting,usa,2.66,3.12
+SYN_EMP_0055,2025-01-01,2024-10-01,2024-12-01,3,Trainee Software Engineer,bi_reporting,usa,2.42,3.12
+SYN_EMP_0056,2025-02-25,2024-11-25,2024-11-01,1,Software Engineer,full_stack,chennai,2.67,2.87
+SYN_EMP_0056,2025-02-25,2024-11-25,2024-12-01,2,Software Engineer,full_stack,chennai,2.47,2.87
+SYN_EMP_0056,2025-02-25,2024-11-25,2025-01-01,3,Software Engineer,full_stack,chennai,2.27,2.87
+SYN_EMP_0057,2025-02-08,2024-11-08,2024-11-01,1,Solutions Consultant,data_engineering,chennai,2.8,2.98
+SYN_EMP_0057,2025-02-08,2024-11-08,2024-12-01,2,Solutions Consultant,data_engineering,chennai,2.61,2.98
+SYN_EMP_0057,2025-02-08,2024-11-08,2025-01-01,3,Solutions Consultant,data_engineering,chennai,2.43,2.98
+SYN_EMP_0058,2025-02-21,2024-11-21,2024-11-01,1,Senior Software Engineer,bi_reporting,chennai,2.77,2.93
+SYN_EMP_0058,2025-02-21,2024-11-21,2024-12-01,2,Senior Software Engineer,bi_reporting,chennai,2.62,2.93
+SYN_EMP_0058,2025-02-21,2024-11-21,2025-01-01,3,Senior Software Engineer,bi_reporting,chennai,2.46,2.93
+SYN_EMP_0059,2025-02-23,2024-11-23,2024-11-01,1,Software Engineer,ai_ml,chennai,2.45,2.61
+SYN_EMP_0059,2025-02-23,2024-11-23,2024-12-01,2,Software Engineer,ai_ml,chennai,2.29,2.61
+SYN_EMP_0059,2025-02-23,2024-11-23,2025-01-01,3,Software Engineer,ai_ml,chennai,2.12,2.61
+SYN_EMP_0060,2025-02-06,2024-11-06,2024-11-01,1,Trainee Software Engineer,ai_ml,chennai,2.62,2.88
+SYN_EMP_0060,2025-02-06,2024-11-06,2024-12-01,2,Trainee Software Engineer,ai_ml,chennai,2.36,2.88
+SYN_EMP_0060,2025-02-06,2024-11-06,2025-01-01,3,Trainee Software Engineer,ai_ml,chennai,2.1,2.88
+SYN_EMP_0061,2025-02-22,2024-11-22,2024-11-01,1,Software Engineer,data_engineering,chennai,2.33,2.57
+SYN_EMP_0061,2025-02-22,2024-11-22,2024-12-01,2,Software Engineer,data_engineering,chennai,2.08,2.57
+SYN_EMP_0061,2025-02-22,2024-11-22,2025-01-01,3,Software Engineer,data_engineering,chennai,1.83,2.57
+SYN_EMP_0062,2025-02-06,2024-11-06,2024-11-01,1,Trainee Software Engineer,full_stack,uk,3.26,3.4
+SYN_EMP_0062,2025-02-06,2024-11-06,2024-12-01,2,Trainee Software Engineer,full_stack,uk,3.13,3.4
+SYN_EMP_0062,2025-02-06,2024-11-06,2025-01-01,3,Trainee Software Engineer,full_stack,uk,2.99,3.4
+SYN_EMP_0063,2025-03-15,2024-12-15,2024-12-01,1,Software Engineer,ai_ml,uk,3.03,3.26
+SYN_EMP_0063,2025-03-15,2024-12-15,2025-01-01,2,Software Engineer,ai_ml,uk,2.79,3.26
+SYN_EMP_0063,2025-03-15,2024-12-15,2025-02-01,3,Software Engineer,ai_ml,uk,2.55,3.26
+SYN_EMP_0064,2025-03-19,2024-12-19,2024-12-01,1,Trainee Software Engineer,techops,chennai,2.84,3.01
+SYN_EMP_0064,2025-03-19,2024-12-19,2025-01-01,2,Trainee Software Engineer,techops,chennai,2.68,3.01
+SYN_EMP_0064,2025-03-19,2024-12-19,2025-02-01,3,Trainee Software Engineer,techops,chennai,2.52,3.01
+SYN_EMP_0065,2025-03-23,2024-12-23,2024-12-01,1,Trainee Software Engineer,full_stack,uk,3.04,3.23
+SYN_EMP_0065,2025-03-23,2024-12-23,2025-01-01,2,Trainee Software Engineer,full_stack,uk,2.85,3.23
+SYN_EMP_0065,2025-03-23,2024-12-23,2025-02-01,3,Trainee Software Engineer,full_stack,uk,2.67,3.23
+SYN_EMP_0066,2025-03-28,2024-12-28,2024-12-01,1,Senior Software Engineer,ai_ml,chennai,2.9,3.08
+SYN_EMP_0066,2025-03-28,2024-12-28,2025-01-01,2,Senior Software Engineer,ai_ml,chennai,2.73,3.08
+SYN_EMP_0066,2025-03-28,2024-12-28,2025-02-01,3,Senior Software Engineer,ai_ml,chennai,2.55,3.08
+SYN_EMP_0067,2025-03-14,2024-12-14,2024-12-01,1,Trainee Software Engineer,ai_ml,chennai,2.44,2.62
+SYN_EMP_0067,2025-03-14,2024-12-14,2025-01-01,2,Trainee Software Engineer,ai_ml,chennai,2.27,2.62
+SYN_EMP_0067,2025-03-14,2024-12-14,2025-02-01,3,Trainee Software Engineer,ai_ml,chennai,2.09,2.62
+SYN_EMP_0068,2025-03-04,2024-12-04,2024-12-01,1,Associate Consultant,bi_reporting,uk,2.92,3.01
+SYN_EMP_0068,2025-03-04,2024-12-04,2025-01-01,2,Associate Consultant,bi_reporting,uk,2.83,3.01
+SYN_EMP_0068,2025-03-04,2024-12-04,2025-02-01,3,Associate Consultant,bi_reporting,uk,2.73,3.01
+SYN_EMP_0069,2025-03-20,2024-12-20,2024-12-01,1,Associate Consultant,techops,uk,2.75,2.93
+SYN_EMP_0069,2025-03-20,2024-12-20,2025-01-01,2,Associate Consultant,techops,uk,2.57,2.93
+SYN_EMP_0069,2025-03-20,2024-12-20,2025-02-01,3,Associate Consultant,techops,uk,2.38,2.93
+SYN_EMP_0070,2025-04-03,2025-01-03,2025-01-01,1,Senior Software Engineer,ai_ml,uk,3.55,3.66
+SYN_EMP_0070,2025-04-03,2025-01-03,2025-02-01,2,Senior Software Engineer,ai_ml,uk,3.44,3.66
+SYN_EMP_0070,2025-04-03,2025-01-03,2025-03-01,3,Senior Software Engineer,ai_ml,uk,3.32,3.66
+SYN_EMP_0071,2025-04-18,2025-01-18,2025-01-01,1,Solutions Enabler,data_engineering,chennai,3.18,3.3
+SYN_EMP_0071,2025-04-18,2025-01-18,2025-02-01,2,Solutions Enabler,data_engineering,chennai,3.05,3.3
+SYN_EMP_0071,2025-04-18,2025-01-18,2025-03-01,3,Solutions Enabler,data_engineering,chennai,2.93,3.3
+SYN_EMP_0072,2025-04-02,2025-01-02,2025-01-01,1,Trainee Software Engineer,data_engineering,chennai,3.07,3.24
+SYN_EMP_0072,2025-04-02,2025-01-02,2025-02-01,2,Trainee Software Engineer,data_engineering,chennai,2.91,3.24
+SYN_EMP_0072,2025-04-02,2025-01-02,2025-03-01,3,Trainee Software Engineer,data_engineering,chennai,2.75,3.24
+SYN_EMP_0073,2025-04-13,2025-01-13,2025-01-01,1,Software Engineer,data_engineering,chennai,2.6,2.75
+SYN_EMP_0073,2025-04-13,2025-01-13,2025-02-01,2,Software Engineer,data_engineering,chennai,2.45,2.75
+SYN_EMP_0073,2025-04-13,2025-01-13,2025-03-01,3,Software Engineer,data_engineering,chennai,2.3,2.75
+SYN_EMP_0074,2025-04-01,2025-01-01,2025-01-01,1,Senior Software Engineer,ai_ml,chennai,2.61,2.88
+SYN_EMP_0074,2025-04-01,2025-01-01,2025-02-01,2,Senior Software Engineer,ai_ml,chennai,2.35,2.88
+SYN_EMP_0074,2025-04-01,2025-01-01,2025-03-01,3,Senior Software Engineer,ai_ml,chennai,2.08,2.88
+SYN_EMP_0075,2025-04-27,2025-01-27,2025-01-01,1,Software Engineer,data_engineering,uk,2.5,2.59
+SYN_EMP_0075,2025-04-27,2025-01-27,2025-02-01,2,Software Engineer,data_engineering,uk,2.4,2.59
+SYN_EMP_0075,2025-04-27,2025-01-27,2025-03-01,3,Software Engineer,data_engineering,uk,2.31,2.59
+SYN_EMP_0076,2025-04-21,2025-01-21,2025-01-01,1,Software Engineer,bi_reporting,uk,3.0,3.19
+SYN_EMP_0076,2025-04-21,2025-01-21,2025-02-01,2,Software Engineer,bi_reporting,uk,2.8,3.19
+SYN_EMP_0076,2025-04-21,2025-01-21,2025-03-01,3,Software Engineer,bi_reporting,uk,2.61,3.19
+SYN_EMP_0077,2025-04-27,2025-01-27,2025-01-01,1,Senior Software Engineer,bi_reporting,chennai,2.77,2.93
+SYN_EMP_0077,2025-04-27,2025-01-27,2025-02-01,2,Senior Software Engineer,bi_reporting,chennai,2.61,2.93
+SYN_EMP_0077,2025-04-27,2025-01-27,2025-03-01,3,Senior Software Engineer,bi_reporting,chennai,2.45,2.93
+SYN_EMP_0078,2025-04-19,2025-01-19,2025-01-01,1,Senior Software Engineer,data_engineering,chennai,3.05,3.18
+SYN_EMP_0078,2025-04-19,2025-01-19,2025-02-01,2,Senior Software Engineer,data_engineering,chennai,2.92,3.18
+SYN_EMP_0078,2025-04-19,2025-01-19,2025-03-01,3,Senior Software Engineer,data_engineering,chennai,2.79,3.18
+SYN_EMP_0079,2025-04-17,2025-01-17,2025-01-01,1,Solutions Consultant,bi_reporting,chennai,2.7,2.91
+SYN_EMP_0079,2025-04-17,2025-01-17,2025-02-01,2,Solutions Consultant,bi_reporting,chennai,2.49,2.91
+SYN_EMP_0079,2025-04-17,2025-01-17,2025-03-01,3,Solutions Consultant,bi_reporting,chennai,2.29,2.91
+SYN_EMP_0080,2025-04-02,2025-01-02,2025-01-01,1,Senior Software Engineer,ai_ml,uk,2.79,2.92
+SYN_EMP_0080,2025-04-02,2025-01-02,2025-02-01,2,Senior Software Engineer,ai_ml,uk,2.66,2.92
+SYN_EMP_0080,2025-04-02,2025-01-02,2025-03-01,3,Senior Software Engineer,ai_ml,uk,2.54,2.92
+SYN_EMP_0081,2025-04-06,2025-01-06,2025-01-01,1,Software Engineer,bi_reporting,chennai,2.98,3.19
+SYN_EMP_0081,2025-04-06,2025-01-06,2025-02-01,2,Software Engineer,bi_reporting,chennai,2.76,3.19
+SYN_EMP_0081,2025-04-06,2025-01-06,2025-03-01,3,Software Engineer,bi_reporting,chennai,2.55,3.19
+SYN_EMP_0082,2025-04-21,2025-01-21,2025-01-01,1,Senior Software Engineer,data_engineering,chennai,2.58,2.8
+SYN_EMP_0082,2025-04-21,2025-01-21,2025-02-01,2,Senior Software Engineer,data_engineering,chennai,2.35,2.8
+SYN_EMP_0082,2025-04-21,2025-01-21,2025-03-01,3,Senior Software Engineer,data_engineering,chennai,2.13,2.8
+SYN_EMP_0083,2025-04-07,2025-01-07,2025-01-01,1,Solutions Enabler,bi_reporting,chennai,2.49,2.71
+SYN_EMP_0083,2025-04-07,2025-01-07,2025-02-01,2,Solutions Enabler,bi_reporting,chennai,2.28,2.71
+SYN_EMP_0083,2025-04-07,2025-01-07,2025-03-01,3,Solutions Enabler,bi_reporting,chennai,2.06,2.71
+SYN_EMP_0084,2025-04-02,2025-01-02,2025-01-01,1,Senior Software Engineer,bi_reporting,chennai,2.84,3.05
+SYN_EMP_0084,2025-04-02,2025-01-02,2025-02-01,2,Senior Software Engineer,bi_reporting,chennai,2.63,3.05
+SYN_EMP_0084,2025-04-02,2025-01-02,2025-03-01,3,Senior Software Engineer,bi_reporting,chennai,2.42,3.05
+SYN_EMP_0085,2025-04-06,2025-01-06,2025-01-01,1,Software Engineer,data_engineering,chennai,2.5,2.66
+SYN_EMP_0085,2025-04-06,2025-01-06,2025-02-01,2,Software Engineer,data_engineering,chennai,2.33,2.66
+SYN_EMP_0085,2025-04-06,2025-01-06,2025-03-01,3,Software Engineer,data_engineering,chennai,2.16,2.66
+SYN_EMP_0086,2025-05-03,2025-02-03,2025-02-01,1,Senior Consultant,data_engineering,chennai,2.93,3.02
+SYN_EMP_0086,2025-05-03,2025-02-03,2025-03-01,2,Senior Consultant,data_engineering,chennai,2.84,3.02
+SYN_EMP_0086,2025-05-03,2025-02-03,2025-04-01,3,Senior Consultant,data_engineering,chennai,2.75,3.02
+SYN_EMP_0087,2025-05-16,2025-02-16,2025-02-01,1,Solutions Enabler,techops,chennai,3.16,3.3
+SYN_EMP_0087,2025-05-16,2025-02-16,2025-03-01,2,Solutions Enabler,techops,chennai,3.03,3.3
+SYN_EMP_0087,2025-05-16,2025-02-16,2025-04-01,3,Solutions Enabler,techops,chennai,2.89,3.3
+SYN_EMP_0088,2025-05-18,2025-02-18,2025-02-01,1,Solutions Enabler,bi_reporting,chennai,3.02,3.19
+SYN_EMP_0088,2025-05-18,2025-02-18,2025-03-01,2,Solutions Enabler,bi_reporting,chennai,2.84,3.19
+SYN_EMP_0088,2025-05-18,2025-02-18,2025-04-01,3,Solutions Enabler,bi_reporting,chennai,2.67,3.19
+SYN_EMP_0089,2025-05-12,2025-02-12,2025-02-01,1,Senior Software Engineer,ai_ml,usa,3.05,3.2
+SYN_EMP_0089,2025-05-12,2025-02-12,2025-03-01,2,Senior Software Engineer,ai_ml,usa,2.9,3.2
+SYN_EMP_0089,2025-05-12,2025-02-12,2025-04-01,3,Senior Software Engineer,ai_ml,usa,2.75,3.2
+SYN_EMP_0090,2025-05-28,2025-02-28,2025-02-01,1,Solutions Enabler,ai_ml,chennai,2.75,2.89
+SYN_EMP_0090,2025-05-28,2025-02-28,2025-03-01,2,Solutions Enabler,ai_ml,chennai,2.61,2.89
+SYN_EMP_0090,2025-05-28,2025-02-28,2025-04-01,3,Solutions Enabler,ai_ml,chennai,2.46,2.89
+SYN_EMP_0091,2025-05-04,2025-02-04,2025-02-01,1,Trainee Software Engineer,data_engineering,uk,2.89,3.11
+SYN_EMP_0091,2025-05-04,2025-02-04,2025-03-01,2,Trainee Software Engineer,data_engineering,uk,2.66,3.11
+SYN_EMP_0091,2025-05-04,2025-02-04,2025-04-01,3,Trainee Software Engineer,data_engineering,uk,2.44,3.11
+SYN_EMP_0092,2025-05-13,2025-02-13,2025-02-01,1,Manager,data_engineering,chennai,2.74,2.97
+SYN_EMP_0092,2025-05-13,2025-02-13,2025-03-01,2,Manager,data_engineering,chennai,2.51,2.97
+SYN_EMP_0092,2025-05-13,2025-02-13,2025-04-01,3,Manager,data_engineering,chennai,2.28,2.97
+SYN_EMP_0093,2025-05-05,2025-02-05,2025-02-01,1,Associate Consultant,bi_reporting,chennai,2.53,2.78
+SYN_EMP_0093,2025-05-05,2025-02-05,2025-03-01,2,Associate Consultant,bi_reporting,chennai,2.29,2.78
+SYN_EMP_0093,2025-05-05,2025-02-05,2025-04-01,3,Associate Consultant,bi_reporting,chennai,2.04,2.78
+SYN_EMP_0094,2025-06-17,2025-03-17,2025-03-01,1,Trainee Software Engineer,bi_reporting,uk,2.92,3.19
+SYN_EMP_0094,2025-06-17,2025-03-17,2025-04-01,2,Trainee Software Engineer,bi_reporting,uk,2.64,3.19
+SYN_EMP_0094,2025-06-17,2025-03-17,2025-05-01,3,Trainee Software Engineer,bi_reporting,uk,2.37,3.19
+SYN_EMP_0095,2025-06-21,2025-03-21,2025-03-01,1,Trainee Software Engineer,data_engineering,chennai,2.24,2.49
+SYN_EMP_0095,2025-06-21,2025-03-21,2025-04-01,2,Trainee Software Engineer,data_engineering,chennai,1.99,2.49
+SYN_EMP_0095,2025-06-21,2025-03-21,2025-05-01,3,Trainee Software Engineer,data_engineering,chennai,1.74,2.49
+SYN_EMP_0096,2025-06-10,2025-03-10,2025-03-01,1,Solutions Consultant,data_engineering,chennai,2.99,3.13
+SYN_EMP_0096,2025-06-10,2025-03-10,2025-04-01,2,Solutions Consultant,data_engineering,chennai,2.85,3.13
+SYN_EMP_0096,2025-06-10,2025-03-10,2025-05-01,3,Solutions Consultant,data_engineering,chennai,2.71,3.13
+SYN_EMP_0097,2025-06-16,2025-03-16,2025-03-01,1,Senior Consultant,full_stack,chennai,3.0,3.18
+SYN_EMP_0097,2025-06-16,2025-03-16,2025-04-01,2,Senior Consultant,full_stack,chennai,2.83,3.18
+SYN_EMP_0097,2025-06-16,2025-03-16,2025-05-01,3,Senior Consultant,full_stack,chennai,2.65,3.18
+SYN_EMP_0098,2025-06-23,2025-03-23,2025-03-01,1,Consultant,bi_reporting,chennai,2.97,3.16
+SYN_EMP_0098,2025-06-23,2025-03-23,2025-04-01,2,Consultant,bi_reporting,chennai,2.78,3.16
+SYN_EMP_0098,2025-06-23,2025-03-23,2025-05-01,3,Consultant,bi_reporting,chennai,2.59,3.16
+SYN_EMP_0099,2025-06-10,2025-03-10,2025-03-01,1,Consultant,full_stack,usa,2.61,2.75
+SYN_EMP_0099,2025-06-10,2025-03-10,2025-04-01,2,Consultant,full_stack,usa,2.48,2.75
+SYN_EMP_0099,2025-06-10,2025-03-10,2025-05-01,3,Consultant,full_stack,usa,2.34,2.75
+SYN_EMP_0100,2025-06-07,2025-03-07,2025-03-01,1,Trainee Software Engineer,bi_reporting,chennai,2.66,2.91
+SYN_EMP_0100,2025-06-07,2025-03-07,2025-04-01,2,Trainee Software Engineer,bi_reporting,chennai,2.4,2.91
+SYN_EMP_0100,2025-06-07,2025-03-07,2025-05-01,3,Trainee Software Engineer,bi_reporting,chennai,2.15,2.91
+SYN_EMP_0101,2025-07-28,2025-04-28,2025-04-01,1,Software Engineer,ai_ml,chennai,3.15,3.34
+SYN_EMP_0101,2025-07-28,2025-04-28,2025-05-01,2,Software Engineer,ai_ml,chennai,2.97,3.34
+SYN_EMP_0101,2025-07-28,2025-04-28,2025-06-01,3,Software Engineer,ai_ml,chennai,2.79,3.34
+SYN_EMP_0102,2025-07-06,2025-04-06,2025-04-01,1,Solutions Consultant,ai_ml,chennai,3.34,3.52
+SYN_EMP_0102,2025-07-06,2025-04-06,2025-05-01,2,Solutions Consultant,ai_ml,chennai,3.16,3.52
+SYN_EMP_0102,2025-07-06,2025-04-06,2025-06-01,3,Solutions Consultant,ai_ml,chennai,2.97,3.52
+SYN_EMP_0103,2025-07-05,2025-04-05,2025-04-01,1,Senior Software Engineer,data_engineering,chennai,3.27,3.51
+SYN_EMP_0103,2025-07-05,2025-04-05,2025-05-01,2,Senior Software Engineer,data_engineering,chennai,3.04,3.51
+SYN_EMP_0103,2025-07-05,2025-04-05,2025-06-01,3,Senior Software Engineer,data_engineering,chennai,2.8,3.51
+SYN_EMP_0104,2025-07-18,2025-04-18,2025-04-01,1,Trainee Software Engineer,bi_reporting,chennai,2.52,2.73
+SYN_EMP_0104,2025-07-18,2025-04-18,2025-05-01,2,Trainee Software Engineer,bi_reporting,chennai,2.3,2.73
+SYN_EMP_0104,2025-07-18,2025-04-18,2025-06-01,3,Trainee Software Engineer,bi_reporting,chennai,2.09,2.73
+SYN_EMP_0105,2025-07-26,2025-04-26,2025-04-01,1,Senior Software Engineer,bi_reporting,chennai,2.51,2.71
+SYN_EMP_0105,2025-07-26,2025-04-26,2025-05-01,2,Senior Software Engineer,bi_reporting,chennai,2.31,2.71
+SYN_EMP_0105,2025-07-26,2025-04-26,2025-06-01,3,Senior Software Engineer,bi_reporting,chennai,2.12,2.71
+SYN_EMP_0106,2025-07-24,2025-04-24,2025-04-01,1,Trainee Software Engineer,techops,chennai,3.09,3.31
+SYN_EMP_0106,2025-07-24,2025-04-24,2025-05-01,2,Trainee Software Engineer,techops,chennai,2.87,3.31
+SYN_EMP_0106,2025-07-24,2025-04-24,2025-06-01,3,Trainee Software Engineer,techops,chennai,2.65,3.31
+SYN_EMP_0107,2025-07-14,2025-04-14,2025-04-01,1,Associate Consultant,data_engineering,uk,2.76,2.86
+SYN_EMP_0107,2025-07-14,2025-04-14,2025-05-01,2,Associate Consultant,data_engineering,uk,2.66,2.86
+SYN_EMP_0107,2025-07-14,2025-04-14,2025-06-01,3,Associate Consultant,data_engineering,uk,2.56,2.86
+SYN_EMP_0108,2025-08-07,2025-05-07,2025-05-01,1,Trainee Software Engineer,ai_ml,chennai,2.84,3.02
+SYN_EMP_0108,2025-08-07,2025-05-07,2025-06-01,2,Trainee Software Engineer,ai_ml,chennai,2.67,3.02
+SYN_EMP_0108,2025-08-07,2025-05-07,2025-07-01,3,Trainee Software Engineer,ai_ml,chennai,2.5,3.02
+SYN_EMP_0109,2025-08-13,2025-05-13,2025-05-01,1,Senior Software Engineer,ai_ml,uk,2.61,2.76
+SYN_EMP_0109,2025-08-13,2025-05-13,2025-06-01,2,Senior Software Engineer,ai_ml,uk,2.47,2.76
+SYN_EMP_0109,2025-08-13,2025-05-13,2025-07-01,3,Senior Software Engineer,ai_ml,uk,2.32,2.76
+SYN_EMP_0110,2025-08-20,2025-05-20,2025-05-01,1,Trainee Software Engineer,bi_reporting,uk,2.28,2.52
+SYN_EMP_0110,2025-08-20,2025-05-20,2025-06-01,2,Trainee Software Engineer,bi_reporting,uk,2.05,2.52
+SYN_EMP_0110,2025-08-20,2025-05-20,2025-07-01,3,Trainee Software Engineer,bi_reporting,uk,1.82,2.52
+SYN_EMP_0111,2025-08-05,2025-05-05,2025-05-01,1,Trainee Software Engineer,data_engineering,uk,2.55,2.73
+SYN_EMP_0111,2025-08-05,2025-05-05,2025-06-01,2,Trainee Software Engineer,data_engineering,uk,2.36,2.73
+SYN_EMP_0111,2025-08-05,2025-05-05,2025-07-01,3,Trainee Software Engineer,data_engineering,uk,2.18,2.73
+SYN_EMP_0112,2025-08-09,2025-05-09,2025-05-01,1,Solutions Consultant,data_engineering,chennai,2.54,2.65
+SYN_EMP_0112,2025-08-09,2025-05-09,2025-06-01,2,Solutions Consultant,data_engineering,chennai,2.42,2.65
+SYN_EMP_0112,2025-08-09,2025-05-09,2025-07-01,3,Solutions Consultant,data_engineering,chennai,2.31,2.65
+SYN_EMP_0113,2025-08-04,2025-05-04,2025-05-01,1,Solutions Enabler,data_engineering,chennai,2.85,3.04
+SYN_EMP_0113,2025-08-04,2025-05-04,2025-06-01,2,Solutions Enabler,data_engineering,chennai,2.67,3.04
+SYN_EMP_0113,2025-08-04,2025-05-04,2025-07-01,3,Solutions Enabler,data_engineering,chennai,2.48,3.04
+SYN_EMP_0114,2025-08-20,2025-05-20,2025-05-01,1,Senior Consultant,ai_ml,chennai,2.66,2.85
+SYN_EMP_0114,2025-08-20,2025-05-20,2025-06-01,2,Senior Consultant,ai_ml,chennai,2.47,2.85
+SYN_EMP_0114,2025-08-20,2025-05-20,2025-07-01,3,Senior Consultant,ai_ml,chennai,2.29,2.85
+SYN_EMP_0115,2025-09-20,2025-06-20,2025-06-01,1,Trainee Software Engineer,full_stack,chennai,2.83,3.0
+SYN_EMP_0115,2025-09-20,2025-06-20,2025-07-01,2,Trainee Software Engineer,full_stack,chennai,2.66,3.0
+SYN_EMP_0115,2025-09-20,2025-06-20,2025-08-01,3,Trainee Software Engineer,full_stack,chennai,2.49,3.0
+SYN_EMP_0116,2025-09-26,2025-06-26,2025-06-01,1,Solutions Enabler,bi_reporting,chennai,3.0,3.1
+SYN_EMP_0116,2025-09-26,2025-06-26,2025-07-01,2,Solutions Enabler,bi_reporting,chennai,2.89,3.1
+SYN_EMP_0116,2025-09-26,2025-06-26,2025-08-01,3,Solutions Enabler,bi_reporting,chennai,2.79,3.1
+SYN_EMP_0117,2025-09-15,2025-06-15,2025-06-01,1,Solutions Enabler,bi_reporting,chennai,2.97,3.04
+SYN_EMP_0117,2025-09-15,2025-06-15,2025-07-01,2,Solutions Enabler,bi_reporting,chennai,2.91,3.04
+SYN_EMP_0117,2025-09-15,2025-06-15,2025-08-01,3,Solutions Enabler,bi_reporting,chennai,2.84,3.04
+SYN_EMP_0118,2025-09-08,2025-06-08,2025-06-01,1,Software Engineer,bi_reporting,chennai,3.49,3.63
+SYN_EMP_0118,2025-09-08,2025-06-08,2025-07-01,2,Software Engineer,bi_reporting,chennai,3.35,3.63
+SYN_EMP_0118,2025-09-08,2025-06-08,2025-08-01,3,Software Engineer,bi_reporting,chennai,3.21,3.63
+SYN_EMP_0119,2025-09-09,2025-06-09,2025-06-01,1,Senior Consultant,full_stack,uk,2.47,2.66
+SYN_EMP_0119,2025-09-09,2025-06-09,2025-07-01,2,Senior Consultant,full_stack,uk,2.27,2.66
+SYN_EMP_0119,2025-09-09,2025-06-09,2025-08-01,3,Senior Consultant,full_stack,uk,2.07,2.66
+SYN_EMP_0120,2025-09-01,2025-06-01,2025-06-01,1,Senior Software Engineer,bi_reporting,chennai,2.84,2.98
+SYN_EMP_0120,2025-09-01,2025-06-01,2025-07-01,2,Senior Software Engineer,bi_reporting,chennai,2.69,2.98
+SYN_EMP_0120,2025-09-01,2025-06-01,2025-08-01,3,Senior Software Engineer,bi_reporting,chennai,2.54,2.98
+SYN_EMP_0121,2025-09-07,2025-06-07,2025-06-01,1,Solutions Enabler,full_stack,uk,3.09,3.3
+SYN_EMP_0121,2025-09-07,2025-06-07,2025-07-01,2,Solutions Enabler,full_stack,uk,2.87,3.3
+SYN_EMP_0121,2025-09-07,2025-06-07,2025-08-01,3,Solutions Enabler,full_stack,uk,2.66,3.3
+SYN_EMP_0122,2025-09-04,2025-06-04,2025-06-01,1,Software Engineer,bi_reporting,uk,2.29,2.54
+SYN_EMP_0122,2025-09-04,2025-06-04,2025-07-01,2,Software Engineer,bi_reporting,uk,2.05,2.54
+SYN_EMP_0122,2025-09-04,2025-06-04,2025-08-01,3,Software Engineer,bi_reporting,uk,1.81,2.54
+SYN_EMP_0123,2025-10-04,2025-07-04,2025-07-01,1,Trainee Software Engineer,data_engineering,chennai,2.91,3.05
+SYN_EMP_0123,2025-10-04,2025-07-04,2025-08-01,2,Trainee Software Engineer,data_engineering,chennai,2.76,3.05
+SYN_EMP_0123,2025-10-04,2025-07-04,2025-09-01,3,Trainee Software Engineer,data_engineering,chennai,2.61,3.05
+SYN_EMP_0124,2025-10-14,2025-07-14,2025-07-01,1,Trainee Software Engineer,techops,uk,2.87,3.03
+SYN_EMP_0124,2025-10-14,2025-07-14,2025-08-01,2,Trainee Software Engineer,techops,uk,2.72,3.03
+SYN_EMP_0124,2025-10-14,2025-07-14,2025-09-01,3,Trainee Software Engineer,techops,uk,2.56,3.03
+SYN_EMP_0125,2025-10-17,2025-07-17,2025-07-01,1,Solutions Enabler,data_engineering,uk,2.9,3.08
+SYN_EMP_0125,2025-10-17,2025-07-17,2025-08-01,2,Solutions Enabler,data_engineering,uk,2.71,3.08
+SYN_EMP_0125,2025-10-17,2025-07-17,2025-09-01,3,Solutions Enabler,data_engineering,uk,2.52,3.08
+SYN_EMP_0126,2025-10-10,2025-07-10,2025-07-01,1,Associate Consultant,ai_ml,chennai,2.79,3.02
+SYN_EMP_0126,2025-10-10,2025-07-10,2025-08-01,2,Associate Consultant,ai_ml,chennai,2.56,3.02
+SYN_EMP_0126,2025-10-10,2025-07-10,2025-09-01,3,Associate Consultant,ai_ml,chennai,2.34,3.02
+SYN_EMP_0127,2025-10-22,2025-07-22,2025-07-01,1,Senior Software Engineer,data_engineering,chennai,3.04,3.18
+SYN_EMP_0127,2025-10-22,2025-07-22,2025-08-01,2,Senior Software Engineer,data_engineering,chennai,2.9,3.18
+SYN_EMP_0127,2025-10-22,2025-07-22,2025-09-01,3,Senior Software Engineer,data_engineering,chennai,2.76,3.18
+SYN_EMP_0128,2025-10-19,2025-07-19,2025-07-01,1,Software Engineer,data_engineering,chennai,2.64,2.82
+SYN_EMP_0128,2025-10-19,2025-07-19,2025-08-01,2,Software Engineer,data_engineering,chennai,2.45,2.82
+SYN_EMP_0128,2025-10-19,2025-07-19,2025-09-01,3,Software Engineer,data_engineering,chennai,2.26,2.82
+SYN_EMP_0129,2025-10-18,2025-07-18,2025-07-01,1,Senior Consultant,bi_reporting,uk,2.68,2.88
+SYN_EMP_0129,2025-10-18,2025-07-18,2025-08-01,2,Senior Consultant,bi_reporting,uk,2.48,2.88
+SYN_EMP_0129,2025-10-18,2025-07-18,2025-09-01,3,Senior Consultant,bi_reporting,uk,2.28,2.88
+SYN_EMP_0130,2025-10-20,2025-07-20,2025-07-01,1,Associate Consultant,ai_ml,uk,2.89,3.09
+SYN_EMP_0130,2025-10-20,2025-07-20,2025-08-01,2,Associate Consultant,ai_ml,uk,2.7,3.09
+SYN_EMP_0130,2025-10-20,2025-07-20,2025-09-01,3,Associate Consultant,ai_ml,uk,2.5,3.09
+SYN_EMP_0131,2025-10-02,2025-07-02,2025-07-01,1,Senior Software Engineer,data_engineering,usa,2.7,2.84
+SYN_EMP_0131,2025-10-02,2025-07-02,2025-08-01,2,Senior Software Engineer,data_engineering,usa,2.56,2.84
+SYN_EMP_0131,2025-10-02,2025-07-02,2025-09-01,3,Senior Software Engineer,data_engineering,usa,2.42,2.84
+SYN_EMP_0132,2025-10-11,2025-07-11,2025-07-01,1,Solutions Enabler,ai_ml,chennai,3.14,3.37
+SYN_EMP_0132,2025-10-11,2025-07-11,2025-08-01,2,Solutions Enabler,ai_ml,chennai,2.91,3.37
+SYN_EMP_0132,2025-10-11,2025-07-11,2025-09-01,3,Solutions Enabler,ai_ml,chennai,2.69,3.37
+SYN_EMP_0133,2025-10-10,2025-07-10,2025-07-01,1,Solutions Enabler,bi_reporting,chennai,2.69,2.93
+SYN_EMP_0133,2025-10-10,2025-07-10,2025-08-01,2,Solutions Enabler,bi_reporting,chennai,2.46,2.93
+SYN_EMP_0133,2025-10-10,2025-07-10,2025-09-01,3,Solutions Enabler,bi_reporting,chennai,2.22,2.93
+SYN_EMP_0134,2025-10-01,2025-07-01,2025-07-01,1,Trainee Software Engineer,data_engineering,uk,2.99,3.23
+SYN_EMP_0134,2025-10-01,2025-07-01,2025-08-01,2,Trainee Software Engineer,data_engineering,uk,2.75,3.23
+SYN_EMP_0134,2025-10-01,2025-07-01,2025-09-01,3,Trainee Software Engineer,data_engineering,uk,2.51,3.23
+SYN_EMP_0135,2025-10-04,2025-07-04,2025-07-01,1,Trainee Software Engineer,ai_ml,chennai,2.75,2.88
+SYN_EMP_0135,2025-10-04,2025-07-04,2025-08-01,2,Trainee Software Engineer,ai_ml,chennai,2.61,2.88
+SYN_EMP_0135,2025-10-04,2025-07-04,2025-09-01,3,Trainee Software Engineer,ai_ml,chennai,2.47,2.88
+SYN_EMP_0136,2025-10-28,2025-07-28,2025-07-01,1,Trainee Software Engineer,data_engineering,chennai,3.17,3.38
+SYN_EMP_0136,2025-10-28,2025-07-28,2025-08-01,2,Trainee Software Engineer,data_engineering,chennai,2.95,3.38
+SYN_EMP_0136,2025-10-28,2025-07-28,2025-09-01,3,Trainee Software Engineer,data_engineering,chennai,2.73,3.38
+SYN_EMP_0137,2025-10-05,2025-07-05,2025-07-01,1,Manager,ai_ml,chennai,3.11,3.25
+SYN_EMP_0137,2025-10-05,2025-07-05,2025-08-01,2,Manager,ai_ml,chennai,2.98,3.25
+SYN_EMP_0137,2025-10-05,2025-07-05,2025-09-01,3,Manager,ai_ml,chennai,2.85,3.25
+SYN_EMP_0138,2025-10-20,2025-07-20,2025-07-01,1,Trainee Software Engineer,bi_reporting,uk,2.83,3.08
+SYN_EMP_0138,2025-10-20,2025-07-20,2025-08-01,2,Trainee Software Engineer,bi_reporting,uk,2.59,3.08
+SYN_EMP_0138,2025-10-20,2025-07-20,2025-09-01,3,Trainee Software Engineer,bi_reporting,uk,2.34,3.08
+SYN_EMP_0139,2025-11-24,2025-08-24,2025-08-01,1,Trainee Software Engineer,data_engineering,uk,3.08,3.24
+SYN_EMP_0139,2025-11-24,2025-08-24,2025-09-01,2,Trainee Software Engineer,data_engineering,uk,2.91,3.24
+SYN_EMP_0139,2025-11-24,2025-08-24,2025-10-01,3,Trainee Software Engineer,data_engineering,uk,2.74,3.24
+SYN_EMP_0140,2025-11-05,2025-08-05,2025-08-01,1,Senior Software Engineer,data_engineering,chennai,2.6,2.84
+SYN_EMP_0140,2025-11-05,2025-08-05,2025-09-01,2,Senior Software Engineer,data_engineering,chennai,2.35,2.84
+SYN_EMP_0140,2025-11-05,2025-08-05,2025-10-01,3,Senior Software Engineer,data_engineering,chennai,2.11,2.84
+SYN_EMP_0141,2025-11-07,2025-08-07,2025-08-01,1,Senior Software Engineer,bi_reporting,chennai,2.96,3.11
+SYN_EMP_0141,2025-11-07,2025-08-07,2025-09-01,2,Senior Software Engineer,bi_reporting,chennai,2.8,3.11
+SYN_EMP_0141,2025-11-07,2025-08-07,2025-10-01,3,Senior Software Engineer,bi_reporting,chennai,2.64,3.11
+SYN_EMP_0142,2025-11-19,2025-08-19,2025-08-01,1,Solutions Consultant,techops,uk,2.99,3.14
+SYN_EMP_0142,2025-11-19,2025-08-19,2025-09-01,2,Solutions Consultant,techops,uk,2.84,3.14
+SYN_EMP_0142,2025-11-19,2025-08-19,2025-10-01,3,Solutions Consultant,techops,uk,2.69,3.14
+SYN_EMP_0143,2025-11-24,2025-08-24,2025-08-01,1,Trainee Software Engineer,data_engineering,chennai,2.65,2.77
+SYN_EMP_0143,2025-11-24,2025-08-24,2025-09-01,2,Trainee Software Engineer,data_engineering,chennai,2.53,2.77
+SYN_EMP_0143,2025-11-24,2025-08-24,2025-10-01,3,Trainee Software Engineer,data_engineering,chennai,2.41,2.77
+SYN_EMP_0144,2025-11-12,2025-08-12,2025-08-01,1,Associate Consultant,full_stack,chennai,2.97,3.0
+SYN_EMP_0144,2025-11-12,2025-08-12,2025-09-01,2,Associate Consultant,full_stack,chennai,2.94,3.0
+SYN_EMP_0144,2025-11-12,2025-08-12,2025-10-01,3,Associate Consultant,full_stack,chennai,2.91,3.0
+SYN_EMP_0145,2025-11-18,2025-08-18,2025-08-01,1,Senior Software Engineer,data_engineering,chennai,3.07,3.26
+SYN_EMP_0145,2025-11-18,2025-08-18,2025-09-01,2,Senior Software Engineer,data_engineering,chennai,2.88,3.26
+SYN_EMP_0145,2025-11-18,2025-08-18,2025-10-01,3,Senior Software Engineer,data_engineering,chennai,2.69,3.26
+SYN_EMP_0146,2025-11-01,2025-08-01,2025-08-01,1,Associate Consultant,data_engineering,uk,2.66,2.82
+SYN_EMP_0146,2025-11-01,2025-08-01,2025-09-01,2,Associate Consultant,data_engineering,uk,2.5,2.82
+SYN_EMP_0146,2025-11-01,2025-08-01,2025-10-01,3,Associate Consultant,data_engineering,uk,2.34,2.82
+SYN_EMP_0147,2025-12-09,2025-09-09,2025-09-01,1,Software Engineer,bi_reporting,chennai,2.73,2.98
+SYN_EMP_0147,2025-12-09,2025-09-09,2025-10-01,2,Software Engineer,bi_reporting,chennai,2.47,2.98
+SYN_EMP_0147,2025-12-09,2025-09-09,2025-11-01,3,Software Engineer,bi_reporting,chennai,2.22,2.98
+SYN_EMP_0148,2025-12-19,2025-09-19,2025-09-01,1,Trainee Software Engineer,data_engineering,usa,3.04,3.19
+SYN_EMP_0148,2025-12-19,2025-09-19,2025-10-01,2,Trainee Software Engineer,data_engineering,usa,2.89,3.19
+SYN_EMP_0148,2025-12-19,2025-09-19,2025-11-01,3,Trainee Software Engineer,data_engineering,usa,2.74,3.19
+SYN_EMP_0149,2025-12-21,2025-09-21,2025-09-01,1,Consultant,bi_reporting,uk,2.58,2.82
+SYN_EMP_0149,2025-12-21,2025-09-21,2025-10-01,2,Consultant,bi_reporting,uk,2.34,2.82
+SYN_EMP_0149,2025-12-21,2025-09-21,2025-11-01,3,Consultant,bi_reporting,uk,2.09,2.82
+SYN_EMP_0150,2025-12-10,2025-09-10,2025-09-01,1,Software Engineer,bi_reporting,uk,2.92,3.06
+SYN_EMP_0150,2025-12-10,2025-09-10,2025-10-01,2,Software Engineer,bi_reporting,uk,2.77,3.06
+SYN_EMP_0150,2025-12-10,2025-09-10,2025-11-01,3,Software Engineer,bi_reporting,uk,2.63,3.06
+SYN_EMP_0151,2025-12-04,2025-09-04,2025-09-01,1,Software Engineer,data_engineering,chennai,2.91,3.15
+SYN_EMP_0151,2025-12-04,2025-09-04,2025-10-01,2,Software Engineer,data_engineering,chennai,2.68,3.15
+SYN_EMP_0151,2025-12-04,2025-09-04,2025-11-01,3,Software Engineer,data_engineering,chennai,2.45,3.15
+SYN_EMP_0152,2025-12-28,2025-09-28,2025-09-01,1,Trainee Software Engineer,data_engineering,chennai,2.97,3.22
+SYN_EMP_0152,2025-12-28,2025-09-28,2025-10-01,2,Trainee Software Engineer,data_engineering,chennai,2.72,3.22
+SYN_EMP_0152,2025-12-28,2025-09-28,2025-11-01,3,Trainee Software Engineer,data_engineering,chennai,2.47,3.22
+SYN_EMP_0153,2025-12-05,2025-09-05,2025-09-01,1,Trainee Software Engineer,bi_reporting,chennai,2.47,2.69
+SYN_EMP_0153,2025-12-05,2025-09-05,2025-10-01,2,Trainee Software Engineer,bi_reporting,chennai,2.25,2.69
+SYN_EMP_0153,2025-12-05,2025-09-05,2025-11-01,3,Trainee Software Engineer,bi_reporting,chennai,2.02,2.69
+SYN_EMP_0154,2026-01-20,2025-10-20,2025-10-01,1,Solutions Consultant,techops,chennai,3.07,3.31
+SYN_EMP_0154,2026-01-20,2025-10-20,2025-11-01,2,Solutions Consultant,techops,chennai,2.82,3.31
+SYN_EMP_0154,2026-01-20,2025-10-20,2025-12-01,3,Solutions Consultant,techops,chennai,2.57,3.31
+SYN_EMP_0155,2026-01-05,2025-10-05,2025-10-01,1,Associate Consultant,ai_ml,uk,3.14,3.34
+SYN_EMP_0155,2026-01-05,2025-10-05,2025-11-01,2,Associate Consultant,ai_ml,uk,2.94,3.34
+SYN_EMP_0155,2026-01-05,2025-10-05,2025-12-01,3,Associate Consultant,ai_ml,uk,2.74,3.34
+SYN_EMP_0156,2026-01-18,2025-10-18,2025-10-01,1,Senior Software Engineer,data_engineering,chennai,3.0,3.17
+SYN_EMP_0156,2026-01-18,2025-10-18,2025-11-01,2,Senior Software Engineer,data_engineering,chennai,2.84,3.17
+SYN_EMP_0156,2026-01-18,2025-10-18,2025-12-01,3,Senior Software Engineer,data_engineering,chennai,2.67,3.17
+SYN_EMP_0157,2026-01-03,2025-10-03,2025-10-01,1,Trainee Software Engineer,ai_ml,chennai,2.99,3.23
+SYN_EMP_0157,2026-01-03,2025-10-03,2025-11-01,2,Trainee Software Engineer,ai_ml,chennai,2.76,3.23
+SYN_EMP_0157,2026-01-03,2025-10-03,2025-12-01,3,Trainee Software Engineer,ai_ml,chennai,2.52,3.23
+SYN_EMP_0158,2026-01-03,2025-10-03,2025-10-01,1,Senior Software Engineer,bi_reporting,uk,3.28,3.35
+SYN_EMP_0158,2026-01-03,2025-10-03,2025-11-01,2,Senior Software Engineer,bi_reporting,uk,3.21,3.35
+SYN_EMP_0158,2026-01-03,2025-10-03,2025-12-01,3,Senior Software Engineer,bi_reporting,uk,3.14,3.35
+SYN_EMP_0159,2026-01-07,2025-10-07,2025-10-01,1,Senior Consultant,ai_ml,chennai,2.42,2.59
+SYN_EMP_0159,2026-01-07,2025-10-07,2025-11-01,2,Senior Consultant,ai_ml,chennai,2.25,2.59
+SYN_EMP_0159,2026-01-07,2025-10-07,2025-12-01,3,Senior Consultant,ai_ml,chennai,2.08,2.59
+SYN_EMP_0160,2026-01-14,2025-10-14,2025-10-01,1,Senior Consultant,data_engineering,chennai,2.95,3.2
+SYN_EMP_0160,2026-01-14,2025-10-14,2025-11-01,2,Senior Consultant,data_engineering,chennai,2.69,3.2
+SYN_EMP_0160,2026-01-14,2025-10-14,2025-12-01,3,Senior Consultant,data_engineering,chennai,2.44,3.2
+SYN_EMP_0161,2026-01-06,2025-10-06,2025-10-01,1,Solutions Enabler,data_engineering,uk,2.77,2.93
+SYN_EMP_0161,2026-01-06,2025-10-06,2025-11-01,2,Solutions Enabler,data_engineering,uk,2.62,2.93
+SYN_EMP_0161,2026-01-06,2025-10-06,2025-12-01,3,Solutions Enabler,data_engineering,uk,2.46,2.93
+SYN_EMP_0162,2026-02-01,2025-11-01,2025-11-01,1,Solutions Enabler,data_engineering,chennai,2.63,2.76
+SYN_EMP_0162,2026-02-01,2025-11-01,2025-12-01,2,Solutions Enabler,data_engineering,chennai,2.51,2.76
+SYN_EMP_0162,2026-02-01,2025-11-01,2026-01-01,3,Solutions Enabler,data_engineering,chennai,2.38,2.76
+SYN_EMP_0163,2026-02-03,2025-11-03,2025-11-01,1,Senior Software Engineer,data_engineering,chennai,2.91,3.13
+SYN_EMP_0163,2026-02-03,2025-11-03,2025-12-01,2,Senior Software Engineer,data_engineering,chennai,2.68,3.13
+SYN_EMP_0163,2026-02-03,2025-11-03,2026-01-01,3,Senior Software Engineer,data_engineering,chennai,2.46,3.13
+SYN_EMP_0164,2026-02-03,2025-11-03,2025-11-01,1,Solutions Enabler,full_stack,chennai,3.15,3.34
+SYN_EMP_0164,2026-02-03,2025-11-03,2025-12-01,2,Solutions Enabler,full_stack,chennai,2.97,3.34
+SYN_EMP_0164,2026-02-03,2025-11-03,2026-01-01,3,Solutions Enabler,full_stack,chennai,2.78,3.34
+SYN_EMP_0165,2026-02-17,2025-11-17,2025-11-01,1,Senior Consultant,data_engineering,chennai,2.79,2.89
+SYN_EMP_0165,2026-02-17,2025-11-17,2025-12-01,2,Senior Consultant,data_engineering,chennai,2.69,2.89
+SYN_EMP_0165,2026-02-17,2025-11-17,2026-01-01,3,Senior Consultant,data_engineering,chennai,2.58,2.89
+SYN_EMP_0166,2026-02-07,2025-11-07,2025-11-01,1,Senior Software Engineer,bi_reporting,uk,2.61,2.78
+SYN_EMP_0166,2026-02-07,2025-11-07,2025-12-01,2,Senior Software Engineer,bi_reporting,uk,2.44,2.78
+SYN_EMP_0166,2026-02-07,2025-11-07,2026-01-01,3,Senior Software Engineer,bi_reporting,uk,2.28,2.78
+SYN_EMP_0167,2026-02-06,2025-11-06,2025-11-01,1,Solutions Consultant,data_engineering,chennai,2.84,3.04
+SYN_EMP_0167,2026-02-06,2025-11-06,2025-12-01,2,Solutions Consultant,data_engineering,chennai,2.64,3.04
+SYN_EMP_0167,2026-02-06,2025-11-06,2026-01-01,3,Solutions Consultant,data_engineering,chennai,2.44,3.04
+SYN_EMP_0168,2026-02-10,2025-11-10,2025-11-01,1,Solutions Consultant,bi_reporting,uk,2.8,3.01
+SYN_EMP_0168,2026-02-10,2025-11-10,2025-12-01,2,Solutions Consultant,bi_reporting,uk,2.6,3.01
+SYN_EMP_0168,2026-02-10,2025-11-10,2026-01-01,3,Solutions Consultant,bi_reporting,uk,2.4,3.01
+SYN_EMP_0169,2026-02-15,2025-11-15,2025-11-01,1,Trainee Software Engineer,data_engineering,chennai,2.66,2.86
+SYN_EMP_0169,2026-02-15,2025-11-15,2025-12-01,2,Trainee Software Engineer,data_engineering,chennai,2.45,2.86
+SYN_EMP_0169,2026-02-15,2025-11-15,2026-01-01,3,Trainee Software Engineer,data_engineering,chennai,2.25,2.86
+SYN_EMP_0170,2026-03-04,2025-12-04,2025-12-01,1,Software Engineer,ai_ml,chennai,3.16,3.38
+SYN_EMP_0170,2026-03-04,2025-12-04,2026-01-01,2,Software Engineer,ai_ml,chennai,2.94,3.38
+SYN_EMP_0170,2026-03-04,2025-12-04,2026-02-01,3,Software Engineer,ai_ml,chennai,2.72,3.38
+SYN_EMP_0171,2026-03-08,2025-12-08,2025-12-01,1,Solutions Enabler,data_engineering,chennai,2.6,2.79
+SYN_EMP_0171,2026-03-08,2025-12-08,2026-01-01,2,Solutions Enabler,data_engineering,chennai,2.4,2.79
+SYN_EMP_0171,2026-03-08,2025-12-08,2026-02-01,3,Solutions Enabler,data_engineering,chennai,2.21,2.79
+SYN_EMP_0172,2026-03-17,2025-12-17,2025-12-01,1,Trainee Software Engineer,bi_reporting,uk,2.75,2.9
+SYN_EMP_0172,2026-03-17,2025-12-17,2026-01-01,2,Trainee Software Engineer,bi_reporting,uk,2.6,2.9
+SYN_EMP_0172,2026-03-17,2025-12-17,2026-02-01,3,Trainee Software Engineer,bi_reporting,uk,2.45,2.9
+SYN_EMP_0173,2026-03-01,2025-12-01,2025-12-01,1,Software Engineer,bi_reporting,chennai,3.11,3.19
+SYN_EMP_0173,2026-03-01,2025-12-01,2026-01-01,2,Software Engineer,bi_reporting,chennai,3.03,3.19
+SYN_EMP_0173,2026-03-01,2025-12-01,2026-02-01,3,Software Engineer,bi_reporting,chennai,2.95,3.19
+SYN_EMP_0174,2026-03-05,2025-12-05,2025-12-01,1,Senior Consultant,data_engineering,uk,3.02,3.18
+SYN_EMP_0174,2026-03-05,2025-12-05,2026-01-01,2,Senior Consultant,data_engineering,uk,2.86,3.18
+SYN_EMP_0174,2026-03-05,2025-12-05,2026-02-01,3,Senior Consultant,data_engineering,uk,2.7,3.18
+SYN_EMP_0175,2026-03-15,2025-12-15,2025-12-01,1,Associate Consultant,bi_reporting,uk,3.02,3.21
+SYN_EMP_0175,2026-03-15,2025-12-15,2026-01-01,2,Associate Consultant,bi_reporting,uk,2.83,3.21
+SYN_EMP_0175,2026-03-15,2025-12-15,2026-02-01,3,Associate Consultant,bi_reporting,uk,2.64,3.21
+SYN_EMP_0176,2026-03-06,2025-12-06,2025-12-01,1,Trainee Software Engineer,ai_ml,usa,2.79,3.01
+SYN_EMP_0176,2026-03-06,2025-12-06,2026-01-01,2,Trainee Software Engineer,ai_ml,usa,2.58,3.01
+SYN_EMP_0176,2026-03-06,2025-12-06,2026-02-01,3,Trainee Software Engineer,ai_ml,usa,2.36,3.01
+SYN_EMP_0177,2026-03-25,2025-12-25,2025-12-01,1,Trainee Software Engineer,data_engineering,chennai,2.95,3.09
+SYN_EMP_0177,2026-03-25,2025-12-25,2026-01-01,2,Trainee Software Engineer,data_engineering,chennai,2.8,3.09
+SYN_EMP_0177,2026-03-25,2025-12-25,2026-02-01,3,Trainee Software Engineer,data_engineering,chennai,2.66,3.09
+SYN_EMP_0178,2026-04-26,2026-01-26,2026-01-01,1,Senior Associate Consultant,bi_reporting,uk,2.85,3.07
+SYN_EMP_0178,2026-04-26,2026-01-26,2026-02-01,2,Senior Associate Consultant,bi_reporting,uk,2.63,3.07
+SYN_EMP_0178,2026-04-26,2026-01-26,2026-03-01,3,Senior Associate Consultant,bi_reporting,uk,2.41,3.07
+SYN_EMP_0179,2026-04-12,2026-01-12,2026-01-01,1,Trainee Software Engineer,bi_reporting,chennai,2.77,2.95
+SYN_EMP_0179,2026-04-12,2026-01-12,2026-02-01,2,Trainee Software Engineer,bi_reporting,chennai,2.59,2.95
+SYN_EMP_0179,2026-04-12,2026-01-12,2026-03-01,3,Trainee Software Engineer,bi_reporting,chennai,2.41,2.95
+SYN_EMP_0180,2026-04-15,2026-01-15,2026-01-01,1,Software Engineer,data_engineering,chennai,2.52,2.78
+SYN_EMP_0180,2026-04-15,2026-01-15,2026-02-01,2,Software Engineer,data_engineering,chennai,2.25,2.78
+SYN_EMP_0180,2026-04-15,2026-01-15,2026-03-01,3,Software Engineer,data_engineering,chennai,1.99,2.78
+SYN_EMP_0181,2026-04-02,2026-01-02,2026-01-01,1,Trainee Software Engineer,full_stack,uk,2.49,2.68
+SYN_EMP_0181,2026-04-02,2026-01-02,2026-02-01,2,Trainee Software Engineer,full_stack,uk,2.29,2.68
+SYN_EMP_0181,2026-04-02,2026-01-02,2026-03-01,3,Trainee Software Engineer,full_stack,uk,2.1,2.68
+SYN_EMP_0182,2026-04-23,2026-01-23,2026-01-01,1,Senior Software Engineer,data_engineering,chennai,2.64,2.82
+SYN_EMP_0182,2026-04-23,2026-01-23,2026-02-01,2,Senior Software Engineer,data_engineering,chennai,2.46,2.82
+SYN_EMP_0182,2026-04-23,2026-01-23,2026-03-01,3,Senior Software Engineer,data_engineering,chennai,2.28,2.82
+SYN_EMP_0183,2026-04-20,2026-01-20,2026-01-01,1,Solutions Consultant,bi_reporting,chennai,2.16,2.37
+SYN_EMP_0183,2026-04-20,2026-01-20,2026-02-01,2,Solutions Consultant,bi_reporting,chennai,1.95,2.37
+SYN_EMP_0183,2026-04-20,2026-01-20,2026-03-01,3,Solutions Consultant,bi_reporting,chennai,1.73,2.37
+SYN_EMP_0184,2026-04-26,2026-01-26,2026-01-01,1,Software Engineer,data_engineering,chennai,2.74,3.04
+SYN_EMP_0184,2026-04-26,2026-01-26,2026-02-01,2,Software Engineer,data_engineering,chennai,2.44,3.04
+SYN_EMP_0184,2026-04-26,2026-01-26,2026-03-01,3,Software Engineer,data_engineering,chennai,2.15,3.04
+SYN_EMP_0185,2026-04-09,2026-01-09,2026-01-01,1,Trainee Software Engineer,data_engineering,chennai,2.86,3.06
+SYN_EMP_0185,2026-04-09,2026-01-09,2026-02-01,2,Trainee Software Engineer,data_engineering,chennai,2.66,3.06
+SYN_EMP_0185,2026-04-09,2026-01-09,2026-03-01,3,Trainee Software Engineer,data_engineering,chennai,2.47,3.06
+SYN_EMP_0186,2026-04-08,2026-01-08,2026-01-01,1,Associate Consultant,ai_ml,chennai,2.41,2.67
+SYN_EMP_0186,2026-04-08,2026-01-08,2026-02-01,2,Associate Consultant,ai_ml,chennai,2.15,2.67
+SYN_EMP_0186,2026-04-08,2026-01-08,2026-03-01,3,Associate Consultant,ai_ml,chennai,1.89,2.67
+SYN_EMP_0187,2026-04-23,2026-01-23,2026-01-01,1,Trainee Software Engineer,data_engineering,usa,2.75,2.98
+SYN_EMP_0187,2026-04-23,2026-01-23,2026-02-01,2,Trainee Software Engineer,data_engineering,usa,2.52,2.98
+SYN_EMP_0187,2026-04-23,2026-01-23,2026-03-01,3,Trainee Software Engineer,data_engineering,usa,2.29,2.98
+SYN_EMP_0188,2026-04-16,2026-01-16,2026-01-01,1,Consultant,data_engineering,uk,3.3,3.52
+SYN_EMP_0188,2026-04-16,2026-01-16,2026-02-01,2,Consultant,data_engineering,uk,3.09,3.52
+SYN_EMP_0188,2026-04-16,2026-01-16,2026-03-01,3,Consultant,data_engineering,uk,2.87,3.52
+SYN_EMP_0189,2026-04-10,2026-01-10,2026-01-01,1,Senior Software Engineer,ai_ml,uk,2.45,2.66
+SYN_EMP_0189,2026-04-10,2026-01-10,2026-02-01,2,Senior Software Engineer,ai_ml,uk,2.24,2.66
+SYN_EMP_0189,2026-04-10,2026-01-10,2026-03-01,3,Senior Software Engineer,ai_ml,uk,2.04,2.66
+SYN_EMP_0190,2026-04-01,2026-01-01,2026-01-01,1,Senior Software Engineer,techops,chennai,2.63,2.79
+SYN_EMP_0190,2026-04-01,2026-01-01,2026-02-01,2,Senior Software Engineer,techops,chennai,2.48,2.79
+SYN_EMP_0190,2026-04-01,2026-01-01,2026-03-01,3,Senior Software Engineer,techops,chennai,2.33,2.79
+SYN_EMP_0191,2026-04-14,2026-01-14,2026-01-01,1,Software Engineer,bi_reporting,uk,2.76,2.93
+SYN_EMP_0191,2026-04-14,2026-01-14,2026-02-01,2,Software Engineer,bi_reporting,uk,2.6,2.93
+SYN_EMP_0191,2026-04-14,2026-01-14,2026-03-01,3,Software Engineer,bi_reporting,uk,2.44,2.93
+SYN_EMP_0192,2026-04-12,2026-01-12,2026-01-01,1,Software Engineer,bi_reporting,chennai,2.43,2.67
+SYN_EMP_0192,2026-04-12,2026-01-12,2026-02-01,2,Software Engineer,bi_reporting,chennai,2.18,2.67
+SYN_EMP_0192,2026-04-12,2026-01-12,2026-03-01,3,Software Engineer,bi_reporting,chennai,1.93,2.67
+SYN_EMP_0193,2026-04-16,2026-01-16,2026-01-01,1,Associate Consultant,ai_ml,uk,2.99,3.17
+SYN_EMP_0193,2026-04-16,2026-01-16,2026-02-01,2,Associate Consultant,ai_ml,uk,2.8,3.17
+SYN_EMP_0193,2026-04-16,2026-01-16,2026-03-01,3,Associate Consultant,ai_ml,uk,2.62,3.17
+SYN_EMP_0194,2026-05-20,2026-02-20,2026-02-01,1,Senior Associate Consultant,bi_reporting,chennai,2.72,2.96
+SYN_EMP_0194,2026-05-20,2026-02-20,2026-03-01,2,Senior Associate Consultant,bi_reporting,chennai,2.48,2.96
+SYN_EMP_0194,2026-05-20,2026-02-20,2026-04-01,3,Senior Associate Consultant,bi_reporting,chennai,2.24,2.96
+SYN_EMP_0195,2026-05-21,2026-02-21,2026-02-01,1,Senior Software Engineer,full_stack,chennai,3.17,3.36
+SYN_EMP_0195,2026-05-21,2026-02-21,2026-03-01,2,Senior Software Engineer,full_stack,chennai,2.99,3.36
+SYN_EMP_0195,2026-05-21,2026-02-21,2026-04-01,3,Senior Software Engineer,full_stack,chennai,2.81,3.36
+SYN_EMP_0196,2026-05-22,2026-02-22,2026-02-01,1,Solutions Enabler,ai_ml,chennai,3.59,3.75
+SYN_EMP_0196,2026-05-22,2026-02-22,2026-03-01,2,Solutions Enabler,ai_ml,chennai,3.42,3.75
+SYN_EMP_0196,2026-05-22,2026-02-22,2026-04-01,3,Solutions Enabler,ai_ml,chennai,3.26,3.75
+SYN_EMP_0197,2026-05-18,2026-02-18,2026-02-01,1,Senior Software Engineer,techops,chennai,2.54,2.65
+SYN_EMP_0197,2026-05-18,2026-02-18,2026-03-01,2,Senior Software Engineer,techops,chennai,2.42,2.65
+SYN_EMP_0197,2026-05-18,2026-02-18,2026-04-01,3,Senior Software Engineer,techops,chennai,2.31,2.65
+SYN_EMP_0198,2026-05-20,2026-02-20,2026-02-01,1,Consultant,ai_ml,chennai,2.97,3.18
+SYN_EMP_0198,2026-05-20,2026-02-20,2026-03-01,2,Consultant,ai_ml,chennai,2.75,3.18
+SYN_EMP_0198,2026-05-20,2026-02-20,2026-04-01,3,Consultant,ai_ml,chennai,2.53,3.18
+SYN_EMP_0199,2026-05-23,2026-02-23,2026-02-01,1,Software Engineer,full_stack,chennai,2.88,3.06
+SYN_EMP_0199,2026-05-23,2026-02-23,2026-03-01,2,Software Engineer,full_stack,chennai,2.7,3.06
+SYN_EMP_0199,2026-05-23,2026-02-23,2026-04-01,3,Software Engineer,full_stack,chennai,2.52,3.06
+SYN_EMP_0200,2026-05-22,2026-02-22,2026-02-01,1,Senior Software Engineer,data_engineering,chennai,2.81,2.94
+SYN_EMP_0200,2026-05-22,2026-02-22,2026-03-01,2,Senior Software Engineer,data_engineering,chennai,2.68,2.94
+SYN_EMP_0200,2026-05-22,2026-02-22,2026-04-01,3,Senior Software Engineer,data_engineering,chennai,2.54,2.94
+SYN_EMP_0201,2026-05-14,2026-02-14,2026-02-01,1,Trainee Software Engineer,bi_reporting,chennai,3.39,3.54
+SYN_EMP_0201,2026-05-14,2026-02-14,2026-03-01,2,Trainee Software Engineer,bi_reporting,chennai,3.24,3.54
+SYN_EMP_0201,2026-05-14,2026-02-14,2026-04-01,3,Trainee Software Engineer,bi_reporting,chennai,3.09,3.54
+SYN_EMP_0202,2026-06-02,2026-03-02,2026-03-01,1,Trainee Software Engineer,bi_reporting,chennai,2.62,2.81
+SYN_EMP_0202,2026-06-02,2026-03-02,2026-04-01,2,Trainee Software Engineer,bi_reporting,chennai,2.42,2.81
+SYN_EMP_0202,2026-06-02,2026-03-02,2026-05-01,3,Trainee Software Engineer,bi_reporting,chennai,2.23,2.81
+SYN_EMP_0203,2026-06-21,2026-03-21,2026-03-01,1,Consultant,data_engineering,chennai,2.55,2.7
+SYN_EMP_0203,2026-06-21,2026-03-21,2026-04-01,2,Consultant,data_engineering,chennai,2.39,2.7
+SYN_EMP_0203,2026-06-21,2026-03-21,2026-05-01,3,Consultant,data_engineering,chennai,2.23,2.7
+SYN_EMP_0204,2026-06-16,2026-03-16,2026-03-01,1,Manager,data_engineering,uk,3.27,3.41
+SYN_EMP_0204,2026-06-16,2026-03-16,2026-04-01,2,Manager,data_engineering,uk,3.13,3.41
+SYN_EMP_0204,2026-06-16,2026-03-16,2026-05-01,3,Manager,data_engineering,uk,3.0,3.41
+SYN_EMP_0205,2026-06-08,2026-03-08,2026-03-01,1,Software Engineer,data_engineering,uk,2.57,2.72
+SYN_EMP_0205,2026-06-08,2026-03-08,2026-04-01,2,Software Engineer,data_engineering,uk,2.42,2.72
+SYN_EMP_0205,2026-06-08,2026-03-08,2026-05-01,3,Software Engineer,data_engineering,uk,2.26,2.72
+SYN_EMP_0206,2026-06-10,2026-03-10,2026-03-01,1,Solutions Enabler,bi_reporting,chennai,2.85,3.05
+SYN_EMP_0206,2026-06-10,2026-03-10,2026-04-01,2,Solutions Enabler,bi_reporting,chennai,2.64,3.05
+SYN_EMP_0206,2026-06-10,2026-03-10,2026-05-01,3,Solutions Enabler,bi_reporting,chennai,2.43,3.05
+SYN_EMP_0207,2026-06-25,2026-03-25,2026-03-01,1,Manager,full_stack,uk,3.17,3.32
+SYN_EMP_0207,2026-06-25,2026-03-25,2026-04-01,2,Manager,full_stack,uk,3.03,3.32
+SYN_EMP_0207,2026-06-25,2026-03-25,2026-05-01,3,Manager,full_stack,uk,2.88,3.32
+SYN_EMP_0208,2026-06-06,2026-03-06,2026-03-01,1,Senior Software Engineer,ai_ml,chennai,2.52,2.75
+SYN_EMP_0208,2026-06-06,2026-03-06,2026-04-01,2,Senior Software Engineer,ai_ml,chennai,2.28,2.75
+SYN_EMP_0208,2026-06-06,2026-03-06,2026-05-01,3,Senior Software Engineer,ai_ml,chennai,2.05,2.75
+SYN_EMP_0209,2026-06-08,2026-03-08,2026-03-01,1,Senior Software Engineer,full_stack,chennai,3.17,3.3
+SYN_EMP_0209,2026-06-08,2026-03-08,2026-04-01,2,Senior Software Engineer,full_stack,chennai,3.04,3.3
+SYN_EMP_0209,2026-06-08,2026-03-08,2026-05-01,3,Senior Software Engineer,full_stack,chennai,2.91,3.3
+SYN_EMP_0210,2026-07-10,2026-04-10,2026-04-01,1,Solutions Consultant,full_stack,chennai,3.23,3.38
+SYN_EMP_0210,2026-07-10,2026-04-10,2026-05-01,2,Solutions Consultant,full_stack,chennai,3.08,3.38
+SYN_EMP_0210,2026-07-10,2026-04-10,2026-06-01,3,Solutions Consultant,full_stack,chennai,2.93,3.38
+SYN_EMP_0211,2026-07-26,2026-04-26,2026-04-01,1,Senior Software Engineer,bi_reporting,uk,3.01,3.16
+SYN_EMP_0211,2026-07-26,2026-04-26,2026-05-01,2,Senior Software Engineer,bi_reporting,uk,2.85,3.16
+SYN_EMP_0211,2026-07-26,2026-04-26,2026-06-01,3,Senior Software Engineer,bi_reporting,uk,2.69,3.16
+SYN_EMP_0212,2026-07-23,2026-04-23,2026-04-01,1,Senior Software Engineer,full_stack,chennai,2.76,2.89
+SYN_EMP_0212,2026-07-23,2026-04-23,2026-05-01,2,Senior Software Engineer,full_stack,chennai,2.63,2.89
+SYN_EMP_0212,2026-07-23,2026-04-23,2026-06-01,3,Senior Software Engineer,full_stack,chennai,2.5,2.89
+SYN_EMP_0213,2026-07-16,2026-04-16,2026-04-01,1,Consultant,techops,chennai,2.98,3.16
+SYN_EMP_0213,2026-07-16,2026-04-16,2026-05-01,2,Consultant,techops,chennai,2.79,3.16
+SYN_EMP_0213,2026-07-16,2026-04-16,2026-06-01,3,Consultant,techops,chennai,2.6,3.16
+SYN_EMP_0214,2026-07-25,2026-04-25,2026-04-01,1,Software Engineer,data_engineering,uk,2.86,3.06
+SYN_EMP_0214,2026-07-25,2026-04-25,2026-05-01,2,Software Engineer,data_engineering,uk,2.66,3.06
+SYN_EMP_0214,2026-07-25,2026-04-25,2026-06-01,3,Software Engineer,data_engineering,uk,2.46,3.06
+SYN_EMP_0215,2026-07-07,2026-04-07,2026-04-01,1,Trainee Software Engineer,data_engineering,chennai,2.46,2.72
+SYN_EMP_0215,2026-07-07,2026-04-07,2026-05-01,2,Trainee Software Engineer,data_engineering,chennai,2.2,2.72
+SYN_EMP_0215,2026-07-07,2026-04-07,2026-06-01,3,Trainee Software Engineer,data_engineering,chennai,1.94,2.72
+SYN_EMP_0216,2026-07-07,2026-04-07,2026-04-01,1,Consultant,bi_reporting,chennai,3.21,3.38
+SYN_EMP_0216,2026-07-07,2026-04-07,2026-05-01,2,Consultant,bi_reporting,chennai,3.05,3.38
+SYN_EMP_0216,2026-07-07,2026-04-07,2026-06-01,3,Consultant,bi_reporting,chennai,2.88,3.38
+SYN_EMP_0217,2026-07-24,2026-04-24,2026-04-01,1,Senior Consultant,bi_reporting,chennai,3.04,3.27
+SYN_EMP_0217,2026-07-24,2026-04-24,2026-05-01,2,Senior Consultant,bi_reporting,chennai,2.82,3.27
+SYN_EMP_0217,2026-07-24,2026-04-24,2026-06-01,3,Senior Consultant,bi_reporting,chennai,2.59,3.27
