@@ -3,6 +3,7 @@ import pandas as pd
 from app.core.adapter import get_adapter
 from app.engines.employee_coe import get_employee_primary_coe_map
 from app.engines import availability_hold
+from app.engines.pulse_engine import get_employee_pulse_detail
 from app.services.recommendation_service import NON_DELIVERY_ROLES
 from app.services.allocation_report_service import OVER_ALLOCATED_THRESHOLD, UNDER_UTILIZED_THRESHOLD, get_allocation_report
 from app.services.timesheet_insights_service import (
@@ -271,4 +272,5 @@ def get_employee_profile(employee_id: str) -> dict:
         "daily_hours_recent": get_employee_recent_daily_hours(employee_id),
         "leaves": _leaves_for(employee_id, adapter.get_leaves()),
         "signals": signals,
+        "pulse": get_employee_pulse_detail(employee_id),
     }

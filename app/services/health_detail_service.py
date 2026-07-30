@@ -2,6 +2,7 @@ import pandas as pd
 import os
 from app.core.adapter import get_adapter
 from app.engines import embedding_engine, experience_engine, scoring
+from app.engines.pulse_engine import get_project_pulse_detail
 from app.engines.coe_skill_engine import GENERIC_SKILL_COES, derive_skills_for_coes
 from app.engines.role_mix_engine import canonical_project_coe, get_role_mix
 from app.services.free_pool_service import get_free_pool
@@ -368,6 +369,7 @@ def get_project_health_detail(project_code: str) -> dict:
         "team_capacity_hours_after_leave": summary["devops_team_capacity_hours_after_leave"],
         "team_daily_capacity_hours": summary.get("devops_team_daily_capacity_hours", 0.0),
         "capacity_surplus_hours": summary["devops_capacity_surplus_hours"],
+        "days_to_clear_backlog": summary.get("devops_days_to_clear_backlog"),
         "is_overdue": summary["devops_is_overdue"],
         "tickets_missing_remaining_estimate": summary["devops_tickets_missing_remaining_estimate"],
         "tickets_with_no_effort_data": summary["devops_tickets_with_no_effort_data"],
@@ -389,6 +391,8 @@ def get_project_health_detail(project_code: str) -> dict:
         "root_cause_categories": summary.get("root_cause_categories", {}),
         "is_extension_risk": summary.get("is_extension_risk", False),
         "is_escalation_risk": summary.get("is_escalation_risk", False),
+        "is_pulse_risk": summary.get("is_pulse_risk", False),
+        "pulse": get_project_pulse_detail(project_code),
         "overrun": overrun_proof,
         "shadow_heavy": shadow_proof,
          "extension_revenue": extension_revenue_proof,

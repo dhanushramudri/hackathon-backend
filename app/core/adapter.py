@@ -47,6 +47,9 @@ class DataSourceAdapter(ABC):
     def get_leaves(self) -> pd.DataFrame:
         ...
 
+    @abstractmethod
+    def get_weekly_pulse(self) -> pd.DataFrame: ...
+
 class LocalAdapter(DataSourceAdapter):
 
     def _query(self, table: str) -> pd.DataFrame:
@@ -100,6 +103,9 @@ class LocalAdapter(DataSourceAdapter):
     def get_leaves(self) -> pd.DataFrame:
         return self._query("leaves")
 
+    def get_weekly_pulse(self) -> pd.DataFrame:
+        return self._query("weekly_pulse")
+
 class JinApiAdapter(DataSourceAdapter):
 
     def __init__(self, base_url: str, api_key: str):
@@ -147,6 +153,9 @@ class JinApiAdapter(DataSourceAdapter):
 
     def get_leaves(self) -> pd.DataFrame:
         self._not_implemented("/api/leave-requests")
+
+    def get_weekly_pulse(self) -> pd.DataFrame:
+        self._not_implemented("/api/weekly-pulse")
 
 def get_adapter() -> DataSourceAdapter:
     return LocalAdapter()
