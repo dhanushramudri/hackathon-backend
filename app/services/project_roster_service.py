@@ -55,6 +55,7 @@ def get_project_info(project_code: str) -> dict | None:
         "client_id": row.get("client_id") if pd.notna(row.get("client_id")) else None,
         "type_of_project": row.get("type_of_project") if pd.notna(row.get("type_of_project")) else None,
         "tech_coe": row.get("tech_coe") if pd.notna(row.get("tech_coe")) else None,
+        "proposition_coe": row.get("proposition_coe") if pd.notna(row.get("proposition_coe")) else None,
         "project_status": row.get("project_status") if pd.notna(row.get("project_status")) else None,
         "project_start_date": row["project_start_date"].strftime("%Y-%m-%d") if pd.notna(row["project_start_date"]) else None,
         "project_end_date": row["project_end_date"].strftime("%Y-%m-%d") if pd.notna(row["project_end_date"]) else None,
