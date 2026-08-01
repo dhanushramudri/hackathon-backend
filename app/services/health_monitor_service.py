@@ -68,7 +68,6 @@ WSR_LONG_TERM_MIN_REPORTS = WSR_BASELINE_REPORTS + WSR_TREND_RECENT_REPORTS
 # now" (escalation) vs other operational risk, instead of one undifferentiated
 # risk_score. A project can fire causes in multiple categories at once.
 ROOT_CAUSE_CATEGORY: dict[str, str] = {
-    "overrunning": "extension",
     "devops_extension_risk": "extension",
     # Deteriorating/critical/long-term-decline were 3 separate root causes
     # over the exact same WSR severity series -- one bad recent stretch could
@@ -86,7 +85,7 @@ ROOT_CAUSE_CATEGORY: dict[str, str] = {
 
 def categorize_root_causes(root_causes: list[str]) -> dict[str, list[str]]:
     """Groups a project's fired root causes by category. A project can appear
-    in multiple categories at once -- e.g. overrunning (extension) AND
+    in multiple categories at once -- e.g. devops_extension_risk (extension) AND
     wsr_critical (escalation) simultaneously; that's real and shouldn't be
     collapsed into one label."""
     grouped: dict[str, list[str]] = {}
@@ -446,12 +445,16 @@ def _compute_health_rows(active: pd.DataFrame, churn_p75_override: float | None 
 
     today = pd.Timestamp.now().normalize()
 
-    # "Overrunning" now means: even the latest currently-booked allocation has
-    # lapsed and nothing further is scheduled -- a real, CURRENT gap. It no longer
-    # fires just because allocations were pushed past the stale original end date,
-    # since that's an already-known, already-resourced extension, not a risk.
+    # overrun_days -- how many days past the latest real, currently-booked
+    # allocation today already is -- is kept as a raw fact (it still feeds the
+    # Extension outlook narrative in health_detail_service.py), but is no
+    # longer turned into its own "Overrunning" root cause/flag: whether an
+    # allocation legitimately runs later than the project's original end date
+    # doesn't by itself mean anything is wrong (that's exactly what
+    # effective_end_date already accounts for), and a real DevOps-effort-based
+    # signal (devops_extension_risk, below) already covers genuine extension
+    # risk without this separate, easily-misread flag.
     active["overrun_days"] = (today - active["effective_end_date"]).dt.days
-    active["is_overrunning"] = active["overrun_days"] > OVERRUN_DAYS_THRESHOLD
     active["is_shadow_heavy"] = active["shadow_unbilled_share"] > SHADOW_SHARE_THRESHOLD
     active["is_high_churn"] = active["churn_per_month"] > churn_p75
 
@@ -569,8 +572,6 @@ def _compute_health_rows(active: pd.DataFrame, churn_p75_override: float | None 
         projected_extension_duration_label = extension_duration_label(projected_extension_days)
 
         root_causes = []
-        if row["is_overrunning"]:
-            root_causes.append("overrunning")
         if row["is_shadow_heavy"]:
             root_causes.append("shadow_heavy")
         if row["is_high_churn"]:

@@ -2,27 +2,15 @@ import pandas as pd
 
 from app.core.adapter import get_adapter
 from app.engines.resource_code_decoder import decode_resource_code, group_label
+from app.engines.revenue_engine import delivery_revenue_for_duration
 from app.engines.skillset_classifier import classify_skillset
-from app.services.demand_forecast_service import MIN_AVAILABLE_PCT_TO_SURFACE, STANDARD_MONTHLY_HOURS
-from app.services.rate_card_service import get_hourly_rate
+from app.services.demand_forecast_service import MIN_AVAILABLE_PCT_TO_SURFACE
 from app.services.recommendation_service import INTERNAL_PROJECT_TYPE, availability_as_of
 
 OUTLOOK_MONTHS = 6
 MAX_HORIZON_MONTHS = 36
 SUPPLY_ANOMALY_SHARE_THRESHOLD = 0.90
 LATE_NOTICE_THRESHOLD_DAYS = 14
-
-def _avg_rate(designations: list[str]) -> float | None:
-    rates = [r for d in designations if (r := get_hourly_rate(d)) is not None]
-    return sum(rates) / len(rates) if rates else None
-
-def _row_value_usd(designations: list[str], requested_pct) -> float | None:
-    rate = _avg_rate(designations)
-    if rate is None:
-        return None
-    pct = pd.to_numeric(requested_pct, errors="coerce")
-    pct = 100.0 if pd.isna(pct) else float(pct)
-    return round(rate * STANDARD_MONTHLY_HOURS * (pct / 100.0), 2)
 
 def _fmt_date(value) -> str | None:
     return value.strftime("%Y-%m-%d") if pd.notna(value) else None
@@ -52,8 +40,15 @@ def _enrich_pipeline(pipeline: pd.DataFrame, granularity: str = "month") -> pd.D
     pipeline["designations"] = pipeline["role_code"].apply(decode_resource_code)
     pipeline["role_label"] = pipeline["role_code"].apply(group_label)
     pipeline["is_confirmed"] = pipeline["sow_signed"].fillna("No").astype(str).str.strip().str.lower() == "yes"
-    pipeline["requested_pct_numeric"] = pd.to_numeric(pipeline["requested_pct"], errors="coerce").fillna(100.0)
-    pipeline["value_usd"] = pipeline.apply(lambda r: _row_value_usd(r["designations"], r.get("requested_pct")), axis=1)
+    # Real deal value, not a per-role rate-card figure: a deal_id is one whole client
+    # project made of several role-request rows (~5.2 on average), so pricing each row
+    # independently at hourly_rate x a full month and summing them inflated a single
+    # project's "value" 5-8x. Every deal gets the same flat, real-template project value
+    # instead (revenue_engine.DELIVERY_TEMPLATE, ~$35K/5-week engagement -- the same
+    # benchmark already validated for the Revenue Target tab), counted once per deal_id
+    # wherever totals are summed. requested_pct/number_of_weeks are too sparse/corrupted
+    # in this source (99%+ non-numeric or missing) to scale per-deal beyond that.
+    pipeline["deal_value_usd"] = delivery_revenue_for_duration(None)
     pipeline["skill_areas"] = pipeline["skillset"].apply(classify_skillset)
 
     notice_days = (pipeline["likely_start_date"] - pipeline["request_received"]).dt.days
@@ -112,8 +107,7 @@ def _deal_dict(r: pd.Series) -> dict:
         "is_confirmed": bool(r.get("is_confirmed")),
         "notice_days": int(r["notice_days"]) if pd.notna(r.get("notice_days")) else None,
         "is_late_notice": bool(r["is_late_notice"]) if pd.notna(r.get("is_late_notice")) else None,
-        "hourly_rate_usd": round(_avg_rate(r.get("designations") or []), 2) if _avg_rate(r.get("designations") or []) is not None else None,
-        "value_usd": round(float(r["value_usd"]), 2) if pd.notna(r.get("value_usd")) else None,
+        "value_usd": round(float(r["deal_value_usd"]), 2) if pd.notna(r.get("deal_value_usd")) else None,
     }
 
 def _supply_dict(r: pd.Series, anomaly_date) -> dict:
@@ -193,9 +187,7 @@ def _role_demand_rows(
     busy_pct_cache: dict[pd.Timestamp, pd.Series] = {}
     role_need = rows.groupby(["month", "role_label"]).agg(
         needed_headcount=("role_code", "size"),
-        value_usd=("value_usd", "sum"),
         role_code=("role_code", "first"),
-        avg_requested_pct=("requested_pct_numeric", "mean"),
     ).reset_index()
 
     out = []
@@ -204,16 +196,12 @@ def _role_demand_rows(
         designations = decode_resource_code(row["role_code"])
         available = None
         shortfall = None
-        shortfall_value = 0.0
         if designations:
             as_of_date = _period_start_date(row["month"], granularity)
             roster = _designation_roster_as_of(designations, as_of_date, employees, allocations, projects, busy_pct_cache)
             available = sum(1 for r in roster if r["is_available"])
         if available is not None:
             shortfall = max(0, int(row["needed_headcount"]) - available)
-            rate = _avg_rate(designations)
-            avg_pct = float(row["avg_requested_pct"]) if pd.notna(row["avg_requested_pct"]) else 100.0
-            shortfall_value = round(shortfall * rate * STANDARD_MONTHLY_HOURS * (avg_pct / 100), 2) if (shortfall and rate) else 0.0
         # Only CONFIRMED shortfalls drive the page's headline "first shortfall" alert --
         # unconfirmed/speculative requests may never materialize, so they still get a real
         # available/shortfall number for reference (computed identically either way), but
@@ -229,8 +217,6 @@ def _role_demand_rows(
                 "needed_headcount": int(row["needed_headcount"]),
                 "available_headcount": available,
                 "shortfall": shortfall,
-                "shortfall_value_usd": shortfall_value,
-                "value_usd": round(float(row["value_usd"]), 2) if pd.notna(row["value_usd"]) else None,
                 "is_confirmed": is_confirmed,
             }
         )
@@ -267,8 +253,14 @@ def get_pipeline_outlook(
             anomaly_by_month[m] = note
 
     demand_counts = in_window.groupby(["month", "is_confirmed"]).size()
-    confirmed_value_by_month = in_window[in_window["is_confirmed"]].groupby("month")["value_usd"].sum()
-    unconfirmed_value_by_month = in_window[~in_window["is_confirmed"]].groupby("month")["value_usd"].sum()
+    # A deal_id can span several role-request rows (~5.2 on average) -- dedupe to one row
+    # per deal before summing so a project's flat value is counted once, not once per role.
+    confirmed_value_by_month = (
+        in_window[in_window["is_confirmed"]].drop_duplicates("deal_id").groupby("month")["deal_value_usd"].sum()
+    )
+    unconfirmed_value_by_month = (
+        in_window[~in_window["is_confirmed"]].drop_duplicates("deal_id").groupby("month")["deal_value_usd"].sum()
+    )
 
     confirmed_role_rows, first_shortfall_month, first_shortfall_roles = _role_demand_rows(
         in_window[in_window["is_confirmed"]], employees, allocations, projects, granularity, is_confirmed=True
@@ -325,7 +317,7 @@ def get_pipeline_outlook(
 
     cluster_scorecards = []
     for cluster_id, grp in in_window.groupby("cluster"):
-        resolved_value = grp["value_usd"].sum()
+        resolved_value = grp.drop_duplicates("deal_id")["deal_value_usd"].sum()
         top_roles = grp["role_label"].value_counts().head(3)
         top_skills = pd.Series([s for row in grp["skill_areas"] for s in row]).value_counts().head(3) if grp["skill_areas"].apply(len).sum() else pd.Series(dtype=int)
         cluster_scorecards.append(
@@ -363,16 +355,20 @@ def get_pipeline_outlook(
             "one real designation; several are genuinely "
             "flexible in the source itself (e.g. 'SAC/AC' literally means either Senior Associate "
             "Consultant or Associate Consultant works) and count as covered if real spare capacity "
-            "exists in any of the listed designations, with the dollar figure averaged across them. "
-            "A few codes ('EM', 'GTM Architect', 'Sr DS SME') have no real designation at all and are "
-            "excluded from dollar figures, though still counted in headcount. Dollar values use the "
-            "illustrative Rate Card (no real cost data exists in any source file) weighted by each "
-            "deal's own real requested %. Unconfirmed demand's $ value is shown as-is, not weighted by "
-            "deal stage -- no historical win-rate data exists to calibrate a real probability against, "
-            "so we deliberately don't manufacture one. Pipeline demand has zero real rows past "
-            f"{real_max_demand_month or 'the available data'} -- months beyond that show real zeros, "
-            "not an estimate. Every number on this page is click-through to the exact real rows behind "
-            "it -- nothing here is a black box."
+            "exists in any of the listed designations. A few codes ('EM', 'GTM Architect', 'Sr DS SME') "
+            "have no real designation at all and are excluded from headcount availability checks, "
+            "though still counted toward needed headcount. Dollar values are a flat, real-template "
+            "figure per deal (~$35K, anchored to the same ~5-week delivery-project benchmark already "
+            "used on the Revenue Target tab), applied uniformly to every deal regardless of its "
+            "specific role mix -- requested_pct and number_of_weeks are missing or non-numeric in over "
+            "99% of real pipeline rows, too sparse/corrupted to scale per-deal, and no real field "
+            "distinguishes a Design & Discovery engagement from a Delivery one, so we deliberately "
+            "don't fabricate a per-role or per-phase split. Unconfirmed demand's $ value is shown "
+            "as-is, not weighted by deal stage -- no historical win-rate data exists to calibrate a "
+            "real probability against, so we deliberately don't manufacture one. Pipeline demand has "
+            f"zero real rows past {real_max_demand_month or 'the available data'} -- months beyond "
+            "that show real zeros, not an estimate. Every number on this page is click-through to the "
+            "exact real rows behind it -- nothing here is a black box."
         ),
     }
 

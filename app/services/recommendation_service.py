@@ -5,7 +5,7 @@ import pandas as pd
 
 from app.core.adapter import get_adapter
 from app.engines import scoring
-from app.engines.designation_ladder import adjacent_designations
+from app.engines.role_hierarchy import adjacent_designations, same_level_peers
 from app.engines.employee_coe import get_employee_primary_coe_map
 from app.engines.resource_code_decoder import decode_resource_code
 from app.engines.skillset_classifier import classify_skillset, classify_skillset_with_proof
@@ -115,11 +115,14 @@ def _match_tier(candidate: dict, requested_designations: list[str] | None) -> st
         return None
     if candidate["skill_confidence"] not in ("no_match", "no_requirement"):
         return "skill_match"
-    if candidate["job_name"] in requested_designations:
+    same_grade = set(requested_designations) | {
+        p for req in requested_designations for p in same_level_peers(req)
+    }
+    if candidate["job_name"] in same_grade:
         return "same_grade_fallback"
     adjacent = {
         d for req in requested_designations for d, _offset in adjacent_designations(req)
-    }
+    } - same_grade
     if candidate["job_name"] in adjacent:
         return "adjacent_level_fallback"
     return None
@@ -192,12 +195,18 @@ def _build_fallback_candidates(ranked: list[dict], requested_designations: list[
         coe_match = 1 if (c.get("coe") or "").strip().lower() in coe_wanted else 0
         return (-c["skill_score"], -coe_match, -c["available_pct"], -c["competency_score"])
 
+    # Same-level cross-family peers (e.g. requesting "Solutions Consultant" also
+    # recognizes an available "Senior Consultant" -- a real equivalent, not a
+    # downgrade) count as same_grade, not adjacent_level.
+    same_grade_designations = set(requested_designations) | {
+        p for req in requested_designations for p in same_level_peers(req)
+    }
     adjacent = {
         d for req in requested_designations for d, _offset in adjacent_designations(req)
-    } - set(requested_designations)
+    } - same_grade_designations
 
     same_grade = sorted(
-        [c for c in ranked if c["job_name"] in requested_designations], key=_sort_key
+        [c for c in ranked if c["job_name"] in same_grade_designations], key=_sort_key
     )[:MAX_FALLBACK_CANDIDATES]
     adjacent_level = sorted(
         [c for c in ranked if c["job_name"] in adjacent], key=_sort_key

@@ -1,18 +1,24 @@
-import re
+from app.engines.role_hierarchy import TITLE_TO_LEVEL
 
-_BANDS: list[tuple[str, float]] = [
-    (r"\b(trainee|intern)\b", 25.0),
-    (r"\b(associate partner|leadership)\b", 190.0),
-    (r"\bpartner\b", 240.0),
-    (r"\b(principal|technology solutions architect)\b", 145.0),
-    (r"\b(senior solutions consultant|technical solutions architect|manager)\b", 110.0),
-    (r"\bsolutions enabler\b", 65.0),
-    (r"\bsenior associate consultant\b", 85.0),
-    (r"\b(solutions consultant |senior consultant)\b", 70.0),
-    (r"\bconsultant\b", 65.0),
-    (r"\bassociate consultant\b", 45.0),
-    (r"\b(senior software engineer |software engineer)\b", 45.0),
-]
+_LEVEL_BY_LOWER_TITLE: dict[str, int] = {title.lower(): level for title, level in TITLE_TO_LEVEL.items()}
+
+# One rate per canonical org level (app.engines.role_hierarchy) -- every title at the
+# same level bills the same, regardless of which naming family (UK/USA vs India) it
+# belongs to. Reuses today's real numbers at every level except Senior Software
+# Engineer, which used to share a band with plain Software Engineer (both $45) despite
+# being a different real level -- it now matches its true peer, Senior Associate
+# Consultant, at $85.
+LEVEL_RATES: dict[int, float] = {
+    1: 25.0,
+    2: 45.0,
+    3: 85.0,
+    4: 65.0,
+    5: 70.0,
+    6: 110.0,
+    7: 145.0,
+    8: 190.0,
+    9: 240.0,
+}
 
 NON_BILLABLE_RATE = None
 
@@ -25,13 +31,13 @@ _NON_BILLABLE_TITLES = {
 def get_hourly_rate(job_name) -> float | None:
     if not isinstance(job_name, str) or not job_name.strip():
         return NON_BILLABLE_RATE
-    text = job_name.lower().strip()
+    text = job_name.strip().lower()
     if text in _NON_BILLABLE_TITLES:
         return NON_BILLABLE_RATE
-    for pattern, rate in _BANDS:
-        if re.search(pattern, text):
-            return rate
-    return NON_BILLABLE_RATE
+    level = _LEVEL_BY_LOWER_TITLE.get(text)
+    if level is None:
+        return NON_BILLABLE_RATE
+    return LEVEL_RATES.get(level)
 
 def get_rate_card(job_names: list[str]) -> list[dict]:
     seen = sorted(set(j for j in job_names if j))

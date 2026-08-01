@@ -4,7 +4,7 @@ import pandas as pd
 
 from app.core.adapter import get_adapter
 from app.engines import availability_hold, embedding_engine, experience_engine, scoring
-from app.engines.designation_ladder import LEADERSHIP_DESIGNATIONS, adjacent_designations
+from app.engines.role_hierarchy import LEADERSHIP_DESIGNATIONS, adjacent_designations, same_level_peers
 from app.engines.employee_coe import get_employee_primary_coe_map
 from app.engines.revenue_engine import (
     DELIVERY_TEMPLATE,
@@ -27,7 +27,6 @@ from app.services.recommendation_service import availability_as_of, get_recommen
 
 STANDARD_MONTHLY_HOURS = 160
 MIN_AVAILABLE_PCT_TO_SURFACE = 100 - UNDER_UTILIZED_THRESHOLD
-RECOMMENDED_DATE_SEARCH_DAYS = 180
 
 # Same 5-parameter ranking flexibility as get_recommendations (see
 # scoring.composite_score_v2 / BASE_WEIGHTS) -- one selection for the whole
@@ -147,71 +146,6 @@ def _score_candidates(
         candidates.sort(key=lambda c: -c.get("composite_score", 0))
     else:
         candidates.sort(key=lambda c: -c["skill_score"])
-
-def _find_recommended_start_date(
-    designation: str,
-    requested_date: pd.Timestamp,
-    needed_headcount: int,
-    employees: pd.DataFrame,
-    allocations: pd.DataFrame,
-    required_skills: list[str],
-    skill_index: dict | None,
-    competency_index: dict | None = None,
-    emp_embedding_index: dict | None = None,
-    include: dict[str, bool] | None = None,
-    experience_profiles: dict | None = None,
-    requested_tech_coes: list[str] | None = None,
-    # Same date_key-scoped claimed-employee set as get_new_project_forecast's
-    # main loop -- someone already committed to a concurrent role at this same
-    # requested_date shouldn't also be projected as this role's future fill.
-    claimed_ids: set[str] | None = None,
-) -> dict | None:
-    claimed_ids = claimed_ids or set()
-    ladder = [designation] + [d for d, _ in adjacent_designations(designation)]
-    relevant_ids = set(
-        employees[(employees["account_status"] == 1) & (employees["job_name"].isin(ladder))]["employee_id"]
-    )
-    window_end = requested_date + pd.Timedelta(days=RECOMMENDED_DATE_SEARCH_DAYS)
-    future_ends = (
-        allocations[
-            allocations["employee_id"].isin(relevant_ids)
-            & (allocations["is_allocation_active"] == 1)
-            & (allocations["allocated_end_date"] > requested_date)
-            & (allocations["allocated_end_date"] <= window_end)
-        ]["allocated_end_date"]
-        .dropna()
-        .sort_values()
-        .unique()
-    )
-
-    for end_date in future_ends:
-        check_date = pd.Timestamp(end_date) + pd.Timedelta(days=1)
-        fill: list[dict] = []
-        for d in ladder:
-            pool = [c for c in get_redeploy_candidates_as_of(d, check_date, employees, allocations) if c["employee_id"] not in claimed_ids]
-            _score_candidates(
-                pool, required_skills, skill_index, competency_index, emp_embedding_index,
-                include=include, experience_profiles=experience_profiles, requested_tech_coes=requested_tech_coes,
-            )
-            if d != designation:
-                if skill_index is None:
-                    continue
-                if designation not in LEADERSHIP_DESIGNATIONS:
-                    pool = [c for c in pool if c.get("skill_score", 0) >= scoring.ELIGIBLE_THRESHOLD]
-            for c in pool:
-                c["source_designation"] = d
-                c["level_offset"] = 0 if d == designation else next(o for dd, o in adjacent_designations(designation) if dd == d)
-            fill.extend(pool)
-        if len(fill) >= needed_headcount:
-            return {
-                "recommended_start_date": check_date.strftime("%Y-%m-%d"),
-                "proof": (
-                    f"{len(fill)} of {needed_headcount} needed {designation} role(s) covered by real allocations "
-                    f"ending {pd.Timestamp(end_date).strftime('%Y-%m-%d')} or earlier."
-                ),
-                "available_then": fill,
-            }
-    return None
 
 def _resolve_role_mix(spec: dict) -> dict:
     if spec.get("role_mix_overrides"):
@@ -365,27 +299,36 @@ def get_new_project_forecast(specs: list[dict], include: dict[str, bool] | None 
         # own MIN_AVAILABLE_PCT_TO_SURFACE gate, which is the check that's
         # supposed to catch exactly that case.
         emp_df, alloc_df = _ensure_employee_tables()
-        candidates = [
-            c for c in get_redeploy_candidates_as_of(designation, pd.to_datetime(date_key), emp_df, alloc_df)
-            if c["employee_id"] not in claimed
-        ]
+        # Holding a same-level cross-family title (e.g. "Senior Consultant" for a
+        # "Solutions Consultant" request) is the same real coverage signal as
+        # holding the literal requested title -- these are the same org level,
+        # just named differently in the UK/USA vs India naming conventions.
+        same_level_titles = [designation, *same_level_peers(designation)]
+        seen_ids: set[str] = set()
+        candidates = []
+        for title in same_level_titles:
+            for c in get_redeploy_candidates_as_of(title, pd.to_datetime(date_key), emp_df, alloc_df):
+                if c["employee_id"] in claimed or c["employee_id"] in seen_ids:
+                    continue
+                seen_ids.add(c["employee_id"])
+                candidates.append(c)
         _score_candidates(
             candidates, all_required_skills, skill_index, competency_index, emp_embedding_index,
             include=include, experience_profiles=experience_profiles, requested_tech_coes=requested_tech_coes,
         )
         _tag_coe(candidates, employee_coe_map)
 
-        # Holding the exact designation only means availability, not skill fit -- without this
-        # gate, asking for a skill nobody has still reports every free person in that title as
-        # "covered" (shortfall 0), because shortfall_at_level used to come from raw headcount.
-        # The adjacent-level fallback below already requires ELIGIBLE_THRESHOLD; same-level
-        # candidates need the identical check for the same reason. Leadership designations
-        # (Manager/Principal/Associate Partner/Partner) are exempt -- they're oversight roles,
-        # not hands-on ICs, so a missing technical skill shouldn't read as "need to hire one".
-        if skill_index is not None and designation not in LEADERSHIP_DESIGNATIONS:
-            qualifying_candidates = [c for c in candidates if c.get("skill_score", 0) >= scoring.ELIGIBLE_THRESHOLD]
-        else:
-            qualifying_candidates = candidates
+        # Holding the exact requested designation is itself the real headcount-coverage
+        # signal here -- a real gap on one specific required skill is trainable, not a
+        # hire signal, for a headcount forecast (unlike picking one best-fit candidate,
+        # where the Recommendations engine's own skill gate still applies). skill_score
+        # still drives composite ranking/sort order via _score_candidates, so a stronger
+        # skill match is still surfaced first -- it's just no longer a hard in/out gate
+        # for whether someone counts toward the need. (A prior version gated this on
+        # skill_score >= ELIGIBLE_THRESHOLD, splitting same-title candidates into a
+        # confusing "qualifies" vs "holds the title but doesn't meet the skillset"
+        # display -- removed per explicit product decision.)
+        qualifying_candidates = candidates
 
         # Tag every candidate with whether it's actually in qualifying_candidates
         # (not re-derivable from skill_score alone client-side -- leadership
@@ -463,7 +406,13 @@ def get_new_project_forecast(specs: list[dict], include: dict[str, bool] | None 
         if all_required_skills:
             prefetch = _ensure_cross_role_prefetch()
             cross_role_result = get_recommendations(
-                skillset_text=" | ".join(all_required_skills),
+                # Comma-separated -- scoring.tokenize_skillset splits on "," / ";" only,
+                # never on " | ". Joining with " | " (a prior bug) made every requested
+                # skill collapse into one giant undividable phrase, so missing_skills
+                # came back permanently empty and matched_skills was always one blob
+                # covering all of them -- no real per-skill signal ever reached the
+                # Cross-Role Match / Trainable tabs.
+                skillset_text=", ".join(all_required_skills),
                 likely_start_date=date_key,
                 requested_pct_raw="100",
                 top_n=200,
@@ -479,22 +428,6 @@ def get_new_project_forecast(specs: list[dict], include: dict[str, bool] | None 
                     training_candidates.append(c)
 
         shortfall = shortfall_after_adjacent
-
-        recommended_start_date = None
-        recommended_start_date_proof = None
-        recommended_available_then: list[dict] = []
-        if shortfall > 0:
-            emp_df, alloc_df = _ensure_employee_tables()
-            found = _find_recommended_start_date(
-                designation, pd.to_datetime(date_key), needed_headcount, emp_df, alloc_df, all_required_skills, skill_index, competency_index, emp_embedding_index,
-                include=include, experience_profiles=experience_profiles, requested_tech_coes=requested_tech_coes,
-                claimed_ids=claimed,
-            )
-            if found:
-                recommended_start_date = found["recommended_start_date"]
-                recommended_start_date_proof = found["proof"]
-                recommended_available_then = found["available_then"]
-                _tag_coe(recommended_available_then, employee_coe_map)
 
         hourly_rate = get_hourly_rate(designation)
         shortfall_value_usd = round(shortfall * (hourly_rate or 0) * STANDARD_MONTHLY_HOURS, 0)
@@ -514,15 +447,12 @@ def get_new_project_forecast(specs: list[dict], include: dict[str, bool] | None 
                 "adjacent_fill_count": adjacent_fill_count,
                 "cross_role_candidates": cross_role_candidates,
                 "cross_role_match_count": len(cross_role_candidates),
-                "training_candidates": training_candidates[:10],
+                "training_candidates": training_candidates,
                 "shortfall": shortfall,
                 "shortfall_value_usd": shortfall_value_usd,
                 "full_role_monthly_value_usd": full_role_monthly_value_usd,
                 "achievable_monthly_value_usd": achievable_monthly_value_usd,
                 "hire_signal": shortfall > 0,
-                "recommended_start_date": recommended_start_date,
-                "recommended_start_date_proof": recommended_start_date_proof,
-                "recommended_available_then": recommended_available_then,
             }
         )
 

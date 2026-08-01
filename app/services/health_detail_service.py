@@ -12,7 +12,6 @@ from app.services.recommendation_service import (
     _coe_affinity_rank,
 )
 from app.services.health_monitor_service import (
-     OVERRUN_DAYS_THRESHOLD,
      DEMO_STATIC_DEVOPS_PROJECT_CODE,
      EXTENSION_DAILY_HOURS,
      count_working_days,
@@ -92,33 +91,12 @@ def get_project_health_detail(project_code: str) -> dict:
     project_end = project_row["project_end_date"]
     # effective_end is the project's real current commitment (official end date, or
     # the latest active billable allocation end date if that's later -- see
-    # health_monitor_service.get_health_report). "Overrunning" and the DevOps
-    # is-overdue/prediction math are measured against THIS, not the stale original
-    # project_end_date, since the client's actual extension process is to push out
-    # allocation end dates, not to fill in a separate extended-end-date field.
+    # health_monitor_service.get_health_report). The DevOps is-overdue/prediction
+    # math and the Extension outlook estimate are measured against THIS, not the
+    # stale original project_end_date, since the client's actual extension process
+    # is to push out allocation end dates, not to fill in a separate
+    # extended-end-date field.
     effective_end = pd.Timestamp(summary["effective_end_date"]) if summary.get("effective_end_date") else project_end
-    overrun_rows = (
-        proj_allocs[proj_allocs["allocated_end_date"] > effective_end]
-        if pd.notna(effective_end)
-        else proj_allocs.iloc[0:0]
-    )
-    overrun_proof = {
-        "fired": "overrunning" in root_causes,
-        "threshold_days": OVERRUN_DAYS_THRESHOLD,
-        "overrun_days": summary["overrun_days"],
-        "project_end_date": _date_str(effective_end),
-        "qualifying_allocations": [
-            {
-                "employee_id": r["employee_id"],
-                "job_name": r.get("job_name") if pd.notna(r.get("job_name")) else None,
-                "resourcing_status": r["resourcing_status"],
-                "allocated_end_date": _date_str(r["allocated_end_date"]),
-                "days_past_project_end": int((r["allocated_end_date"] - effective_end).days),
-                "is_allocation_active": bool(r["is_allocation_active"]),
-            }
-            for _, r in overrun_rows.sort_values("allocated_end_date", ascending=False).iterrows()
-        ],
-    }
 
     # Active allocations only -- monthly_unbilled_value_usd is a CURRENT, ongoing cost
     # figure, so its proof rows must match (a historical/ended shadow allocation isn't
@@ -208,7 +186,7 @@ def get_project_health_detail(project_code: str) -> dict:
     ]
 
     extension_revenue_proof = {
-        "fired": "overrunning" in root_causes or "devops_extension_risk" in root_causes,
+        "fired": "devops_extension_risk" in root_causes,
         "daily_hours_basis": EXTENSION_DAILY_HOURS,
         "extension_unbilled_value_usd": summary["extension_unbilled_value_usd"],
         "team_daily_extension_cost_usd": summary["team_daily_extension_cost_usd"],
@@ -429,7 +407,6 @@ def get_project_health_detail(project_code: str) -> dict:
         "is_escalation_risk": summary.get("is_escalation_risk", False),
         "is_pulse_risk": summary.get("is_pulse_risk", False),
         "pulse": get_project_pulse_detail(project_code),
-        "overrun": overrun_proof,
         "shadow_heavy": shadow_proof,
          "extension_revenue": extension_revenue_proof,
         "high_churn": churn_proof,
@@ -535,12 +512,13 @@ def _estimate_extension(
         "predicted_extension_end_date": predicted_extension_end_date,
         "projected_extension_duration_label": duration_label,
         "note": (
-            "planned_extension_days is a fact: active billable allocations already scheduled the "
-            "project through currently_resourced_through_date, beyond the original plan -- informational, "
-            "not a risk. committed_overrun_days is a fact too, but the risky kind: today is already past "
-            "even that currently-resourced end date with nothing further booked. projected_additional_days/"
-            "weeks is an estimate based on DevOps ticket effort and the team's current daily capacity, and "
-            "assumes no new scope and a stable daily rate -- treat it as a planning signal, not a guarantee."
+            "planned_extension_days and committed_overrun_days are informational facts about current "
+            "resourcing (how far active allocations already run past the original plan, and how many days "
+            "have passed since the last currently-booked allocation), not risk signals by themselves -- an "
+            "allocation legitimately running later than the original plan doesn't mean anything is wrong. "
+            "projected_additional_days/weeks is the real forward-looking risk signal here: an estimate based "
+            "on DevOps ticket effort and the team's current daily capacity, assuming no new scope and a "
+            "stable daily rate -- treat it as a planning signal, not a guarantee."
         ),
     }
 

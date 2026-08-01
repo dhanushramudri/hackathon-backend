@@ -76,7 +76,6 @@ def _wrap_jman_template(title: str, intro: str, sections_html: str) -> str:
 # Mirrors frontend/lib/utils.ts's ROOT_CAUSE_LABEL so the email reads the same
 # human-readable causes the Health page already shows, not raw snake_case codes.
 ROOT_CAUSE_LABEL = {
-    "overrunning": "Overrunning",
     "shadow_heavy": "Shadow-heavy",
     "high_churn": "High churn",
     "understaffed": "Understaffed",

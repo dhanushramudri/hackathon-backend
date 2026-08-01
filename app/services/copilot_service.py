@@ -10,7 +10,7 @@ from app.ai.providers.base import QuotaExceededError
 from app.core.adapter import get_adapter
 from app.core.db import ReadOnlyQueryError, get_schema_description, run_readonly_query
 from app.engines.coe_skill_engine import derive_skills_for_coes
-from app.engines.designation_ladder import adjacent_designations
+from app.engines.role_hierarchy import adjacent_designations
 from app.engines.role_mix_engine import (
     get_role_mix,
     get_role_mix_by_category,
@@ -198,7 +198,7 @@ TOOLS = [
     },
     {
         "name": "get_health_report",
-        "description": "Returns every active project's derived risk score, risk band (high/medium/low), root-cause tags (overrunning, shadow_heavy, high_churn), and real WSR signal where available.",
+        "description": "Returns every active project's derived risk score, risk band (high/medium/low), root-cause tags (shadow_heavy, high_churn, devops_extension_risk), and real WSR signal where available.",
         "parameters": {"type": "object", "properties": {}},
     },
     {
@@ -283,7 +283,7 @@ TOOLS = [
     },
     {
         "name": "get_project_health_detail",
-        "description": "The full real-rows proof behind one project's fired risk root causes (overrun, shadow-heavy, high churn, understaffed, overtime risk, effort spike, and the 3 WSR signals). Requires a real project_code -- call get_health_report first if you don't already have one from this conversation.",
+        "description": "The full real-rows proof behind one project's fired risk root causes (shadow-heavy, high churn, understaffed, overtime risk, effort spike, DevOps extension risk, and the 3 WSR signals). Requires a real project_code -- call get_health_report first if you don't already have one from this conversation.",
         "parameters": {
             "type": "object",
             "properties": {"project_code": {"type": "string"}},
@@ -638,7 +638,7 @@ def _truncate_for_llm(name: str, result):
                 baseline = sum(w["hours"] for w in baseline_weeks) / len(baseline_weeks)
                 spike["latest_week_hours"] = round(latest, 1)
                 spike["baseline_avg_weekly_hours"] = round(baseline, 1)
-        for section in ("overrun", "shadow_heavy", "high_churn", "overtime_risk", "effort_spike", "wsr"):
+        for section in ("shadow_heavy", "high_churn", "overtime_risk", "effort_spike", "wsr"):
             if isinstance(trimmed.get(section), dict):
                 trimmed[section] = {
                     k: v for k, v in trimmed[section].items()
