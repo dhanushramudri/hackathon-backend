@@ -4,18 +4,38 @@ import pandas as pd
 from app.core.adapter import get_adapter
 
 DND_TACTICAL_BUILD = "D&D Tactical Build"
+DELIVERY_STANDARD_TEAM = "Delivery Project - Standard Team"
 
 _DND_TEMPLATE = {
     "Principal": 0.25,
-    "Technical Architect": 0.25,
+    "Technical Solutions Architect": 0.25,
     "Associate Consultant": 1.0,
     "Consultant": 0.5,
-    "Solution Consultant": 0.5,
+    "Senior Solutions Consultant": 0.5,
     "Senior Software Engineer": 1.0,
+}
+
+# Real RM-provided team template for a typical DELIVERY project (~5 weeks,
+# ~$35k revenue -- see app/engines/revenue_engine.py's DELIVERY_TEMPLATE for
+# the duration/revenue side of this same template). 2 engineer seats use
+# Senior Software Engineer as the canonical designation; Software Engineer
+# fills either seat via the existing adjacent-title fallback in
+# demand_forecast_service.py. Same for Consultant/Senior Consultant.
+_DELIVERY_TEMPLATE = {
+    "Senior Software Engineer": 2.0,
+    "Solutions Enabler": 1.0,
+    "Consultant": 1.0,
+}
+
+# docx-given (not derived-from-real-data) templates, keyed by their DOCX_CATEGORY_MAP name.
+_DOCX_TEMPLATES: dict[str, dict[str, float]] = {
+    DND_TACTICAL_BUILD: _DND_TEMPLATE,
+    DELIVERY_STANDARD_TEAM: _DELIVERY_TEMPLATE,
 }
 
 DOCX_CATEGORY_MAP: dict[str, dict] = {
     DND_TACTICAL_BUILD: {"docx_given": True},
+    DELIVERY_STANDARD_TEAM: {"docx_given": True},
     "Build Phase - Tactical Build": {"type_of_project": "Client Project"},
     "Build Phase - Enterprise Platform Build": {"type_of_project": "Client Project"},
     "Build Phase - Data Platform Build": {"type_of_project": "Client Project", "tech_coe_any": ["Data Engineering"]},
@@ -110,10 +130,15 @@ def _aggregate_role_mix_detailed(group: pd.DataFrame) -> dict:
     }
 
 def _docx_template_to_roles(template: dict[str, float]) -> list[dict]:
-    return [
-        {"designation": d, "headcount": 1, "typical_pct": round(fte * 100, 1), "prevalence_pct": None, "common": True}
-        for d, fte in template.items()
-    ]
+    # fte <= 1.0 is one person at that %; fte > 1.0 (e.g. "2 engineer seats
+    # @ 100% each" = 2.0) needs to split across that many people instead of
+    # reporting it as one person at 200%.
+    roles = []
+    for d, fte in template.items():
+        headcount = max(1, round(fte)) if fte >= 1.0 else 1
+        typical_pct = round(fte / headcount * 100, 1)
+        roles.append({"designation": d, "headcount": headcount, "typical_pct": typical_pct, "prevalence_pct": None, "common": True})
+    return roles
 
 def build_role_mix_templates() -> dict[tuple[str, str], dict]:
     merged = _real_completed_merged()
@@ -127,7 +152,8 @@ def get_role_mix_by_category(category: str) -> dict:
     if spec is None:
         return {"role_mix": {}, "roles": [], "sample_size": 0, "source": "unknown_category"}
     if spec.get("docx_given"):
-        return {"role_mix": _DND_TEMPLATE, "roles": _docx_template_to_roles(_DND_TEMPLATE), "sample_size": None, "source": "docx_given"}
+        template = _DOCX_TEMPLATES[category]
+        return {"role_mix": template, "roles": _docx_template_to_roles(template), "sample_size": None, "source": "docx_given"}
 
     merged = _real_completed_merged()
     mask = pd.Series(True, index=merged.index)
@@ -222,7 +248,10 @@ def get_role_mix(type_of_project: str, tech_coe: str | None = None, templates: d
 
 def list_role_mix_templates() -> list[dict]:
     templates = build_role_mix_templates()
-    out = [{"type_of_project": DND_TACTICAL_BUILD, "tech_coe": None, **{"role_mix": _DND_TEMPLATE, "sample_size": None, "source": "docx_given"}}]
+    out = [
+        {"type_of_project": name, "tech_coe": None, "role_mix": template, "sample_size": None, "source": "docx_given"}
+        for name, template in _DOCX_TEMPLATES.items()
+    ]
     for (type_of_project, coe), v in templates.items():
         out.append({"type_of_project": type_of_project, "tech_coe": coe, **v})
     return out

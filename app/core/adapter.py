@@ -50,6 +50,9 @@ class DataSourceAdapter(ABC):
     @abstractmethod
     def get_weekly_pulse(self) -> pd.DataFrame: ...
 
+    @abstractmethod
+    def get_hr_feedback(self) -> pd.DataFrame: ...
+
 class LocalAdapter(DataSourceAdapter):
 
     def _query(self, table: str) -> pd.DataFrame:
@@ -105,6 +108,9 @@ class LocalAdapter(DataSourceAdapter):
 
     def get_weekly_pulse(self) -> pd.DataFrame:
         return self._query("weekly_pulse")
+
+    def get_hr_feedback(self) -> pd.DataFrame:
+        return self._query("hr_feedback")
 
 class JinApiAdapter(DataSourceAdapter):
 

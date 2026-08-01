@@ -11,7 +11,9 @@ CHANGES vs original (search for  ← NEW  to find every addition):
 All other logic is UNCHANGED from the original.
 """
 
-import os 
+import os
+import threading
+import time
 import numpy as np                                                                     # ← needed for AZURE_DEVOPS_PAT check
 import math
 import pandas as pd
@@ -68,9 +70,12 @@ WSR_LONG_TERM_MIN_REPORTS = WSR_BASELINE_REPORTS + WSR_TREND_RECENT_REPORTS
 ROOT_CAUSE_CATEGORY: dict[str, str] = {
     "overrunning": "extension",
     "devops_extension_risk": "extension",
-    "wsr_deteriorating": "escalation",
-    "wsr_critical": "escalation",
-    "wsr_long_term_decline": "escalation",
+    # Deteriorating/critical/long-term-decline were 3 separate root causes
+    # over the exact same WSR severity series -- one bad recent stretch could
+    # fire all 3 at once and triple-count toward risk_score. Collapsed into
+    # one "wsr_risk" cause; the 3 underlying signals are still surfaced
+    # individually in health_detail_service's wsr proof for explanation.
+    "wsr_risk": "escalation",
     "effort_spike": "escalation",
     "shadow_heavy": "financial",
     "understaffed": "staffing",
@@ -241,15 +246,69 @@ def _projected_additional_extension_days(devops_risk: dict) -> tuple[float | Non
     confidence = "low" if gap_ratio > 0.3 else "medium"
     return projected_days, confidence
 
+# get_health_report() is expensive (loops every ACTIVE project, and its
+# DevOps extension-risk signal makes live Azure DevOps API calls -- ~20-30s
+# cold, dwarfing everything else in any code path that touches it, including
+# Forecast's free-pool lookup via availability_hold.get_employee_hold_flags,
+# which otherwise recomputed this from scratch on every single forecast run).
+# No arguments, called from ~8 unrelated places (health router, copilot,
+# digest, wellbeing, free-pool hold flags) -- a short TTL cache means rapid
+# successive calls (e.g. one page load pulling health + free pool + hold
+# flags) share one computation instead of paying the ~20-30s cost each time,
+# while still refreshing often enough for a live ops dashboard.
+_HEALTH_REPORT_CACHE_TTL_SECONDS = 120
+_health_report_cache: dict = {"report": None, "computed_at": 0.0}
+_health_report_cache_lock = threading.Lock()
+
+
 def get_health_report() -> list[dict]:
+    now = time.monotonic()
+    if _health_report_cache["report"] is not None and (now - _health_report_cache["computed_at"]) < _HEALTH_REPORT_CACHE_TTL_SECONDS:
+        return _health_report_cache["report"]
+    with _health_report_cache_lock:
+        now = time.monotonic()
+        if _health_report_cache["report"] is not None and (now - _health_report_cache["computed_at"]) < _HEALTH_REPORT_CACHE_TTL_SECONDS:
+            return _health_report_cache["report"]
+        report = _compute_health_report()
+        _health_report_cache["report"] = report
+        _health_report_cache["computed_at"] = time.monotonic()
+        return report
+
+
+def _compute_health_report() -> list[dict]:
     adapter = get_adapter()
     projects = adapter.get_projects()
+    cohort = projects[projects["project_status"] == "ACTIVE"].copy()
+    return _compute_health_rows(cohort)
+
+
+def get_project_summary_row(project_code: str) -> dict | None:
+    """Real per-project health metrics for ANY project, regardless of status --
+    lets the detail modal's tabs (Overview/Staffing/Overtime/WSR/DevOps) work
+    for every project, not only the ACTIVE cohort get_health_report() tracks
+    for risk scoring (the Health list page, dashboard, and email digest stay
+    ACTIVE-only, unchanged -- this is a separate, single-project lookup).
+    Reuses the exact same formulas and the real ACTIVE-cohort churn threshold
+    for comparison, so a non-active project's root causes come out of real
+    data -- if it doesn't warrant a flag, none fires, nothing is invented."""
+    cached = next((r for r in get_health_report() if r["project_code"] == project_code), None)
+    if cached is not None:
+        return cached
+    projects = get_adapter().get_projects()
+    match = projects[projects["project_code"] == project_code].copy()
+    if match.empty:
+        return None
+    rows = _compute_health_rows(match, churn_p75_override=churn_p75_threshold())
+    return rows[0] if rows else None
+
+
+def _compute_health_rows(active: pd.DataFrame, churn_p75_override: float | None = None) -> list[dict]:
+    adapter = get_adapter()
     allocations = adapter.get_allocations()
     employees = adapter.get_employees()
     wsr = adapter.get_wsr_reports()
 
-    active = projects[projects["project_status"] == "ACTIVE"].copy()
-
+    active = active.copy()
     role_mix_templates = build_role_mix_templates()
 
     alloc_with_rate = allocations.merge(employees[["employee_id", "job_name"]], on="employee_id", how="left")
@@ -264,14 +323,22 @@ def get_health_report() -> list[dict]:
     # Each row's own effective end date is its RM-entered extended_end_date when set
     # (explicit, gated on the project already being extended -- see
     # allocation_report_service.extend_allocation_end_date), else its allocated_end_date.
-    billable_active_allocs = allocations[
-        (allocations["is_allocation_active"] == 1)
-        & (~allocations["resourcing_status"].isin(["SHADOW", "UNBILLED"]))
-    ].copy()
-    billable_active_allocs["_effective_alloc_end"] = billable_active_allocs["extended_end_date"].where(
-        billable_active_allocs["extended_end_date"].notna(), billable_active_allocs["allocated_end_date"]
+    #
+    # Deliberately NOT filtered to is_allocation_active==1 or billable-only: this is
+    # "the latest end date this project has EVER had recorded" (any status, any
+    # time), used only to answer "how far out is this project's resourcing data
+    # real", not "how much revenue is currently billable" (that's shadow_share/
+    # unbilled_value below, which do keep their own status filters). Restricting to
+    # currently-active rows was a real bug -- the moment a booked tail (even a
+    # billable one, and especially an UNBILLED wind-down tail) itself lapses as
+    # today advances, it silently stopped counting here and effective_end_date
+    # snapped back to an earlier, stale date -- as if that later activity never
+    # happened -- inflating overrun_days well beyond the real gap.
+    all_allocs_with_end = allocations.copy()
+    all_allocs_with_end["_effective_alloc_end"] = all_allocs_with_end["extended_end_date"].where(
+        all_allocs_with_end["extended_end_date"].notna(), all_allocs_with_end["allocated_end_date"]
     )
-    max_alloc_end = billable_active_allocs.groupby("project_id")["_effective_alloc_end"].max().rename("max_alloc_end")
+    max_alloc_end = all_allocs_with_end.groupby("project_id")["_effective_alloc_end"].max().rename("max_alloc_end")
     shadow_share = (
         allocations.assign(is_shadow_unbilled=allocations["resourcing_status"].isin(["SHADOW", "UNBILLED"]))
         .groupby("project_id")["is_shadow_unbilled"]
@@ -353,16 +420,21 @@ def get_health_report() -> list[dict]:
 
     duration_days = (active["project_end_date"] - active["project_start_date"]).dt.days.clip(lower=1)
     active["churn_per_month"] = (active["n_employees"] / (duration_days / 30)).round(2)
-    churn_p75 = active["churn_per_month"].quantile(0.75)
+    # For the real ACTIVE cohort this IS the p75 threshold; for a single
+    # non-active project scored on its own (get_project_summary_row), a
+    # quantile of one value is meaningless -- the real cross-project
+    # threshold is passed in instead so the comparison stays honest.
+    churn_p75 = churn_p75_override if churn_p75_override is not None else active["churn_per_month"].quantile(0.75)
 
     # effective_end_date is the project's real current commitment, the latest of:
     #   1. project_end_date -- the original plan
     #   2. extended_end_date -- an explicit, RM-entered project extension (see
     #      allocation_report_service.extend_project_end_date)
-    #   3. max_alloc_end -- the latest active billable allocation's own effective end
-    #      (allocation-level extended_end_date if set, else allocated_end_date),
-    #      which catches extensions already reflected in resourcing before this
-    #      explicit-extension feature existed.
+    #   3. max_alloc_end -- the latest end date ANY allocation on this project has
+    #      ever recorded (allocation-level extended_end_date if set, else
+    #      allocated_end_date), regardless of status or whether it's still active
+    #      today -- catches extensions/wind-down tails already reflected in
+    #      resourcing before this explicit-extension feature existed.
     # planned_extension_days is purely informational -- how far #2/#3 already
     # pushed past the original plan, not a risk signal on its own.
     def _row_max(a: pd.Series, b: pd.Series) -> pd.Series:
@@ -509,12 +581,8 @@ def get_health_report() -> list[dict]:
             root_causes.append("overtime_risk")
         if is_effort_spike:
             root_causes.append("effort_spike")
-        if project_wsr_trend == "deteriorating":
-            root_causes.append("wsr_deteriorating")
-        if is_wsr_critical:
-            root_causes.append("wsr_critical")
-        if is_wsr_long_term_decline:
-            root_causes.append("wsr_long_term_decline")
+        if project_wsr_trend == "deteriorating" or is_wsr_critical or is_wsr_long_term_decline:
+            root_causes.append("wsr_risk")
         if is_devops_extension_risk:                                          # ← NEW
             root_causes.append("devops_extension_risk")                       # ← NEW
         if bool(row.get("is_pulse_risk")):

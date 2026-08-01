@@ -6,9 +6,35 @@ Produces three CSVs under data/HeadcountPrediction/:
   - notice_period_cohort.csv      (one row per employee per month while under notice)
   - weekly_pulse_monthly_agg.csv  (24 rows, one per month)
 
-This is 100% synthetic — no real employee/project/financial data is used or
-referenced. It exists to prototype the Headcount Prediction feature's data
-pipeline before real historical data is available.
+This started as 100% synthetic data and is now PARTIALLY GROUNDED in real
+reported figures where they exist (see "REAL DATA GROUNDING" below) — no
+real per-employee/per-project rows are used (those stay synthetic), but the
+company-wide revenue, EBITDA margin, and hiring totals/timing are calibrated
+to real JMAN reporting decks (FY26 Global Townhall P&L, "Total Global
+Hiring" deck) rather than pure random generation.
+
+REAL DATA GROUNDING (added after the initial synthetic build):
+  - Revenue (REAL_LTM_REVENUE_GBP_000) and Adj. EBITDA margin
+    (REAL_EBITDA_MARGIN_PCT): real trailing-12-month figures reported for
+    2025-05 through 2026-05 (13 months), fitted with a quadratic trend and
+    extrapolated for the months outside that real range. The monthly
+    "level" is the real LTM figure / 12 (a run-rate proxy) with the existing
+    seasonal shape applied on top — this reproduces the real GROWTH TREND
+    and SCALE faithfully, but is NOT an exact deconvolution of the reported
+    trailing-12-month sums back into individual months (that's
+    under-determined from a 13-point LTM series alone). Currency is real
+    GBP, not USD — the "revenue_usd_*" field names are a naming artifact
+    from before this grounding and are not renamed here to avoid touching
+    the ~15 other files that already reference them; the frontend labels
+    these amounts with "£".
+  - Hiring (GROWTH_PHASE_MULTIPLIER, FRESHER_BATCH): real FY26 total of 330
+    new joiners (295 already joined as of May-26 + 35 signed offers through
+    Aug-26), including one real one-time batch of 144 Chennai freshers
+    called out explicitly on the hiring deck. See the comment above
+    build_hr_flow() for exactly how this is applied.
+  - What's still fully synthetic: individual employee/project rows, the
+    Feb-Mar seasonal peak / Dec dip shape, the Nov'24-Jan'25 "new client"
+    shock, pulse survey scores, and anything not listed above.
 
 ASSUMPTIONS RESOLVED (see plan's "Open questions" — proceeding per the user's
 instruction to fill any gap with dummy data rather than block on these):
@@ -91,15 +117,42 @@ CLIENT_LOCATION_SHARE = {"chennai": 0.55, "uk": 0.25, "usa": 0.10, "other": 0.10
 # Real UK bank-holiday counts per calendar month (same every year, approx.)
 UK_HOLIDAYS_BY_MONTH = {1: 1, 2: 0, 3: 0, 4: 2, 5: 2, 6: 0, 7: 0, 8: 1, 9: 0, 10: 0, 11: 0, 12: 2}
 
-RATE_PER_FTE_MONTH_USD = {
-    # Blended $/FTE/month per COE, derived from rate_card_service.py bands
-    # (AI/ML and Full Stack skew to higher-band roles; BI/Reporting and
-    # TechOps skew to mid/lower bands) at ~160h/month.
-    "data_engineering": 10_400, "bi_reporting": 9_600, "ai_ml": 12_800,
-    "full_stack": 11_200, "techops": 8_800,
+STANDARD_MONTHLY_HOURS = 160
+
+# ── Real financial grounding (JMAN FY26 Global Townhall, "May 26 results (M9)"
+# deck + "Last 12-month results" slide) ─────────────────────────────────────
+# Reported trailing-12-month (LTM) revenue and Adj. EBITDA margin, £'000,
+# for the 13 months this data actually covers (2025-05 .. 2026-05). The
+# reported currency is GBP -- the "revenue_usd_*" field names below are a
+# naming artifact from before this data was grounded in real figures and are
+# NOT re-derived here; the frontend labels these amounts with "£", not "$".
+# Revenue/EBITDA outside this real window (2024-08..2025-04 and 2026-06..07)
+# is extrapolated from the same fitted trend (see _fit_and_extrapolate),
+# since no real reporting exists for those months.
+REAL_LTM_REVENUE_GBP_000 = {
+    "2025-05-01": 27290, "2025-06-01": 27895, "2025-07-01": 28960, "2025-08-01": 30099,
+    "2025-09-01": 31319, "2025-10-01": 32401, "2025-11-01": 33629, "2025-12-01": 34853,
+    "2026-01-01": 36351, "2026-02-01": 38101, "2026-03-01": 39531, "2026-04-01": 40962,
+    "2026-05-01": 42493,
+}
+REAL_EBITDA_MARGIN_PCT = {
+    "2025-05-01": 27.9, "2025-06-01": 27.1, "2025-07-01": 27.7, "2025-08-01": 29.2,
+    "2025-09-01": 30.8, "2025-10-01": 29.2, "2025-11-01": 28.8, "2025-12-01": 28.6,
+    "2026-01-01": 29.1, "2026-02-01": 29.5, "2026-03-01": 29.9, "2026-04-01": 29.9,
+    "2026-05-01": 29.8,
 }
 
-STANDARD_MONTHLY_HOURS = 160
+
+def _fit_and_extrapolate(anchors: dict[str, float]) -> np.ndarray:
+    """Fit a quadratic trend through real anchor points (keyed by month
+    string) against the MONTHS index, evaluated at every month in the
+    window -- extrapolating smoothly for months outside the anchors' real
+    date range instead of leaving them undefined."""
+    month_to_idx = {month_key(m): i for i, m in enumerate(MONTHS)}
+    xs = np.array([month_to_idx[k] for k in anchors if k in month_to_idx], dtype=float)
+    ys = np.array([v for k, v in anchors.items() if k in month_to_idx], dtype=float)
+    coeffs = np.polyfit(xs, ys, deg=2)
+    return np.polyval(coeffs, np.arange(N, dtype=float))
 
 
 # ── Seasonal shape ──────────────────────────────────────────────────────────
@@ -156,6 +209,35 @@ def month_key(ts: pd.Timestamp) -> str:
     return ts.strftime("%Y-%m-01")
 
 
+# ── Real hiring grounding (JMAN "Total Global Hiring" FY26 deck) ───────────
+# FY26 (Sept'25 onward): 330 total new joiners company-wide -- 295 already
+# joined as of the May-26 townhall (Chennai 204 / London 75 / New York 16)
+# plus 35 future joiners with signed offers through end of Aug-26
+# (Chennai 3 / London 22 / New York 10). This window runs 2024-08..2026-07,
+# so it only overlaps the FIRST 11 of those 12 real months (through Jul-26,
+# missing only the final Aug-26 offers-accepted month).
+# A single one-time batch of 144 Chennai freshers (grad-hire intake) is
+# called out explicitly on the slide, landing around Nov-25 -- separate from
+# the steady monthly flow, which (net of that batch) actually skews toward
+# London/New York, consistent with the deck's stated goal of growing those
+# two offices proportionally faster than Chennai.
+GROWTH_PHASE_START = pd.Timestamp("2025-09-01")
+GROWTH_PHASE_END = pd.Timestamp("2026-07-01")
+GROWTH_PHASE_MULTIPLIER = 1.22  # calibrated so growth-phase hires (excl. the fresher batch) average ~16/month over Sep'25-Jul'26, matching the real ~175 non-batch hires in that span
+# Real grad-hire cohorts onboard in staggered waves over a few months, not a
+# single-day event -- spread across Nov'25-Jan'26 rather than dumped into one
+# month (which would show as an implausible single-month headcount cliff).
+FRESHER_BATCH = {"months": ["2025-11-01", "2025-12-01", "2026-01-01"], "counts": [60, 50, 34]}
+# Regular (non-fresher-batch) hiring flow during the growth phase, derived
+# from the real deck: Chennai 207 / London 97 / New York 26 total FY26
+# joiners, minus the 144-person Chennai-only fresher batch, leaves ~62
+# Chennai / 97 London / 26 New York = 35%/51%/13% -- skewing toward
+# London/New York, consistent with the deck's stated growth targets. Outside
+# the growth phase, hires follow the existing headcount stock's location mix
+# (LOCATION_SHARE) instead.
+HIRES_LOCATION_SHARE = {"chennai": 0.354, "uk": 0.514, "usa": 0.132}
+
+
 # ── Bottom-up HR flow (hires/resignations -> headcount), not an independent
 # random headcount series -- keeps total_active_headcount internally
 # consistent with the hires/resignations columns instead of two unrelated
@@ -164,6 +246,11 @@ def build_hr_flow() -> dict[str, np.ndarray]:
     base_hires = 13.0
     base_resign = 8.4  # ~15% annualized attrition on a ~670-head base
 
+    growth_phase_mult = np.array([
+        GROWTH_PHASE_MULTIPLIER if GROWTH_PHASE_START <= m <= GROWTH_PHASE_END else 1.0
+        for m in MONTHS
+    ])
+
     hires = np.array([
         base_hires * HR_CYCLE_FACTOR.get(9 if m.month == 9 else m.month, 1.0) * is_shock_month(m)
         for m in MONTHS
@@ -171,7 +258,15 @@ def build_hr_flow() -> dict[str, np.ndarray]:
     # Small extra bump every September (grad-hire intake), independent of the
     # bi-annual promotion/resignation cycle.
     hires = np.array([h * (1.3 if m.month == 9 else 1.0) for h, m in zip(hires, MONTHS)])
+    hires = hires * growth_phase_mult
     hires = np.clip(add_noise(hires), 3, None)
+    hires_regular = hires.copy()  # pre-batch flow, used to split hires by location below
+    # Real Chennai fresher batch, added on top of the smooth flow in its real
+    # months (not smoothed into the average above).
+    month_to_idx = {month_key(m): i for i, m in enumerate(MONTHS)}
+    for mk, count in zip(FRESHER_BATCH["months"], FRESHER_BATCH["counts"]):
+        if mk in month_to_idx:
+            hires[month_to_idx[mk]] += count
 
     resign = np.array([base_resign * HR_CYCLE_FACTOR[m.month] for m in MONTHS], dtype=float)
     resign = np.clip(add_noise(resign), 2, None)
@@ -186,12 +281,55 @@ def build_hr_flow() -> dict[str, np.ndarray]:
     for i in range(1, N):
         headcount[i] = headcount[i - 1] + hires[i] - resign[i]
 
+    hires_by_location = split_hires_by_location(hires_regular, hires)
+
     return {
         "new_hires_total": np.round(hires).astype(int),
+        "new_hires_chennai": hires_by_location["chennai"],
+        "new_hires_uk": hires_by_location["uk"],
+        "new_hires_usa": hires_by_location["usa"],
         "resignations_total": np.round(resign).astype(int),
         "promotions_total": np.round(promotions).astype(int),
         "total_active_headcount": np.round(headcount).astype(int),
     }
+
+
+def split_hires_by_location(hires_regular: np.ndarray, hires_final: np.ndarray) -> dict[str, np.ndarray]:
+    """Split each month's hires into Chennai/UK/USA counts that sum EXACTLY to
+    that month's new_hires_total (largest-remainder rounding), using
+    HIRES_LOCATION_SHARE during the real growth phase (and the fresher batch,
+    100% Chennai, added on top) or the existing headcount LOCATION_SHARE
+    outside it."""
+    month_to_idx = {month_key(m): i for i, m in enumerate(MONTHS)}
+    fresher_by_idx = {month_to_idx[mk]: c for mk, c in zip(FRESHER_BATCH["months"], FRESHER_BATCH["counts"]) if mk in month_to_idx}
+
+    out = {loc: np.zeros(N) for loc in LOCATIONS}
+    for i, m in enumerate(MONTHS):
+        in_growth_phase = GROWTH_PHASE_START <= m <= GROWTH_PHASE_END
+        shares = HIRES_LOCATION_SHARE if in_growth_phase else LOCATION_SHARE
+        raw = {loc: hires_regular[i] * shares[loc] for loc in LOCATIONS}
+        raw["chennai"] += fresher_by_idx.get(i, 0)
+
+        target = int(round(hires_final[i]))
+        floor_vals = {loc: int(np.floor(v)) for loc, v in raw.items()}
+        remainder = target - sum(floor_vals.values())
+        order = sorted(LOCATIONS, key=lambda loc: raw[loc] - floor_vals[loc], reverse=True)
+        j = 0
+        while remainder > 0:
+            floor_vals[order[j % len(order)]] += 1
+            remainder -= 1
+            j += 1
+        while remainder < 0:
+            loc = max(floor_vals, key=lambda k: floor_vals[k])
+            if floor_vals[loc] == 0:
+                break
+            floor_vals[loc] -= 1
+            remainder += 1
+
+        for loc in LOCATIONS:
+            out[loc][i] = floor_vals[loc]
+
+    return {loc: arr.astype(int) for loc, arr in out.items()}
 
 
 def split_by_weights(total: np.ndarray, weights: dict[str, float]) -> dict[str, np.ndarray]:
@@ -235,20 +373,29 @@ def build_monthly_snapshot() -> pd.DataFrame:
     utilization = np.clip(rng.normal(0.85, 0.05, N) * (seasonal_fte / seasonal_fte_mean), 0.65, 0.98)
     billable_hours = np.clip(billable_fte_total * STANDARD_MONTHLY_HOURS * utilization, 0, total_logged_hours)
 
-    # Revenue: random-walk component (per the brief) layered under the FULL
-    # seasonal shape (applied once, here -- not also inside billable_fte_total
-    # above, which would double-count it) and the COE blended rate card, plus
-    # the dampened shock effect.
-    revenue_walk = random_walk(N, 0, 25_000)
-    avg_rate = np.mean(list(RATE_PER_FTE_MONTH_USD.values()))
+    # Revenue: grounded in the real LTM revenue trend (REAL_LTM_REVENUE_GBP_000
+    # above), not FTE x rate-card. Monthly "level" is the real trailing-12mo
+    # figure divided by 12 (a run-rate proxy), fitted/extrapolated across the
+    # full window, with the existing seasonal shape applied on top -- an
+    # approximation of the real trend's shape, not an exact deconvolution of
+    # the reported trailing-12-month sums (see README for the method and its
+    # limits). A small random walk adds realistic month-to-month noise
+    # without swamping the real-grounded level.
+    revenue_level_gbp = _fit_and_extrapolate({k: v * 1000 / 12 for k, v in REAL_LTM_REVENUE_GBP_000.items()})
+    revenue_walk = random_walk(N, 0, 15_000)
     revenue_usd_total = np.clip(
-        billable_fte_total * avg_rate * (seasonal / seasonal.mean()) * revenue_shock + revenue_walk,
+        revenue_level_gbp * (seasonal / seasonal.mean()) * revenue_shock + revenue_walk,
         1_500_000, None,
     )
-    revenue_usd_total = add_noise(revenue_usd_total, pct_std=0.10)
+    revenue_usd_total = add_noise(revenue_usd_total, pct_std=0.04)
     billable_share = np.clip(rng.normal(0.85, 0.03, N) - (1 - seasonal) * 0.1, 0.65, 0.93)
     revenue_usd_billable = revenue_usd_total * billable_share
     revenue_usd_unbillable = revenue_usd_total - revenue_usd_billable
+
+    # Adj. EBITDA margin: grounded in the real reported margin trend
+    # (REAL_EBITDA_MARGIN_PCT), fitted/extrapolated the same way as revenue.
+    ebitda_margin_pct = np.clip(_fit_and_extrapolate(REAL_EBITDA_MARGIN_PCT) + rng.normal(0, 0.3, N), 15, 40)
+    ebitda_usd_total = revenue_usd_total * ebitda_margin_pct / 100
 
     revenue_by_coe = split_by_weights(revenue_usd_total, COE_SHARE)
     revenue_by_cluster = split_by_weights(revenue_usd_total, CLUSTER_SHARE)
@@ -295,6 +442,8 @@ def build_monthly_snapshot() -> pd.DataFrame:
             **{f"revenue_usd_{k}": round(float(v[i]), 2) for k, v in revenue_by_coe.items()},
             **{f"revenue_usd_{k}": round(float(v[i]), 2) for k, v in revenue_by_cluster.items()},
             "revenue_usd_billable": round(float(revenue_usd_billable[i]), 2),
+            "ebitda_usd_total": round(float(ebitda_usd_total[i]), 2),
+            "ebitda_margin_pct": round(float(ebitda_margin_pct[i]), 2),
             "revenue_usd_unbillable": round(float(revenue_usd_unbillable[i]), 2),
             "new_projects_total": int(round(new_projects_total[i])),
             **{f"new_projects_{k}": int(v[i]) for k, v in new_projects_by_coe.items()},
@@ -310,6 +459,9 @@ def build_monthly_snapshot() -> pd.DataFrame:
             "client_location_usa_pct": CLIENT_LOCATION_SHARE["usa"] * 100,
             "client_location_other_pct": CLIENT_LOCATION_SHARE["other"] * 100,
             "new_hires_total": int(hr["new_hires_total"][i]),
+            "new_hires_chennai": int(hr["new_hires_chennai"][i]),
+            "new_hires_uk": int(hr["new_hires_uk"][i]),
+            "new_hires_usa": int(hr["new_hires_usa"][i]),
             "new_hires_by_role_json": json.dumps(hires_by_role[i]),
             "resignations_total": int(hr["resignations_total"][i]),
             "resignations_by_role_json": json.dumps(resign_by_role[i]),

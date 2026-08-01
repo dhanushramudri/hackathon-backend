@@ -50,7 +50,7 @@ RAW_TABLES: dict[str, dict[str, str]] = {
     "monthly_snapshot": {
         "file": "monthly_snapshot.csv",
         "label": "Monthly Snapshot",
-        "description": "The primary 24-month table -- revenue, projects, headcount, FTE, and calendar signals (Categories A-E of the plan).",
+        "description": "The primary 24-month table -- revenue, EBITDA margin, projects, headcount, FTE, and calendar signals (Categories A-E of the plan).",
     },
     "notice_period_cohort": {
         "file": "notice_period_cohort.csv",
@@ -65,7 +65,7 @@ RAW_TABLES: dict[str, dict[str, str]] = {
     "engineered_features": {
         "file": "engineered_features.csv",
         "label": "Engineered Features",
-        "description": "The full Phase 2 output: base columns + lags, rolling stats, ratios, interactions, and calendar encoding (267 columns).",
+        "description": "The full Phase 2 output: base columns + lags, rolling stats, ratios, interactions, and calendar encoding (285 columns).",
     },
     "feature_correlation_report": {
         "file": "feature_correlation_report.csv",
@@ -170,13 +170,232 @@ def _predict_one(state: dict, time_idx: float, feature_row: dict) -> float:
     return float(state["model"].predict(x_scaled)[0])
 
 
+# Canonical COE keys (matching generate_headcount_prediction_data.py's COES
+# list) -> display labels, used for the COE breakdown and notice-period-by-COE
+# panels below.
+_COE_LABELS = {
+    "data_engineering": "Data Engineering",
+    "bi_reporting": "BI & Reporting",
+    "ai_ml": "AI & ML",
+    "full_stack": "Full Stack Engineering",
+    "techops": "TechOps & Automation",
+}
+
+
+def _compute_insights(df: pd.DataFrame, forecast: list[dict]) -> dict:
+    """Executive-facing insights built entirely from data this feature already
+    generates (monthly_snapshot / notice_period_cohort / weekly_pulse) but
+    that was previously only visible in the raw data tables. Nothing here
+    retrains or re-forecasts anything -- it's read-and-summarize over the
+    same `df` the model already uses, plus one extra read of
+    notice_period_cohort.csv for the current month's COE breakdown."""
+    latest = df.iloc[-1]
+    lookback_idx = max(0, len(df) - 4)  # ~3 months back
+    prior = df.iloc[lookback_idx]
+
+    headcount_change_pct = round(
+        (latest["total_active_headcount"] - prior["total_active_headcount"]) / prior["total_active_headcount"] * 100, 1
+    )
+    net_hire_flow = int(latest["new_hires_total"] - latest["resignations_total"])
+
+    validated_forecast = [f for f in forecast if f["is_validated_horizon"]]
+    forecast_3mo = validated_forecast[-1] if validated_forecast else (forecast[-1] if forecast else None)
+    forecast_change_pct = (
+        round((forecast_3mo["forecast"] - latest["total_active_headcount"]) / latest["total_active_headcount"] * 100, 1)
+        if forecast_3mo else None
+    )
+
+    # --- Workforce productivity: revenue per active headcount ---
+    # Currency is GBP (£), matching the real reported financials this data is
+    # grounded in (see generate_headcount_prediction_data.py's "REAL DATA
+    # GROUNDING" section) -- the "revenue_usd_*" column names are a naming
+    # artifact predating that grounding and don't reflect actual currency.
+    revenue_per_head_history = [
+        {"month": row["month"].strftime("%Y-%m"), "value": round(row["revenue_usd_total"] / row["total_active_headcount"], 0)}
+        for _, row in df.iterrows()
+    ]
+    current_revenue_per_head = revenue_per_head_history[-1]["value"]
+    prior_revenue_per_head = revenue_per_head_history[lookback_idx]["value"]
+
+    ebitda_margin_history = [
+        {"month": row["month"].strftime("%Y-%m"), "value": round(float(row["ebitda_margin_pct"]), 1)}
+        for _, row in df.iterrows()
+    ]
+    current_ebitda_margin_pct = ebitda_margin_history[-1]["value"]
+    prior_ebitda_margin_pct = ebitda_margin_history[lookback_idx]["value"]
+
+    # --- Headcount by COE: current mix (from billable FTE shares) applied
+    # proportionally to the total forecast -- an approximation (FTE share
+    # used as a headcount-share proxy), not an independently modeled
+    # per-COE forecast. Labeled as such in the API response's own field
+    # names ("estimated", "mix") rather than presented as equally precise.
+    coe_fte = {key: float(latest[f"billable_fte_{key}"]) for key in _COE_LABELS}
+    total_coe_fte = sum(coe_fte.values()) or 1.0
+    coe_mix = [
+        {"coe": _COE_LABELS[key], "fte": round(fte, 1), "share_pct": round(fte / total_coe_fte * 100, 1)}
+        for key, fte in coe_fte.items()
+    ]
+    coe_forecast = [
+        {
+            "month": f["month"],
+            "by_coe": {_COE_LABELS[key]: round(f["forecast"] * (fte / total_coe_fte), 1) for key, fte in coe_fte.items()},
+        }
+        for f in forecast
+    ]
+
+    # --- Attrition & retention ---
+    # notice_period_headcount (used above/in monthly_snapshot) is a smoothed
+    # statistical estimate; notice_period_cohort.csv is built from actual
+    # per-resignation notice windows, which structurally CANNOT have rows for
+    # the most recent month(s) in the window -- that would require someone's
+    # resignation to already be known further in the future than the
+    # synthetic data extends (see the Phase-1 README's documented edge
+    # effect). Falling back to the most recent month that has real cohort
+    # rows, and saying so explicitly, rather than silently showing an empty
+    # breakdown next to a nonzero headline count.
+    notice_df = pd.read_csv(HEADCOUNT_PREDICTION_DIR / "notice_period_cohort.csv")
+    months_with_data = sorted(notice_df["month"].unique()) if not notice_df.empty else []
+    notice_by_coe_month = months_with_data[-1] if months_with_data else None
+    current_notice = notice_df[notice_df["month"] == notice_by_coe_month] if notice_by_coe_month else notice_df.iloc[0:0]
+    notice_by_coe = (
+        [{"coe": _COE_LABELS.get(k, k), "count": int(v)} for k, v in current_notice["coe"].value_counts().items()]
+        if not current_notice.empty else []
+    )
+
+    flight_risk_note = None
+    pulse_delta = latest.get("notice_cohort_pulse_delta")
+    if pd.notna(pulse_delta) and pulse_delta < -0.2:
+        flight_risk_note = (
+            f"Employees currently in their notice period showed a pulse-score drop of "
+            f"{pulse_delta:.2f} (on the 1-4 scale) in the months before resigning -- "
+            f"consistent with a disengagement-before-exit pattern in this data."
+        )
+
+    hires_vs_resignations = [
+        {
+            "month": row["month"].strftime("%Y-%m"),
+            "new_hires": int(row["new_hires_total"]),
+            "resignations": int(row["resignations_total"]),
+            "net": int(row["new_hires_total"] - row["resignations_total"]),
+        }
+        for _, row in df.tail(6).iterrows()
+    ]
+
+    # --- Utilization / bench health ---
+    utilization_history = [
+        {
+            "month": row["month"].strftime("%Y-%m"),
+            "free_pool": int(row["free_pool_headcount"]),
+            "over_allocated": int(row["over_allocated_count"]),
+            "under_allocated": int(row["under_allocated_count"]),
+        }
+        for _, row in df.tail(6).iterrows()
+    ]
+
+    # --- Risk flags ---
+    risk_flags = []
+    if net_hire_flow < 0:
+        risk_flags.append({
+            "severity": "warning",
+            "message": f"Net hiring flow is negative this month ({int(latest['new_hires_total'])} hires vs "
+                       f"{int(latest['resignations_total'])} resignations) -- attrition is currently outpacing hiring.",
+        })
+    notice_count = int(latest["notice_period_headcount"])
+    if notice_count > 0:
+        pct_of_headcount = round(notice_count / latest["total_active_headcount"] * 100, 1)
+        risk_flags.append({
+            "severity": "warning" if pct_of_headcount > 3 else "info",
+            "message": f"{notice_count} employee(s) ({pct_of_headcount}% of headcount) are currently in their notice period.",
+        })
+    if forecast_change_pct is not None and forecast_change_pct < -2:
+        risk_flags.append({
+            "severity": "warning",
+            "message": f"Headcount is forecast to decline {abs(forecast_change_pct)}% over the validated horizon.",
+        })
+    if flight_risk_note:
+        risk_flags.append({"severity": "warning", "message": flight_risk_note})
+    risk_flags.append({
+        "severity": "info",
+        "message": f"This forecast is statistically validated {len(validated_forecast)} month(s) ahead; "
+                   f"treat anything beyond that as a directional scenario, not a validated number.",
+    })
+
+    # --- Executive summary ---
+    direction_word = "grown" if headcount_change_pct > 0 else "declined" if headcount_change_pct < 0 else "held steady"
+    executive_summary = []
+    if forecast_3mo:
+        forecast_word = "grow" if (forecast_change_pct or 0) > 0 else "decline" if (forecast_change_pct or 0) < 0 else "hold steady"
+        executive_summary.append(
+            f"Headcount has {direction_word} {abs(headcount_change_pct)}% over the last 3 months "
+            f"({int(prior['total_active_headcount'])} → {int(latest['total_active_headcount'])}), and is forecast to "
+            f"{forecast_word} to ~{round(forecast_3mo['forecast'])} by {forecast_3mo['month']}."
+        )
+    rev_trend = "up" if current_revenue_per_head > prior_revenue_per_head else "down" if current_revenue_per_head < prior_revenue_per_head else "flat"
+    executive_summary.append(
+        f"Revenue per active headcount is currently ~£{current_revenue_per_head:,.0f}/month, "
+        f"{rev_trend} from ~£{prior_revenue_per_head:,.0f}/month three months ago."
+    )
+    margin_trend = "up" if current_ebitda_margin_pct > prior_ebitda_margin_pct else "down" if current_ebitda_margin_pct < prior_ebitda_margin_pct else "flat"
+    executive_summary.append(
+        f"Adj. EBITDA margin is currently {current_ebitda_margin_pct:.1f}%, "
+        f"{margin_trend} from {prior_ebitda_margin_pct:.1f}% three months ago."
+    )
+    executive_summary.append(
+        f"Net hiring this month: {'+' if net_hire_flow >= 0 else ''}{net_hire_flow} "
+        f"({int(latest['new_hires_total'])} hires vs {int(latest['resignations_total'])} resignations)."
+    )
+    executive_summary.append(
+        f"{int(latest['over_allocated_count'])} employee(s) are over-allocated, {int(latest['under_allocated_count'])} "
+        f"under-allocated, and {int(latest['free_pool_headcount'])} are in the free pool right now."
+    )
+
+    return {
+        "executive_summary": executive_summary,
+        "risk_flags": risk_flags,
+        "headcount_change_pct_3mo": headcount_change_pct,
+        "forecast_change_pct": forecast_change_pct,
+        "productivity": {
+            "current_revenue_per_head_usd": current_revenue_per_head,
+            "history": revenue_per_head_history,
+            "current_ebitda_margin_pct": current_ebitda_margin_pct,
+            "ebitda_margin_history": ebitda_margin_history,
+        },
+        "coe_breakdown": {
+            "latest_month": latest["month"].strftime("%Y-%m"),
+            "mix": coe_mix,
+            "forecast": coe_forecast,
+        },
+        "attrition": {
+            "notice_period_current": notice_count,
+            "notice_period_by_coe": notice_by_coe,
+            "notice_period_by_coe_as_of_month": (
+                pd.Timestamp(notice_by_coe_month).strftime("%Y-%m") if notice_by_coe_month else None
+            ),
+            "hires_vs_resignations": hires_vs_resignations,
+            "flight_risk_note": flight_risk_note,
+        },
+        "utilization": {
+            "free_pool_current": int(latest["free_pool_headcount"]),
+            "over_allocated_current": int(latest["over_allocated_count"]),
+            "under_allocated_current": int(latest["under_allocated_count"]),
+            "history": utilization_history,
+        },
+    }
+
+
 def get_headcount_prediction(horizon_months: int = 12) -> dict:
     horizon_months = max(1, min(horizon_months, MAX_FORECAST_MONTHS))
     state = _production_model()
     df, features, horizon = state["df"], state["features"], state["horizon"]
 
     history = [
-        {"month": row["month"].strftime("%Y-%m"), "total_active_headcount": int(row["total_active_headcount"])}
+        {
+            "month": row["month"].strftime("%Y-%m"),
+            "total_active_headcount": int(row["total_active_headcount"]),
+            "new_hires_chennai": int(row["new_hires_chennai"]),
+            "new_hires_uk": int(row["new_hires_uk"]),
+            "new_hires_usa": int(row["new_hires_usa"]),
+        }
         for _, row in df.iterrows()
     ]
 
@@ -230,6 +449,7 @@ def get_headcount_prediction(horizon_months: int = 12) -> dict:
             running_headcount_row["total_active_headcount"] = point
 
     validated_months = sum(1 for f in forecast if f["is_validated_horizon"])
+    insights = _compute_insights(df, forecast)
 
     return {
         "history": history,
@@ -237,6 +457,7 @@ def get_headcount_prediction(horizon_months: int = 12) -> dict:
         "horizon_months": horizon_months,
         "validated_horizon_months": validated_months,
         "forecast": forecast,
+        "insights": insights,
         "model_info": {
             "type": "Trend + Seasonal + Ridge Regression (hybrid)",
             "formula": "Y(t+3) = Ridge(time_index, selected_features(t)), 12 features selected via Spearman correlation pruning + mutual info + permutation importance",
@@ -254,7 +475,7 @@ def get_headcount_prediction(horizon_months: int = 12) -> dict:
             "recommendation_rationale": state["results"]["recommendation_rationale"],
             "confidence_interval": "90% for the first 3 (validated) months; widens for months beyond that via a simple sqrt(h/3) heuristic, since those months hold most features constant rather than using real data",
             "note": (
-                "Trained on synthetic historical data (Jan 2023-Dec 2024). Real forecasting "
+                f"Trained on synthetic historical data ({history[0]['month']}-{history[-1]['month']}). Real forecasting "
                 "requires multiple years of actual JMAN headcount/revenue/pulse records. "
                 "Months beyond the 3-month validated horizon are extrapolated by holding "
                 "revenue/FTE/pulse/etc. features at their last known value and feeding this "

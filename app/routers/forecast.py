@@ -2,10 +2,12 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from app.engines.headcount_prediction_engine import get_headcount_prediction, get_raw_table, list_raw_tables
-from app.engines.revenue_engine import get_revenue_benchmarks_by_coe
+from app.engines.revenue_engine import compute_duration_buckets, get_revenue_benchmarks_by_coe
 from app.engines.role_mix_engine import get_role_mix_by_coes
 from app.engines.simple_forecast_engine import get_prediction_forecast
-from app.services.demand_forecast_service import get_new_project_forecast, get_revenue_target_forecast
+from app.services.demand_forecast_service import (
+    get_financial_summary, get_new_project_forecast, get_revenue_target_forecast, get_top_candidates_for_role,
+)
 from app.services.pipeline_outlook_service import OUTLOOK_MONTHS, get_pipeline_outlook, get_pipeline_outlook_drilldown
 
 router = APIRouter(prefix="/forecast", tags=["forecast"])
@@ -30,11 +32,18 @@ class RevenueTargetRequest(BaseModel):
     start_date: str | None = None
     duration_weeks: int | None = None
     type_of_project: str | None = None
+    duration_mix: dict[str, float] | None = None
     include_skill: bool = True
     include_competency: bool = True
     include_availability: bool = True
     include_category_match: bool = False
     include_project_count: bool = False
+
+class FinancialSummaryRequest(BaseModel):
+    target_revenue_usd: float
+    target_date: str
+    priority_coes: list[str] | None = None
+    duration_weeks: int | None = None
 
 @router.post("/new-projects")
 def new_projects(
@@ -67,6 +76,10 @@ def role_mix_preview(body: RoleMixPreviewRequest) -> dict:
 def revenue_benchmarks() -> dict:
     return get_revenue_benchmarks_by_coe()
 
+@router.get("/top-candidates-for-role")
+def top_candidates_for_role(designation: str, as_of_date: str, limit: int = Query(default=10, ge=1, le=50)) -> list[dict]:
+    return get_top_candidates_for_role(designation, as_of_date, limit)
+
 @router.post("/revenue-target")
 def revenue_target(body: RevenueTargetRequest) -> dict:
     return get_revenue_target_forecast(
@@ -75,6 +88,7 @@ def revenue_target(body: RevenueTargetRequest) -> dict:
         start_date=body.start_date,
         duration_weeks=body.duration_weeks,
         type_of_project=body.type_of_project,
+        duration_mix=body.duration_mix,
         include={
             "skill": body.include_skill,
             "competency": body.include_competency,
@@ -82,6 +96,19 @@ def revenue_target(body: RevenueTargetRequest) -> dict:
             "category_match": body.include_category_match,
             "project_count": body.include_project_count,
         },
+    )
+
+@router.get("/duration-mix-benchmarks")
+def duration_mix_benchmarks() -> dict:
+    return compute_duration_buckets()
+
+@router.post("/financial-summary")
+def financial_summary(body: FinancialSummaryRequest) -> dict:
+    return get_financial_summary(
+        body.target_revenue_usd,
+        body.target_date,
+        priority_coes=body.priority_coes,
+        duration_weeks=body.duration_weeks,
     )
 
 @router.get("/prediction")

@@ -364,7 +364,7 @@ def fetch_open_devops_tickets() -> list[dict]:
         except Exception as exc:
             print(f"[DEVOPS INSIGHTS] Detail batch {i // 200 + 1} error: {exc}")
 
-    print(f"[DEVOPS INSIGHTS] Fetched {len(all_fields)} work-item field sets.")
+    # print(f"[DEVOPS INSIGHTS] Fetched {len(all_fields)} work-item field sets.")
 
     _area_paths_seen = sorted({f.get("System.AreaPath", "<none>") for f in all_fields})
     # logger.info(f"[DEVOPS INSIGHTS][DEBUG] {len(_area_paths_seen)} distinct AreaPaths returned:")

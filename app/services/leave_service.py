@@ -16,12 +16,22 @@ from app.engines.scoring import (
     top_skill_phrases_for_employees,
 )
 from app.engines.employee_coe import get_employee_primary_coe_map
+from app.services.email_service import render_support_request_html
 from app.services.free_pool_service import get_free_pool_by_designation
 from app.services.recommendation_service import (
     SKILLSET_CATEGORY_TO_TECH_COE,
     _coe_affinity_rank,
     _COE_AFFINITY_NEUTRAL,
 )
+
+# No employee/manager email column exists anywhere in the real data -- MAILTRAP_HOST
+# is a sandbox relay that never actually delivers to the To/Cc address regardless of
+# what's supplied, so a synthetic address on the same domain as the sender is safe
+# and harmless here (nothing is ever really delivered to a real inbox).
+SUPPORT_REQUEST_EMAIL_DOMAIN = "jmangroup.com"
+
+def _synthetic_email(employee_id: str) -> str:
+    return f"{employee_id.lower()}@{SUPPORT_REQUEST_EMAIL_DOMAIN}"
 
 MAX_BACKFILL_SHOWN = 5
 TOP_N_REQUIRED_SKILLS = 8
@@ -41,6 +51,75 @@ def _cost_key(c: dict) -> float:
 
 def _top_skill_phrases(skills_subset: pd.DataFrame, top_n: int) -> list[str]:
     return top_skill_phrases_for_employees(skills_subset, GENERIC_SKILL_COES, top_n)
+
+def _date_str(value) -> str | None:
+    return value.strftime("%Y-%m-%d") if pd.notna(value) else None
+
+def get_project_alumni_candidates(project_code: str, exclude_employee_id: str | None = None) -> list[dict]:
+    """Real employees who have EVER been allocated to this exact project
+    (any resourcing status, any time), shown as backfill candidates
+    regardless of what they're doing today -- including people currently
+    active on a different project. This is deliberately separate from
+    get_leave_impact's free-pool-only pool: prior hands-on familiarity with
+    THIS project is its own real signal, not something the free-pool
+    (idle-right-now) view can ever surface."""
+    adapter = get_adapter()
+    allocations = adapter.get_allocations()
+    employees = adapter.get_employees()
+
+    proj_allocs = allocations[allocations["project_id"] == project_code].merge(
+        employees[["employee_id", "job_name", "location", "department_name", "account_status"]],
+        on="employee_id", how="left",
+    )
+    if exclude_employee_id:
+        proj_allocs = proj_allocs[proj_allocs["employee_id"] != exclude_employee_id]
+    if proj_allocs.empty:
+        return []
+
+    active_allocs_all = allocations[allocations["is_allocation_active"] == 1]
+
+    candidates = []
+    for emp_id, group in proj_allocs.groupby("employee_id"):
+        emp_row = employees[employees["employee_id"] == emp_id]
+        if emp_row.empty or emp_row.iloc[0].get("account_status") != 1:
+            continue  # resigned/inactive employees can't be reassigned
+
+        stints = [
+            {
+                "allocated_start_date": _date_str(r["allocated_start_date"]),
+                "allocated_end_date": _date_str(r["allocated_end_date"]),
+                "resourcing_status": r["resourcing_status"],
+                "allocation_by_percentage": float(r["allocation_by_percentage"]) if pd.notna(r["allocation_by_percentage"]) else None,
+                "is_allocation_active": bool(r["is_allocation_active"]),
+            }
+            for _, r in group.sort_values("allocated_start_date").iterrows()
+        ]
+        if any(s["is_allocation_active"] for s in stints):
+            continue  # already actively staffed on this exact project -- not a backfill candidate
+
+        current = active_allocs_all[active_allocs_all["employee_id"] == emp_id]
+        current_projects = [
+            {
+                "project_id": r["project_id"],
+                "allocation_by_percentage": float(r["allocation_by_percentage"]) if pd.notna(r["allocation_by_percentage"]) else None,
+                "resourcing_status": r["resourcing_status"],
+            }
+            for _, r in current.iterrows()
+        ]
+
+        first_row = group.iloc[0]
+        candidates.append({
+            "employee_id": emp_id,
+            "job_name": first_row["job_name"] if pd.notna(first_row["job_name"]) else None,
+            "location": first_row["location"] if pd.notna(first_row["location"]) else None,
+            "is_currently_free": len(current_projects) == 0,
+            "current_projects": current_projects,
+            "past_stints": stints,
+            "most_recent_end_date": max((s["allocated_end_date"] for s in stints if s["allocated_end_date"]), default=None),
+        })
+
+    candidates.sort(key=lambda c: c["most_recent_end_date"] or "", reverse=True)
+    return candidates
 
 def get_leave_impact(
     *,
@@ -254,3 +333,46 @@ def get_leave_impact(
             )
 
     return sorted(impacts, key=lambda i: (not i["is_currently_on_leave"], i["leave_start_date"]))
+
+def build_support_request(employee_id: str, project_id: str, start_date: str, end_date: str) -> dict:
+    """Resolve the real people who belong on a 'can you help cover this project'
+    request: the candidate, the project's real manager (reporter_employee_id,
+    falling back to approver_employee_id), and the candidate's real reporting
+    manager as the CDM proxy -- this dataset has no distinct CDM field, so
+    manager_employee_id is the closest real signal (same fallback precedent as
+    generate_hr_feedback_data.py's pick_reviewer). Never a fabricated identity."""
+    adapter = get_adapter()
+    employees = adapter.get_employees()
+    projects = adapter.get_projects()
+
+    emp_row = employees[employees["employee_id"] == employee_id]
+    manager_employee_id = None
+    if not emp_row.empty:
+        val = emp_row["manager_employee_id"].iloc[0]
+        if pd.notna(val) and val:
+            manager_employee_id = val
+
+    proj_row = projects[projects["project_code"] == project_id]
+    project_manager_employee_id = None
+    if not proj_row.empty:
+        for col in ("reporter_employee_id", "approver_employee_id"):
+            val = proj_row[col].iloc[0]
+            if pd.notna(val) and val:
+                project_manager_employee_id = val
+                break
+
+    cc_employee_ids = [
+        eid for eid in dict.fromkeys([project_manager_employee_id, manager_employee_id])
+        if eid and eid != employee_id
+    ]
+
+    return {
+        "employee_id": employee_id,
+        "employee_email": _synthetic_email(employee_id),
+        "project_manager_employee_id": project_manager_employee_id,
+        "cdm_employee_id": manager_employee_id,
+        "cc_employee_ids": cc_employee_ids,
+        "cc_emails": [_synthetic_email(eid) for eid in cc_employee_ids],
+        "subject": f"Support Request — {project_id} ({start_date} to {end_date})",
+        "html": render_support_request_html(employee_id, project_id, start_date, end_date),
+    }

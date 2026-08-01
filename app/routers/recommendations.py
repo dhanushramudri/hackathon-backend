@@ -28,8 +28,8 @@ class ProjectTeamRequest(BaseModel):
     include_availability: bool = True
     include_category_match: bool = False
     include_project_count: bool = False
-    include_project_count: bool = False
     include_coe_affinity: bool = True
+    include_cost_efficiency: bool = False
 
 
 @router.get("/coverage-summary")
@@ -50,8 +50,7 @@ def project_team(req: ProjectTeamRequest) -> dict:
         include_skill=req.include_skill, include_competency=req.include_competency,
         include_availability=req.include_availability,
         include_category_match=req.include_category_match, include_project_count=req.include_project_count,
-        include_coe_affinity=req.include_coe_affinity,
-    
+        include_coe_affinity=req.include_coe_affinity, include_cost_efficiency=req.include_cost_efficiency,
     )
 
 @router.get("/pipeline-row/{row_index}")

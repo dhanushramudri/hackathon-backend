@@ -28,7 +28,10 @@ SEASONAL_FACTORS = {
 
 HISTORY_START = "2023-01"
 HISTORY_END   = "2026-06"
-MONTHLY_RATE_PER_HEAD = 14_500   # illustrative $/head/month
+# Grounded in real delivery-project economics (app/engines/revenue_engine.py's
+# DELIVERY_TEMPLATE: ~$35k revenue / ~4.6 FTE-months for a 4-person, 5-week
+# team) rather than an independently illustrative figure.
+MONTHLY_RATE_PER_HEAD = 7_583
 
 
 def _generate_synthetic_history() -> list[dict]:

@@ -105,8 +105,18 @@ def get_employee_pulse_detail(employee_id: str, weeks: int = RECENT_WEEKS) -> di
                 for q in ALL_QUESTIONS
             },
         })
+    # Same aggregate shape as get_project_pulse_detail (avg_score/response_count/
+    # worst_question), scoped to one employee's own responses instead of a
+    # project's -- lets the Employee Profile modal show the same "X/4 avg, N
+    # responses, worst: Q" proof the Health page's project-level Pulse row does.
+    scores = {q: round(rows[q].mean(), 2) for q in ALL_QUESTIONS}
+    avg_score = round(sum(scores[q] for q in NOT_HAPPY_QUESTIONS) / len(NOT_HAPPY_QUESTIONS), 2)
     return {
         "is_not_happy": any(resp["is_not_happy"] for resp in responses),
+        "response_count": int(len(rows)),
+        "avg_score": avg_score,
+        "scores": scores,
+        "worst_question": QUESTION_LABELS[min(NOT_HAPPY_QUESTIONS, key=lambda q: scores[q])],
         "responses": responses,
         "window_weeks": weeks,
     }

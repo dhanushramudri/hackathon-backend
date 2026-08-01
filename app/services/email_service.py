@@ -45,7 +45,7 @@ def _wrap_jman_template(title: str, intro: str, sections_html: str) -> str:
         <tr>
           <td style="background:{JMAN_PURPLE};padding:20px 28px;">
             <span style="color:#ffffff;font-size:18px;font-weight:bold;letter-spacing:0.3px;">JMAN Group</span>
-            <span style="color:#C9BBF5;font-size:12px;display:block;margin-top:2px;">ResourceIQ — Automated Resourcing Digest</span>
+            <span style="color:#C9BBF5;font-size:12px;display:block;margin-top:2px;">ResourceIQ — {title}</span>
           </td>
         </tr>
         <tr>
@@ -82,9 +82,7 @@ ROOT_CAUSE_LABEL = {
     "understaffed": "Understaffed",
     "overtime_risk": "Overtime risk",
     "effort_spike": "Effort spike",
-    "wsr_deteriorating": "WSR getting worse",
-    "wsr_critical": "WSR stuck at red/amber",
-    "wsr_long_term_decline": "WSR fell and hasn't recovered",
+    "wsr_risk": "WSR risk",
 }
 
 def _root_cause_label(value: str) -> str:
@@ -121,18 +119,39 @@ def render_digest_html(digest: dict, period_label: str) -> str:
         sections += f'<p style="margin:-10px 0 14px 0;color:#6B7280;font-size:11px;">+{digest["high_risk_total_count"] - len(risk_items)} more — see the Health page.</p>'
 
     intro = f"Dear Resource Manager,<br/>Here's what needs your attention {period_label}."
-    return _wrap_jman_template(f"ResourceIQ Digest — {period_label}", intro, sections)
+    return _wrap_jman_template(f"Digest — {period_label}", intro, sections)
 
-def send_email(to_email: str, subject: str, html_body: str) -> None:
+def render_support_request_html(employee_id: str, project_id: str, start_date: str, end_date: str) -> str:
+    """Short, plain-language ask -- an RM requesting a candidate's availability
+    to cover a project gap, not a formal system report. Wording mirrors how an
+    RM would actually phrase this over email."""
+    intro = f"Hi {employee_id},"
+    body = f"""
+            <p style="margin:0 0 14px 0;">
+              We are requesting support for a few days from <strong>{start_date}</strong> to <strong>{end_date}</strong>
+              on <strong>{project_id}</strong>. Let us know if you are available for any support during these days
+              for a few work items.
+            </p>
+            <p style="margin:0 0 14px 0;">
+              Upon your approval, your allocation will be granted. Please respond to this email within
+              <strong>24 hours</strong>.
+            </p>
+            <p style="margin:0 0 14px 0;">Thank you.</p>"""
+    return _wrap_jman_template("Support Request", intro, body)
+
+def send_email(to_email: str, subject: str, html_body: str, cc: list[str] | None = None) -> None:
     config = _smtp_config()
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = f"{config['from_name']} <{config['from_email']}>"
     msg["To"] = to_email
+    if cc:
+        msg["Cc"] = ", ".join(cc)
     msg.attach(MIMEText(html_body, "html"))
 
+    recipients = [to_email, *(cc or [])]
     with smtplib.SMTP(config["host"], config["port"]) as server:
         server.starttls()
         server.login(config["username"], config["password"])
-        server.sendmail(config["from_email"], [to_email], msg.as_string())
-    logger.info("Digest email sent to %s", to_email)
+        server.sendmail(config["from_email"], recipients, msg.as_string())
+    logger.info("Email sent to %s (cc: %s)", to_email, ", ".join(cc or []) or "none")

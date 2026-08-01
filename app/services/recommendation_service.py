@@ -380,7 +380,6 @@ def get_recommendations(
         skill_index = scoring.build_employee_skill_index(skills)
     if employee_coe_map is None:
         employee_coe_map = get_employee_primary_coe_map()
-        print(list(set(employee_coe_map.values()))[:50])
     busy_pct = availability_as_of(allocations, as_of_date)
 
     if experience_profiles is None:
@@ -457,6 +456,10 @@ def get_recommendations(
             experience_profiles.get(emp_id), requested_solution, requested_tech_coes
         )
         hold_info = employee_hold_flags.get(emp_id)
+        coe_affinity_rank = (
+            _coe_affinity_rank(employee_coe_map.get(emp_id), requested_coe_categories)
+            if include_coe_affinity else _COE_AFFINITY_NEUTRAL
+        )
         composite = scoring.composite_score_v2(
             skill_result["score"], competency_score, availability_score,
             experience["relevant_project_ratio"], experience["project_count_score"],
@@ -466,12 +469,9 @@ def get_recommendations(
                 "availability": include_availability,
                 "category_match": include_category_match,
                 "project_count": include_project_count,
+                "coe_affinity": include_coe_affinity,
             },
-        )
-        print("requested_coe_categories (raw):", repr(requested_coe_categories))
-        coe_affinity_rank = (
-            _coe_affinity_rank(employee_coe_map.get(emp_id), requested_coe_categories)
-            if include_coe_affinity else _COE_AFFINITY_NEUTRAL
+            coe_affinity_score=coe_affinity_rank / 2.0,
         )
 
         results.append(
@@ -566,56 +566,87 @@ def get_recommendations(
         rate = r.get("hourly_rate_usd")
         return -(rate if rate is not None else _FALLBACK_RATE)
 
-    def _apply_cost_tiebreak(ranked: list[dict]) -> list[dict]:
-        """Post-process pass for Budget-friendly mode: groups consecutive candidates
-        whose composite_score sits within COST_TIE_BAND_PCT points of the group's own
-        top score, then re-sorts each group by hourly rate (cheapest first). A fixed
-        rounding grid (composite_score // COST_TIE_BAND_PCT) would split two nearly
-        identical scores -- e.g. 48.9% and 49.1% -- into different bands whenever they
-        straddle a rounding boundary, silently disabling the cost tiebreak for exactly
-        the near-ties it exists to catch. `ranked` must already be sorted by
-        composite_score (descending), which it is by the time this is called."""
+    def _tier_key(r: dict) -> tuple:
+        """The higher-priority fields that precede composite_score in whichever
+        sort_key variant is active below (bucket/confidence only when
+        include_skill, availability only when include_availability). CoE
+        affinity is deliberately NOT part of this -- see _apply_secondary_tiebreaks.
+        Two candidates only ever belong in the same tiebreak group if this
+        matches exactly."""
+        parts: list = []
+        if include_skill:
+            parts.append(_BUCKET_RANK.get(r["bucket"], 0))
+            parts.append(_CONFIDENCE_RANK.get(r["skill_confidence"], 0))
+        if include_availability:
+            parts.append(r["available_pct"])
+        return tuple(parts)
+
+    def _apply_secondary_tiebreaks(ranked: list[dict]) -> list[dict]:
+        """Post-process pass for Budget-friendly: groups consecutive candidates
+        that share the same higher-priority tier (_tier_key) AND whose
+        composite_score sits within COST_TIE_BAND_PCT points of the group's
+        own top score, then re-sorts each such group by hourly rate --
+        never letting cost override a real, larger difference in overall
+        match quality.
+
+        CoE preference is NOT handled here (any more) -- it's now a real,
+        weighted contributor to composite_score itself (see coe_affinity_score
+        in composite_score_v2), so it's already reflected in `ranked`'s order
+        with no post-processing needed. It used to live in this same
+        tiebreak-only pass, which correctly stopped it from overriding a real
+        composite difference -- but the RM explicitly asked for CoE match to
+        be able to outrank a stronger different-CoE candidate by a real
+        margin, which a near-tie-only tiebreak can never do by definition.
+
+        The _tier_key equality check is essential, not optional: `ranked` is
+        sorted by a multi-field tuple (bucket/confidence/availability THEN
+        composite), so composite_score is only monotonic *within* a tier --
+        crossing a tier boundary (e.g. the last "observed"-confidence
+        candidate to the first "imputed" one) can jump to an arbitrarily
+        different composite score, including a HIGHER one. Grouping on raw
+        composite proximity alone would band together candidates from
+        completely different, non-comparable tiers whenever that jump
+        happened to land within COST_TIE_BAND_PCT (or land below the anchor,
+        since a negative gap always satisfies a `<=` check).
+
+        A fixed rounding grid (composite_score // COST_TIE_BAND_PCT) would
+        separately split two nearly identical scores -- e.g. 48.9% and 49.1%
+        -- into different bands whenever they straddle a rounding boundary,
+        silently disabling the tiebreak for exactly the near-ties it exists
+        to catch -- hence the rolling anchor-based comparison instead."""
+        if not include_cost_efficiency:
+            return ranked
+
         result: list[dict] = []
         i, n = 0, len(ranked)
         while i < n:
             top_score = ranked[i]["composite_score"] * 100
+            top_tier = _tier_key(ranked[i])
             j = i + 1
-            while j < n and (top_score - ranked[j]["composite_score"] * 100) <= COST_TIE_BAND_PCT:
+            while (
+                j < n
+                and _tier_key(ranked[j]) == top_tier
+                and (top_score - ranked[j]["composite_score"] * 100) <= COST_TIE_BAND_PCT
+            ):
                 j += 1
-            group = sorted(ranked[i:j], key=_cost_key, reverse=True)
+            group = sorted(ranked[i:j], key=lambda r: (_cost_key(r), r["composite_score"]), reverse=True)
             result.extend(group)
             i = j
         return result
-
-    def _composite_for_sort(r: dict) -> float:
-        if not include_cost_efficiency:
-            return r["composite_score"]
-        # Band the score so near-tied matches (e.g. 49% vs 48%) become
-        # genuinely equal for sorting purposes, letting cost decide between
-        # them. The exact composite_score is still used as a later tiebreaker
-        # (see below), so within the same cost, the sharper match still wins.
-        return round(r["composite_score"] * 100 / COST_TIE_BAND_PCT)
-
 
     if include_availability:
         if include_skill:
             sort_key = lambda r: (
                 _BUCKET_RANK.get(r["bucket"], 0),
                 _CONFIDENCE_RANK.get(r["skill_confidence"], 0),
-                r["coe_affinity_rank"],
                 r["available_pct"],
-                _composite_for_sort(r),
-                _cost_key(r) if include_cost_efficiency else 0,
                 r["composite_score"],
                 r["relevant_project_count"],
                 r["relevant_project_ratio"],
             )
         else:
             sort_key = lambda r: (
-                r["coe_affinity_rank"],
                 r["available_pct"],
-                _composite_for_sort(r),
-                _cost_key(r) if include_cost_efficiency else 0,
                 r["composite_score"],
                 r["relevant_project_count"],
                 r["relevant_project_ratio"],
@@ -628,33 +659,19 @@ def get_recommendations(
             sort_key = lambda r: (
                 _BUCKET_RANK.get(r["bucket"], 0),
                 _CONFIDENCE_RANK.get(r["skill_confidence"], 0),
-                r["coe_affinity_rank"],
-                _composite_for_sort(r),
-                _cost_key(r) if include_cost_efficiency else 0,
                 r["composite_score"],
                 r["relevant_project_count"],
                 r["relevant_project_ratio"],
             )
         else:
             sort_key = lambda r: (
-                r["coe_affinity_rank"],
-                _composite_for_sort(r),
-                _cost_key(r) if include_cost_efficiency else 0,
                 r["composite_score"],
                 r["relevant_project_count"],
                 r["relevant_project_ratio"],
             )
 
     ranked = sorted(results, key=sort_key, reverse=True)
-    bi_candidates = [r for r in ranked if (r.get("coe") or "").strip().lower() == "bi & reporting"]
-    print(f"BI & Reporting candidates: {len(bi_candidates)}, "
-    f"near_capacity={sum(1 for r in bi_candidates if r['near_capacity'])}, "
-    f"meets_capacity={sum(1 for r in bi_candidates if r['meets_requested_capacity'])}")
-    print([(r['employee_id'], r['available_pct'], r['bucket'], r['skill_confidence'], r['coe_affinity_rank']) for r in bi_candidates[:10]])
-
-
-    if include_cost_efficiency:
-        ranked = _apply_cost_tiebreak(ranked)
+    ranked = _apply_secondary_tiebreaks(ranked)
     candidates_meeting_capacity = [r for r in ranked if r["meets_requested_capacity"]]
     candidates_near_capacity = [r for r in ranked if r["near_capacity"]]
     # Default pool now includes near-miss candidates within the caller-chosen
@@ -1014,6 +1031,9 @@ def get_redeploy_matches_for_employee(
         ]
         experience = experience_engine.match_experience(profile, row["solution"], requested_tech_coes)
 
+        coe_affinity_rank = (
+            _coe_affinity_rank(employee_coe, row["skill_areas"]) if include_coe_affinity else _COE_AFFINITY_NEUTRAL
+        )
         composite = scoring.composite_score_v2(
             skill_result["score"], competency_entry["score"], availability_score,
             experience["relevant_project_ratio"], experience["project_count_score"],
@@ -1023,10 +1043,9 @@ def get_redeploy_matches_for_employee(
                 "availability": include_availability,
                 "category_match": include_category_match,
                 "project_count": include_project_count,
+                "coe_affinity": include_coe_affinity,
             },
-        )
-        coe_affinity_rank = (
-            _coe_affinity_rank(employee_coe, row["skill_areas"]) if include_coe_affinity else _COE_AFFINITY_NEUTRAL
+            coe_affinity_score=coe_affinity_rank / 2.0,
         )
         matches.append(
             {
@@ -1286,7 +1305,7 @@ def get_project_team_recommendation(
     row_indices: list[int], top_n: int = 15,
     include_skill: bool = True, include_competency: bool = True, include_availability: bool = True,
     include_category_match: bool = False, include_project_count: bool = False,
-    include_coe_affinity: bool = True,
+    include_coe_affinity: bool = True, include_cost_efficiency: bool = False,
 ) -> dict:
     """Greedy conflict-aware team assignment for a set of pipeline roles.
 
@@ -1332,7 +1351,7 @@ def get_project_team_recommendation(
             row_index, pipeline=pipeline, top_n=2000,
             include_skill=include_skill, include_competency=include_competency, include_availability=include_availability,
             include_category_match=include_category_match, include_project_count=include_project_count,
-            include_coe_affinity=include_coe_affinity,
+            include_coe_affinity=include_coe_affinity, include_cost_efficiency=include_cost_efficiency,
             **prefetched
         )
         role_data.append({

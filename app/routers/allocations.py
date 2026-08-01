@@ -5,9 +5,11 @@ import pandas as pd
 
 from app.services.allocation_report_service import (
     AllocationNotFound, AllocationRowNotFound, ProjectNotFoundForExtension,
-    create_allocation, extend_allocation_end_date, extend_project_end_date,
+    create_allocation, delete_allocation, extend_allocation_end_date, extend_project_end_date,
     get_allocation_report, get_allocation_timesheet, get_availability_as_of,
+    update_allocation,
 )
+from app.services.project_extension_history_service import get_extension_history
 
 router = APIRouter(prefix="/allocations", tags=["allocations"])
 
@@ -18,6 +20,8 @@ class AssignRequest(BaseModel):
     start_date: str
     end_date: str
     resourcing_status: str = "BILLABLE"
+    shift_type: str | None = None
+    reviewer_employee_id: str | None = None
 
 @router.post("/assign")
 def assign(body: AssignRequest) -> dict:
@@ -25,6 +29,30 @@ def assign(body: AssignRequest) -> dict:
         return create_allocation(**body.model_dump())
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+class UpdateAllocationRequest(BaseModel):
+    allocation_pct: float
+    start_date: str
+    end_date: str
+    resourcing_status: str
+    shift_type: str | None = None
+    reviewer_employee_id: str | None = None
+
+@router.patch("/{allocation_id}")
+def update_allocation_route(allocation_id: str, body: UpdateAllocationRequest) -> dict:
+    try:
+        return update_allocation(allocation_id, **body.model_dump())
+    except AllocationRowNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+@router.delete("/{allocation_id}")
+def delete_allocation_route(allocation_id: str) -> dict:
+    try:
+        return delete_allocation(allocation_id)
+    except AllocationRowNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 class ExtendEndDateRequest(BaseModel):
     extended_end_date: str | None = None
@@ -51,6 +79,10 @@ def extend_project(project_code: str, body: ExtendProjectEndDateRequest) -> dict
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+@router.get("/projects/{project_code}/extensions")
+def project_extensions(project_code: str) -> list[dict]:
+    return get_extension_history(project_code)
 
 @router.get("/current")
 def current() -> list[dict]:

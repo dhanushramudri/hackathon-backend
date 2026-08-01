@@ -45,6 +45,8 @@ KEY_METRICS = [
     "promotions_total",
     "revenue_usd_total",
     "revenue_usd_billable",
+    "ebitda_usd_total",
+    "ebitda_margin_pct",
     "billable_fte_total",
     "unbillable_fte_total",
     "billable_hours",
@@ -70,6 +72,19 @@ def load_base_frame() -> pd.DataFrame:
     notice = pd.read_csv(DATA_DIR / "notice_period_cohort.csv", parse_dates=["month"])
 
     df = snapshot.merge(pulse, on="month", how="left", validate="one_to_one")
+
+    # notice_cohort_avg_pulse_before/_during/pulse_delta are NaN for the most
+    # recent month(s) -- notice_period_cohort.csv structurally can't have
+    # rows there (would require a resignation known further in the future
+    # than the data extends; same edge effect documented for
+    # notice_period_by_coe in headcount_prediction_engine.py). Forward-fill
+    # rather than leaving NaN or filling with 0 -- these are pulse SCORES,
+    # where 0 would misrepresent "no data yet" as "catastrophic morale," and
+    # a trailing NaN breaks any model that selects these as a feature (can't
+    # extrapolate a forecast off a NaN feature value).
+    for col in ("notice_cohort_avg_pulse_before", "notice_cohort_avg_pulse_during", "notice_cohort_pulse_delta"):
+        if col in df.columns:
+            df[col] = df[col].ffill()
 
     # Extra monthly aggregates from the notice cohort beyond what
     # weekly_pulse_monthly_agg already carries (notice_cohort_avg_pulse_*,

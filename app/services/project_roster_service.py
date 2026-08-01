@@ -32,6 +32,8 @@ def get_project_roster(project_code: str) -> dict:
                 "extended_end_date": _date_str(r.get("extended_end_date")),
                 "extended_status": r.get("extended_status") if pd.notna(r.get("extended_status")) else None,
                 "is_allocation_active": bool(r["is_allocation_active"]),
+                "shift_type": r.get("shift_type") if pd.notna(r.get("shift_type")) else None,
+                "reviewer_employee_id": r.get("reviewer_employee_id") if pd.notna(r.get("reviewer_employee_id")) else None,
             }
         )
 

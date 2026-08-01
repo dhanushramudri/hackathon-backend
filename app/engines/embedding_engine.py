@@ -345,10 +345,19 @@ def batch_cosine_similarity(
         pc_index = _get_pinecone_index()
         if pc_index is not None:
             try:
-                # top_k = all employees so ranking is identical to numpy mode
-                top_k = min(len(emp_index), 10_000)
+                # top_k must cover the WHOLE index, not just len(emp_index) -- emp_index
+                # is often a small candidate subset (e.g. 47 people shortlisted for one
+                # role) while Pinecone ranks across the full ~1000+ person org. Capping
+                # top_k at the subset size silently truncated results to the org-wide
+                # top-K matches, defaulting every candidate outside that global top-K to
+                # score 0 even when they matched the job vector well within their subset.
+                top_k = 10_000
                 result = pc_index.query(vector=job_vec.tolist(), top_k=top_k)
-                scores = {m["id"]: float(np.clip(m["score"], 0.0, 1.0)) for m in result["matches"]}
+                scores = {
+                    m["id"]: float(np.clip(m["score"], 0.0, 1.0))
+                    for m in result["matches"]
+                    if m["id"] in emp_index
+                }
                 # Fill in 0 for any employee not returned (score below threshold)
                 for eid in emp_index:
                     scores.setdefault(eid, 0.0)

@@ -8,6 +8,7 @@ import pandas as pd
 from app.ai import llm
 from app.ai.providers.base import QuotaExceededError
 from app.core.adapter import get_adapter
+from app.core.db import ReadOnlyQueryError, get_schema_description, run_readonly_query
 from app.engines.coe_skill_engine import derive_skills_for_coes
 from app.engines.designation_ladder import adjacent_designations
 from app.engines.role_mix_engine import (
@@ -45,8 +46,19 @@ from app.services.timesheet_insights_service import get_employee_overtime_risk, 
 
 logger = logging.getLogger("resourceiq.copilot")
 
-MAX_TOOL_TURNS = 6
+MAX_TOOL_TURNS = 10
 MAX_HISTORY_TURNS = 8
+# Dedicated budget for the query_database escape hatch specifically (separate
+# from MAX_TOOL_TURNS, which is shared by every tool) -- generate SQL, run it,
+# read the result/error, and retry with a corrected query, up to this many
+# times per question, so a bad query can self-correct without looping forever.
+MAX_SQL_ATTEMPTS = 5
+
+try:
+    _DB_SCHEMA_TEXT = get_schema_description()
+except Exception:
+    logger.exception("Could not build DB schema description for query_database tool -- it will have no schema reference")
+    _DB_SCHEMA_TEXT = ""
 
 SYSTEM_PROMPT = """You are the ResourceIQ copilot for JMAN's Resource Management Group (RMG).
 You have full read access to every real engine in this app -- staffing recommendations,
@@ -122,6 +134,14 @@ for "why" or "what should I do" questions):
   are X" question using the matching exact count field when one is present, never by
   counting matches within the truncated items sample -- the sample is not representative
   (it may be sorted, capped, or arbitrarily ordered) and counting within it WILL be wrong.
+- If NONE of the tools above can answer the question (an unusual aggregation, a filter or
+  breakdown nothing else exposes, a cross-table join, a one-off count) -- do not just say
+  you can't help. Use query_database as a last resort: write a single read-only SQL SELECT/
+  WITH query (DuckDB dialect) against the real tables described in that tool's own
+  description, read the result, and if it errors or comes back empty/wrong, fix the query
+  and call it again. You get up to 5 attempts at this before you must answer with whatever
+  you found (or say plainly the data doesn't support an answer) -- never loop on the same
+  broken query.
 
 You have at most a few tool-call turns for one question -- use them deliberately, don't
 call more tools than the question actually needs.
@@ -409,6 +429,27 @@ TOOLS = [
         "description": "Monthly revenue trend from the pipeline workbook's revenue sheet. Use for 'what's our revenue trend / revenue leakage' style questions.",
         "parameters": {"type": "object", "properties": {}},
     },
+    {
+        "name": "query_database",
+        "description": (
+            "LAST RESORT ONLY -- use this when none of the other tools above can answer the question "
+            "(an unusual aggregation, a cross-table join, a filter/breakdown nothing else exposes, a "
+            "one-off count). Runs a single read-only SQL SELECT or WITH statement (DuckDB dialect) "
+            "directly against the app's real database and returns the matching rows. This tool has NO "
+            "write access whatsoever -- INSERT/UPDATE/DELETE/DROP/ALTER/CREATE or any other mutating "
+            "statement is rejected outright, and only one statement is allowed per call. If your query "
+            "errors (bad column/table name, syntax) or returns an empty/unhelpful result, read the "
+            "error/result and try a corrected query -- you have up to 5 attempts total for this tool "
+            "per question. The real tables and columns available are:\n" + _DB_SCHEMA_TEXT
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "sql": {"type": "string", "description": "A single read-only SQL SELECT or WITH statement, DuckDB dialect, against the tables listed above."},
+            },
+            "required": ["sql"],
+        },
+    },
 ]
 
 def _list_pipeline_demand(query: str | None = None) -> list[dict]:
@@ -522,7 +563,28 @@ def _dispatch(name: str, args: dict):
         return info if info is not None else {"error": f"project {args.get('project_code')} not found"}
     if name == "get_revenue_trend":
         return get_revenue_trend()
+    if name == "query_database":
+        try:
+            return run_readonly_query(args.get("sql", ""))
+        except ReadOnlyQueryError as exc:
+            return {"error": str(exc)}
     return {"error": f"unknown tool {name}"}
+
+def _dispatch_checked(name: str, args: dict, sql_attempts: list[int]):
+    """Wraps _dispatch with a dedicated attempt cap for query_database only --
+    every other tool is untouched. sql_attempts is a single-element list used
+    as a mutable counter shared across one ask()/ask_stream() call."""
+    if name == "query_database":
+        sql_attempts[0] += 1
+        if sql_attempts[0] > MAX_SQL_ATTEMPTS:
+            return {
+                "error": (
+                    f"Maximum of {MAX_SQL_ATTEMPTS} database query attempts reached for this question. "
+                    "Answer using the best information already gathered, or tell the user plainly that "
+                    "this specific question isn't answerable with the data available."
+                )
+            }
+    return _dispatch(name, args)
 
 def _capped(items: list, n: int, extra: dict | None = None) -> dict:
     # A bare truncated list gives the model no way to tell "shown" from "real total" --
@@ -628,6 +690,12 @@ def _truncate_for_llm(name: str, result):
         return {**result, "daily_hours": result.get("daily_hours", [])[-30:]}
     if name == "get_project_roster" and isinstance(result, dict):
         return {**result, "roster": _capped(result.get("roster", []), 20)}
+    if name == "query_database" and isinstance(result, dict) and "rows" in result:
+        # The model only needs enough rows to read/verify the shape of its own
+        # query result -- the fuller run_readonly_query cap (200) is preserved
+        # in last_data for the table builder below, this is just what feeds
+        # back into the conversation.
+        return {**result, "rows": result["rows"][:30]}
     return result
 
 _BUCKET_LABEL = {"eligible": "Redeploy", "trainable": "Needs training", "gap": "Hire signal", "not_assessed": "Not assessed"}
@@ -842,6 +910,11 @@ def _revenue_table(data) -> dict | None:
     rows = [[r.get("month"), f"${r.get('value', 0):,.0f}"] for r in data]
     return {"columns": columns, "rows": rows}
 
+def _query_database_table(data) -> dict | None:
+    if not isinstance(data, dict) or "columns" not in data or "rows" not in data or not data["rows"]:
+        return None
+    return {"columns": data["columns"], "rows": data["rows"][:30]}
+
 _TABLE_BUILDERS = {
     "get_recommendations": _candidates_table,
     "get_recommendations_for_pipeline_row": _candidates_table,
@@ -862,6 +935,7 @@ _TABLE_BUILDERS = {
     "get_allocation_timesheet": _timesheet_table,
     "get_project_roster": _roster_table,
     "get_revenue_trend": _revenue_table,
+    "query_database": _query_database_table,
 }
 
 def _build_table(tool_name: str | None, data) -> dict | None:
@@ -1026,6 +1100,7 @@ def _run_with_llm(message: str, history: list[dict], prior_context: str | None =
     active_idx = 0
     last_data = None
     last_tool_name = None
+    sql_attempts = [0]
 
     for _ in range(MAX_TOOL_TURNS):
         turn = None
@@ -1052,7 +1127,7 @@ def _run_with_llm(message: str, history: list[dict], prior_context: str | None =
 
         messages.append({"role": "assistant", "content": turn["content"], "tool_calls": turn["tool_calls"]})
         for tc in turn["tool_calls"]:
-            result = _dispatch(tc["name"], tc["arguments"])
+            result = _dispatch_checked(tc["name"], tc["arguments"], sql_attempts)
             last_data = result
             last_tool_name = tc["name"]
             payload = _truncate_for_llm(tc["name"], result)
@@ -1091,6 +1166,7 @@ def ask_stream(message: str, history: list[dict] | None = None, prior_context: s
     active_idx = 0
     last_data = None
     last_tool_name = None
+    sql_attempts = [0]
 
     for _ in range(MAX_TOOL_TURNS):
         turn = None
@@ -1121,7 +1197,7 @@ def ask_stream(message: str, history: list[dict] | None = None, prior_context: s
         messages.append({"role": "assistant", "content": turn["content"], "tool_calls": turn["tool_calls"]})
         for tc in turn["tool_calls"]:
             yield {"type": "tool_call", "tool": tc["name"], "arguments": tc["arguments"]}
-            result = _dispatch(tc["name"], tc["arguments"])
+            result = _dispatch_checked(tc["name"], tc["arguments"], sql_attempts)
             last_data = result
             last_tool_name = tc["name"]
             payload = _truncate_for_llm(tc["name"], result)

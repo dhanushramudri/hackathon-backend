@@ -56,6 +56,10 @@ def project_code_exists(project_code: str) -> bool:
     existing = adapter.get_projects()["project_code"].dropna().astype(str)
     return project_code in set(existing)
 
+def list_client_ids() -> list[str]:
+    adapter = get_adapter()
+    return sorted(adapter.get_projects()["client_id"].dropna().astype(str).unique().tolist())
+
 def create_project(
     project_code: str, client_id: str, type_of_project: str,
     start_date: str, end_date: str,
@@ -97,6 +101,43 @@ def create_project(
     df.to_csv(PROJECTS_CSV, index=False)
     db_module.reload()
     return new_row
+
+def update_project(
+    project_code: str, client_id: str | None = None, type_of_project: str | None = None,
+    start_date: str | None = None, end_date: str | None = None,
+    tech_coe: str | None = None, proposition_coe: str | None = None,
+    project_status: str | None = None,
+) -> dict:
+    """Edit an already-created project's fields in place -- the Wizard's Step 1
+    supports revisiting and correcting a project after it's been created, not
+    just a one-shot create. Only non-None fields are changed."""
+    project_code = project_code.strip().upper()
+    df = pd.read_csv(PROJECTS_CSV)
+    df.columns = [c.strip() for c in df.columns]
+    mask = df["project_code"] == project_code
+    if not mask.any():
+        raise ValueError(f"Project code {project_code!r} not found")
+    if start_date and end_date and pd.to_datetime(end_date) < pd.to_datetime(start_date):
+        raise ValueError("end_date cannot be before start_date")
+
+    updates = {
+        "client_id": client_id, "type_of_project": type_of_project,
+        "project_start_date": start_date, "project_end_date": end_date,
+        "tech_coe": tech_coe, "proposition_coe": proposition_coe,
+        "project_status": project_status,
+    }
+    for col, val in updates.items():
+        if val is not None:
+            df.loc[mask, col] = val
+    df.to_csv(PROJECTS_CSV, index=False)
+    db_module.reload()
+    row = df.loc[mask].iloc[-1]
+    return {
+        "project_code": project_code, "client_id": row["client_id"],
+        "project_start_date": row["project_start_date"], "project_end_date": row["project_end_date"],
+        "type_of_project": row["type_of_project"], "tech_coe": row.get("tech_coe"),
+        "proposition_coe": row.get("proposition_coe"), "project_status": row["project_status"],
+    }
 
 if __name__ == "__main__":
     assert _prefix_from_name("Kasaya") == "KAS"

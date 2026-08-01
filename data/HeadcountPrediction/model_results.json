@@ -2,18 +2,18 @@
   "forecast_horizon_months": 3,
   "n_rows_used": 15,
   "features_used": [
-    "unbillable_fte_total_roll6_mean",
     "unbillable_fte_total_roll6_std",
-    "total_active_headcount",
-    "shadow_unbilled_count_lag6",
-    "completions_on_time_roll6_std",
-    "resignations_total_roll6_mean",
-    "free_pool_headcount_roll6_std",
-    "completions_on_time_roll6_mean",
-    "total_logged_hours_roll6_std",
-    "avg_q1_motivation_roll6_mean",
-    "extensions_billable_roll6_std",
-    "total_active_headcount_roll6_std"
+    "time_index",
+    "new_hires_usa",
+    "unbillable_fte_total_roll3_mean",
+    "shadow_unbilled_count_roll6_mean",
+    "notice_cohort_avg_pulse_before",
+    "shadow_unbilled_count_lag2",
+    "completions_on_time_roll3_mean",
+    "unbillable_fte_total",
+    "ebitda_usd_total_lag6",
+    "promotions_total_roll6_mean",
+    "total_logged_hours_roll6_std"
   ],
   "holdout_months": [
     "2026-02",
@@ -21,73 +21,73 @@
     "2026-04"
   ],
   "holdout_actual": [
-    683.0,
-    686.0,
-    690.0
+    856.0,
+    862.0,
+    868.0
   ],
   "candidates": {
     "arima": {
       "folds": [
         {
           "label": "fold_1",
-          "mape": 0.89,
+          "mape": 1.54,
           "n_test": 3
         },
         {
           "label": "fold_2",
-          "mape": 0.13,
+          "mape": 13.15,
           "n_test": 3
         },
         {
           "label": "fold_3",
-          "mape": 0.21,
+          "mape": 5.15,
           "n_test": 3
         }
       ],
-      "holdout_mape": 0.18,
-      "walk_forward_avg_mape": 0.41
+      "holdout_mape": 0.26,
+      "walk_forward_avg_mape": 6.61
     },
     "lightgbm": {
       "folds": [
         {
           "label": "fold_1",
-          "mape": 3.05,
+          "mape": 3.69,
           "n_test": 3
         },
         {
           "label": "fold_2",
-          "mape": 5.18,
+          "mape": 19.02,
           "n_test": 3
         },
         {
           "label": "fold_3",
-          "mape": 2.2,
+          "mape": 7.16,
           "n_test": 3
         }
       ],
-      "holdout_mape": 4.85,
-      "walk_forward_avg_mape": 3.48
+      "holdout_mape": 3.77,
+      "walk_forward_avg_mape": 9.96
     },
     "ridge_hybrid": {
       "folds": [
         {
           "label": "fold_1",
-          "mape": 2.04,
+          "mape": 2.29,
           "n_test": 3
         },
         {
           "label": "fold_2",
-          "mape": 2.46,
+          "mape": 18.34,
           "n_test": 3
         },
         {
           "label": "fold_3",
-          "mape": 1.32,
+          "mape": 4.0,
           "n_test": 3
         }
       ],
-      "holdout_mape": 1.44,
-      "walk_forward_avg_mape": 1.94
+      "holdout_mape": 1.23,
+      "walk_forward_avg_mape": 8.21
     }
   },
   "recommended_model": "ridge_hybrid",

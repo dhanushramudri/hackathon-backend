@@ -245,14 +245,23 @@ BASE_WEIGHTS = {
     "availability": AVAILABILITY_WEIGHT,
     "category_match": 0.15,
     "project_count": 0.15,
+    "coe_affinity": 0.15,
 }
 
 def composite_score_v2(
     skill_score: float, competency_score: float, availability_score: float,
     category_match_ratio: float, project_count_score: float,
     include: dict[str, bool],
+    # Optional and defaulted (NEUTRAL = 0.5) so every pre-existing caller that
+    # doesn't pass this, or doesn't set include["coe_affinity"], is completely
+    # unaffected. Normalized from the 3-tier _coe_affinity_rank (0/1/2) to a
+    # 0-1 score like every other factor here, so it can be a real, tunable
+    # ranking weight instead of only a post-sort tiebreak -- a same-CoE match
+    # can now genuinely outrank a stronger different-CoE candidate by a real
+    # margin, not just decide between two already-near-tied candidates.
+    coe_affinity_score: float = 0.5,
 ) -> float:
-    """Generalized composite over all 5 parameters. `include` maps each of
+    """Generalized composite over all 6 parameters. `include` maps each of
     BASE_WEIGHTS' keys to whether it's selected. Included parameters' base
     weights are renormalized to sum to 1.0 -- e.g. skill+competency only gives
     skill 0.5/0.8=0.625, competency 0.3/0.8=0.375. If nothing is selected
@@ -264,6 +273,7 @@ def composite_score_v2(
         "availability": availability_score,
         "category_match": category_match_ratio,
         "project_count": project_count_score,
+        "coe_affinity": coe_affinity_score,
     }
     total_weight = sum(BASE_WEIGHTS[k] for k in BASE_WEIGHTS if include.get(k))
     if total_weight <= 0:

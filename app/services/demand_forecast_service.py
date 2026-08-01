@@ -6,10 +6,22 @@ from app.core.adapter import get_adapter
 from app.engines import availability_hold, embedding_engine, experience_engine, scoring
 from app.engines.designation_ladder import LEADERSHIP_DESIGNATIONS, adjacent_designations
 from app.engines.employee_coe import get_employee_primary_coe_map
-from app.engines.revenue_engine import get_revenue_benchmarks_by_coe
-from app.engines.role_mix_engine import CANONICAL_COE_MAP, DOCX_CATEGORY_MAP, get_role_mix_by_category, get_role_mix_by_coes
+from app.engines.revenue_engine import (
+    DELIVERY_TEMPLATE,
+    DND_TEMPLATE,
+    DND_TYPICAL_DURATION_WEEKS,
+    compute_duration_buckets,
+    dnd_revenue_range_for_duration,
+    get_revenue_benchmarks_by_coe,
+)
+from app.engines.role_mix_engine import (
+    CANONICAL_COE_MAP,
+    DOCX_CATEGORY_MAP,
+    canonical_project_coe,
+    get_role_mix_by_category,
+    get_role_mix_by_coes,
+)
 from app.services.allocation_report_service import UNDER_UTILIZED_THRESHOLD
-from app.services.free_pool_service import get_free_pool_by_designation
 from app.services.rate_card_service import get_hourly_rate
 from app.services.recommendation_service import availability_as_of, get_recommendations
 
@@ -59,6 +71,17 @@ def get_redeploy_candidates_as_of(designation: str, as_of_date: pd.Timestamp, em
         )
     candidates.sort(key=lambda c: -c["available_pct_as_of"])
     return candidates
+
+def get_top_candidates_for_role(designation: str, as_of_date: str, limit: int = 10) -> list[dict]:
+    """Ranked-by-availability shortlist for one designation, as of a date --
+    the same real signal get_redeploy_candidates_as_of already uses elsewhere,
+    exposed standalone so the Wizard's Resource Allocation step can pre-select
+    a real "top guy" per budgeted role instead of leaving every row blank."""
+    adapter = get_adapter()
+    candidates = get_redeploy_candidates_as_of(
+        designation, pd.to_datetime(as_of_date), adapter.get_employees(), adapter.get_allocations()
+    )
+    return candidates[:limit]
 
 def _tag_coe(candidates: list[dict], employee_coe_map: dict[str, str]) -> None:
     for c in candidates:
@@ -206,7 +229,6 @@ def get_new_project_forecast(specs: list[dict], include: dict[str, bool] | None 
     include = include or DEFAULT_FORECAST_INCLUDE
     today = pd.Timestamp.now().normalize()
     today_key = today.strftime("%Y-%m-%d")
-    pool_by_designation = get_free_pool_by_designation()
     employee_coe_map = get_employee_primary_coe_map()
     employees_df: pd.DataFrame | None = None
     allocations_df: pd.DataFrame | None = None
@@ -332,14 +354,21 @@ def get_new_project_forecast(specs: list[dict], include: dict[str, bool] | None 
         requested_tech_coes = list(tech_coes_by_key.get((designation, date_key), []))
         claimed = claimed_ids_by_date.setdefault(date_key, set())
 
-        if date_key == today_key:
-            candidates = [dict(c) for c in pool_by_designation.get(designation, []) if c["employee_id"] not in claimed]
-        else:
-            emp_df, alloc_df = _ensure_employee_tables()
-            candidates = [
-                c for c in get_redeploy_candidates_as_of(designation, pd.to_datetime(date_key), emp_df, alloc_df)
-                if c["employee_id"] not in claimed
-            ]
+        # Always availability-as-of the role's own needed_by date (same real
+        # mechanism the main Recommendations engine uses) -- there used to be
+        # a separate, date-agnostic free-pool shortcut for "needed today"
+        # roles that ignored whether a candidate's current allocation(s)
+        # actually free them up by the date in question. That let someone
+        # over-allocated today, whose commitment doesn't end until well after
+        # the role's needed_by date, be scored as if 100% free right now and
+        # silently counted toward "covered" -- see get_redeploy_candidates_as_of's
+        # own MIN_AVAILABLE_PCT_TO_SURFACE gate, which is the check that's
+        # supposed to catch exactly that case.
+        emp_df, alloc_df = _ensure_employee_tables()
+        candidates = [
+            c for c in get_redeploy_candidates_as_of(designation, pd.to_datetime(date_key), emp_df, alloc_df)
+            if c["employee_id"] not in claimed
+        ]
         _score_candidates(
             candidates, all_required_skills, skill_index, competency_index, emp_embedding_index,
             include=include, experience_profiles=experience_profiles, requested_tech_coes=requested_tech_coes,
@@ -358,6 +387,15 @@ def get_new_project_forecast(specs: list[dict], include: dict[str, bool] | None 
         else:
             qualifying_candidates = candidates
 
+        # Tag every candidate with whether it's actually in qualifying_candidates
+        # (not re-derivable from skill_score alone client-side -- leadership
+        # designations are exempt from the threshold above, so a frontend
+        # reimplementing "skill_score >= 0.6" would wrongly split a Manager
+        # with a low skill_score into "doesn't qualify" even though they do).
+        qualifying_ids = {c["employee_id"] for c in qualifying_candidates}
+        for c in candidates:
+            c["meets_requested_skillset"] = c["employee_id"] in qualifying_ids
+
         # Candidates are already best-first (sorted by composite/skill score in
         # _score_candidates, or by availability if unscored) -- claim exactly the
         # ones this designation's own need would actually draw on, so a sibling
@@ -370,14 +408,11 @@ def get_new_project_forecast(specs: list[dict], include: dict[str, bool] | None 
         adjacent_fill_count = 0
         if shortfall_at_level > 0:
             for adj_designation, offset in adjacent_designations(designation):
-                if date_key == today_key:
-                    pool = [dict(c) for c in pool_by_designation.get(adj_designation, []) if c["employee_id"] not in claimed]
-                else:
-                    emp_df, alloc_df = _ensure_employee_tables()
-                    pool = [
-                        c for c in get_redeploy_candidates_as_of(adj_designation, pd.to_datetime(date_key), emp_df, alloc_df)
-                        if c["employee_id"] not in claimed
-                    ]
+                emp_df, alloc_df = _ensure_employee_tables()
+                pool = [
+                    c for c in get_redeploy_candidates_as_of(adj_designation, pd.to_datetime(date_key), emp_df, alloc_df)
+                    if c["employee_id"] not in claimed
+                ]
                 _score_candidates(
                     pool, all_required_skills, skill_index, competency_index, emp_embedding_index,
                     include=include, experience_profiles=experience_profiles, requested_tech_coes=requested_tech_coes,
@@ -392,28 +427,39 @@ def get_new_project_forecast(specs: list[dict], include: dict[str, bool] | None 
                 qualifying = [c for c in adjacent_level_candidates if c.get("skill_score", 0) >= scoring.ELIGIBLE_THRESHOLD]
                 adjacent_fill_count = min(len(qualifying), shortfall_at_level)
                 claimed.update(c["employee_id"] for c in qualifying[:adjacent_fill_count])
+                qualifying_adjacent_ids = {c["employee_id"] for c in qualifying}
             else:
                 adjacent_fill_count = min(len(adjacent_level_candidates), shortfall_at_level)
                 claimed.update(c["employee_id"] for c in adjacent_level_candidates[:adjacent_fill_count])
+                qualifying_adjacent_ids = {c["employee_id"] for c in adjacent_level_candidates}
+            # Same reasoning as the same-title tag above -- leadership
+            # designations aren't skill-gated here either.
+            for c in adjacent_level_candidates:
+                c["meets_requested_skillset"] = c["employee_id"] in qualifying_adjacent_ids
 
         shortfall_after_adjacent = max(0, shortfall_at_level - adjacent_fill_count)
 
         # Cross-role tier: title-ladder adjacency (above) only catches a different
         # seniority of the SAME track (Software Engineer <-> Senior Software
-        # Engineer). "We're short a Solutions Enabler, but do we have a Senior
+        # Engineer). "We're short a Solutions Enabler, but is there a Senior
         # Software Engineer whose actual skills fit?" is a different track
         # entirely -- so this runs the exact same org-wide skill/competency/
         # availability search the main Recommendations page uses (get_recommendations,
         # bucketed eligible/trainable/gap via scoring.bucket()), unrestricted by
-        # designation. `eligible` results are a real redeploy option and count
-        # toward filling the shortfall; `trainable` results are a real skill gap,
-        # not headcount, and belong in the training/upskill plan below regardless
-        # of whether the shortfall is fully covered -- surfaced but never assumed
-        # to fill a seat automatically. Hiring is only justified once this tier
-        # is exhausted too.
+        # designation.
+        #
+        # These are surfaced as real, useful context (their skill records
+        # genuinely match), but do NOT reduce shortfall or the hire signal --
+        # a skill-tag match alone doesn't mean pulling a Consultant off their
+        # day job to hands-on-deliver a technical build is a realistic plan.
+        # Same-title + adjacent-title (above) is the only pool the shortfall
+        # math trusts as a real redeployment option; cross-role match is shown
+        # separately so an RM can judge case-by-case whether it's worth
+        # pursuing, not have it silently assumed into "covered."
+        # `trainable` results are a real skill gap, not headcount, and belong
+        # in the training/upskill plan below regardless of shortfall.
         cross_role_candidates: list[dict] = []
         training_candidates: list[dict] = []
-        cross_role_fill_count = 0
         if all_required_skills:
             prefetch = _ensure_cross_role_prefetch()
             cross_role_result = get_recommendations(
@@ -431,11 +477,8 @@ def get_new_project_forecast(specs: list[dict], include: dict[str, bool] | None 
                     cross_role_candidates.append(c)
                 elif c["bucket"] == "trainable":
                     training_candidates.append(c)
-            if shortfall_after_adjacent > 0 and cross_role_candidates:
-                cross_role_fill_count = min(len(cross_role_candidates), shortfall_after_adjacent)
-                claimed.update(c["employee_id"] for c in cross_role_candidates[:cross_role_fill_count])
 
-        shortfall = max(0, shortfall_after_adjacent - cross_role_fill_count)
+        shortfall = shortfall_after_adjacent
 
         recommended_start_date = None
         recommended_start_date_proof = None
@@ -470,7 +513,7 @@ def get_new_project_forecast(specs: list[dict], include: dict[str, bool] | None 
                 "adjacent_level_candidates": adjacent_level_candidates,
                 "adjacent_fill_count": adjacent_fill_count,
                 "cross_role_candidates": cross_role_candidates,
-                "cross_role_fill_count": cross_role_fill_count,
+                "cross_role_match_count": len(cross_role_candidates),
                 "training_candidates": training_candidates[:10],
                 "shortfall": shortfall,
                 "shortfall_value_usd": shortfall_value_usd,
@@ -529,6 +572,7 @@ def get_revenue_target_forecast(
     duration_weeks: int | None = None,
     type_of_project: str | None = None,
     include: dict[str, bool] | None = None,
+    duration_mix: dict[str, float] | None = None,
 ) -> dict:
     """Reverse the usual forecast question: given a revenue target, what project
     mix (how many of each CoE) gets us there, prioritized toward the CoEs we're
@@ -537,12 +581,30 @@ def get_revenue_target_forecast(
     hire), what resources does that mix actually require, what do we already
     have, and where's the real gap.
 
-    Revenue figures are synthetic (see app/engines/revenue_engine.py) -- no
-    project in the source data carries a real revenue value, so this is a
-    defensible, consistently-ranked estimate for driving the reverse math, not
-    a claim of historical billing fact.
+    Revenue figures and the role mix per project are grounded in real JMAN
+    delivery-project economics (see app/engines/revenue_engine.py's
+    DELIVERY_TEMPLATE) -- ~$35k revenue, ~5 weeks, 2 engineers + 1 Solutions
+    Enabler + 1 Consultant -- not derived from the source data's real
+    allocation hours (which pool multi-month, multi-phase engagements under
+    one project_code and don't correspond to a single clean "project" unit).
+    $35k is a RATE anchored to 5 weeks, not a flat per-project constant -- a
+    longer requested duration_weeks scales the per-project revenue (and the
+    D&D estimate below) proportionally.
     """
-    benchmarks = get_revenue_benchmarks_by_coe()
+    # duration_mix (from the frontend's Short/Mid/Long slider) overrides a
+    # plain duration_weeks input -- it's a weighted blend of the real
+    # historical duration buckets rather than one flat number, but feeds into
+    # exactly the same duration_weeks-scaled revenue math below.
+    effective_duration_weeks = duration_weeks
+    if duration_mix:
+        buckets = compute_duration_buckets()["buckets"]
+        if buckets:
+            effective_duration_weeks = sum(
+                duration_mix.get(b, 0) * buckets[b]["avg_weeks"] for b in ("short", "mid", "long") if b in buckets
+            )
+    duration_weeks = effective_duration_weeks
+
+    benchmarks = get_revenue_benchmarks_by_coe(duration_weeks)
     if not benchmarks:
         return {
             "target_revenue_usd": target_revenue_usd,
@@ -552,6 +614,7 @@ def get_revenue_target_forecast(
             "revenue_gap_usd": target_revenue_usd,
             "pct_of_target_covered": 0.0,
             "forecast": None,
+            "design_and_discovery": None,
             "error": "No historical project revenue data available to benchmark against.",
         }
 
@@ -587,12 +650,44 @@ def get_revenue_target_forecast(
                 "coes": [coe],
                 "count": project_count,
                 "start_date": start_date,
-                "duration_weeks": duration_weeks,
+                "duration_weeks": duration_weeks or DELIVERY_TEMPLATE["duration_weeks"],
                 "type_of_project": type_of_project,
+                # Real delivery-team template (2 engineers + 1 Solutions
+                # Enabler + 1 Consultant) instead of the empirical per-CoE
+                # role mix, which is built from the same over-broad real
+                # project_code groupings the revenue figure above replaced.
+                "role_mix_overrides": DELIVERY_TEMPLATE["role_mix"],
             })
 
     forecast = get_new_project_forecast(specs, include=include) if specs else None
     total_projected_revenue = sum(m["projected_revenue_usd"] for m in project_mix)
+    total_delivery_projects = sum(m["project_count"] for m in project_mix)
+
+    # D&D is the real precursor phase most delivery projects go through
+    # before a client commits -- surfaced as prerequisite context (roughly
+    # 1 D&D per delivery project) rather than folded into the revenue math
+    # above, since no real D&D-to-delivery conversion rate exists to model
+    # how many D&Ds it actually takes to land one delivery project.
+    dnd_duration = DND_TYPICAL_DURATION_WEEKS
+    dnd_revenue_low, dnd_revenue_high = dnd_revenue_range_for_duration(dnd_duration)
+    design_and_discovery = (
+        {
+            "engagements_needed": total_delivery_projects,
+            "duration_weeks": dnd_duration,
+            "revenue_usd_low": dnd_revenue_low,
+            "revenue_usd_high": dnd_revenue_high,
+            "total_revenue_usd_low": total_delivery_projects * dnd_revenue_low,
+            "total_revenue_usd_high": total_delivery_projects * dnd_revenue_high,
+            "role_mix": DND_TEMPLATE["role_mix"],
+            "note": (
+                "Clients typically commit to a delivery project only after a paid D&D engagement -- "
+                "shown as prerequisite work, not guaranteed to convert 1:1, and not included in the "
+                "revenue totals above."
+            ),
+        }
+        if total_delivery_projects > 0
+        else None
+    )
 
     return {
         "target_revenue_usd": target_revenue_usd,
@@ -602,4 +697,103 @@ def get_revenue_target_forecast(
         "revenue_gap_usd": round(target_revenue_usd - total_projected_revenue, 0),
         "pct_of_target_covered": round(100 * total_projected_revenue / target_revenue_usd, 1) if target_revenue_usd > 0 else None,
         "forecast": forecast,
+        "design_and_discovery": design_and_discovery,
+        "effective_duration_weeks": round(duration_weeks, 1) if duration_weeks else None,
+    }
+
+
+FINANCIAL_SUMMARY_TRAILING_MONTHS = 6
+FINANCIAL_SUMMARY_MIN_SAMPLE = 5
+
+
+def _real_dated_projects_with_coe() -> pd.DataFrame:
+    adapter = get_adapter()
+    projects = adapter.get_projects()
+    real = projects[
+        (projects["date_source"].isin(["given", "derived_allocation"]))
+        & (projects["project_status"].isin(["COMPLETE", "ACTIVE"]))
+    ].copy()
+    real = real.dropna(subset=["project_start_date"])
+    real["coe"] = real["tech_coe"].apply(canonical_project_coe)
+    return real
+
+
+def get_financial_summary(
+    target_revenue_usd: float,
+    target_date: str,
+    priority_coes: list[str] | None = None,
+    duration_weeks: int | None = None,
+) -> dict:
+    """CFO view: current vs required revenue run-rate, computed from real
+    project start dates over the trailing months -- not a fabricated growth
+    curve. avg_revenue_per_project is the same rate-anchored DELIVERY_TEMPLATE
+    figure used everywhere else in this feature (see revenue_engine.py);
+    which/how many projects started when comes straight from real rows."""
+    today = pd.Timestamp.now().normalize()
+    target_ts = pd.to_datetime(target_date).normalize()
+
+    benchmarks = get_revenue_benchmarks_by_coe(duration_weeks)
+    if not benchmarks:
+        return {"error": "No historical project revenue data available to benchmark against."}
+
+    coes_in_scope = [c for c in (priority_coes or list(benchmarks.keys())) if c in benchmarks] or list(benchmarks.keys())
+    real = _real_dated_projects_with_coe()
+    scoped = real[real["coe"].isin(coes_in_scope)]
+
+    window_start = today - pd.DateOffset(months=FINANCIAL_SUMMARY_TRAILING_MONTHS)
+    trailing = scoped[(scoped["project_start_date"] > window_start) & (scoped["project_start_date"] <= today)]
+
+    monthly_actual = []
+    cumulative = 0.0
+    for i in range(FINANCIAL_SUMMARY_TRAILING_MONTHS - 1, -1, -1):
+        month_period = (today - pd.DateOffset(months=i)).to_period("M")
+        month_start, month_end = month_period.start_time.normalize(), min(month_period.end_time.normalize(), today)
+        month_coes = trailing[(trailing["project_start_date"] >= month_start) & (trailing["project_start_date"] <= month_end)]["coe"]
+        month_revenue = sum(benchmarks[c]["avg_revenue_per_project"] for c in month_coes if c in benchmarks)
+        cumulative += month_revenue
+        monthly_actual.append({"month": month_start.strftime("%Y-%m"), "cumulative_revenue_usd": round(cumulative, 0)})
+
+    trailing_count = len(trailing)
+    current_run_rate_monthly = round(cumulative / FINANCIAL_SUMMARY_TRAILING_MONTHS, 0)
+
+    months_to_target = max((target_ts - today).days / 30.44, 1 / 30.44)
+    revenue_gap = max(target_revenue_usd - cumulative, 0)
+    required_run_rate_monthly = round(revenue_gap / months_to_target, 0)
+    velocity_gap_monthly = round(required_run_rate_monthly - current_run_rate_monthly, 0)
+    productivity_multiplier = (
+        round(required_run_rate_monthly / current_run_rate_monthly, 2) if current_run_rate_monthly > 0 else None
+    )
+    projected_attainment_date = (
+        (today + pd.DateOffset(months=math.ceil(revenue_gap / current_run_rate_monthly))).strftime("%Y-%m-%d")
+        if current_run_rate_monthly > 0
+        else None
+    )
+
+    per_coe = [
+        {
+            "coe": coe,
+            "current_run_rate_monthly_usd": round(
+                len(trailing[trailing["coe"] == coe]) * benchmarks[coe]["avg_revenue_per_project"] / FINANCIAL_SUMMARY_TRAILING_MONTHS, 0
+            ),
+            "sample_size": len(trailing[trailing["coe"] == coe]),
+        }
+        for coe in coes_in_scope
+    ]
+
+    return {
+        "target_revenue_usd": target_revenue_usd,
+        "target_date": target_ts.strftime("%Y-%m-%d"),
+        "current_run_rate_monthly_usd": current_run_rate_monthly,
+        "required_run_rate_monthly_usd": required_run_rate_monthly,
+        "velocity_gap_monthly_usd": velocity_gap_monthly,
+        "productivity_multiplier": productivity_multiplier,
+        "projected_attainment_date": projected_attainment_date,
+        "monthly_actual": monthly_actual,
+        "required_line": [
+            {"date": today.strftime("%Y-%m-%d"), "cumulative_revenue_usd": round(cumulative, 0)},
+            {"date": target_ts.strftime("%Y-%m-%d"), "cumulative_revenue_usd": round(target_revenue_usd, 0)},
+        ],
+        "per_coe": per_coe,
+        "low_confidence": trailing_count < FINANCIAL_SUMMARY_MIN_SAMPLE,
+        "sample_size": trailing_count,
     }

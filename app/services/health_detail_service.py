@@ -14,7 +14,7 @@ from app.services.recommendation_service import (
 from app.services.health_monitor_service import (
      OVERRUN_DAYS_THRESHOLD,
      DEMO_STATIC_DEVOPS_PROJECT_CODE,
-     EXTENSION_DAILY_HOURS,         
+     EXTENSION_DAILY_HOURS,
      count_working_days,
      add_working_days,
      extension_duration_label,
@@ -28,6 +28,7 @@ from app.services.health_monitor_service import (
      WSR_TREND_RECENT_REPORTS,
      churn_p75_threshold,
      get_health_report,
+     get_project_summary_row,
      trend_from_severity_series,
      worst_wsr_signal_vectorized,
      wsr_severity_rows,
@@ -63,9 +64,16 @@ def _date_str(value) -> str | None:
     return value.strftime("%Y-%m-%d") if pd.notna(value) else None
 
 def get_project_health_detail(project_code: str) -> dict:
-    summary = next((r for r in get_health_report() if r["project_code"] == project_code), None)
+    summary = get_project_summary_row(project_code)
     if summary is None:
         raise ProjectNotFound(project_code)
+    # Whether this project is actually part of the ACTIVE cohort
+    # get_health_report() tracks for risk scoring (the Health list page,
+    # dashboard, and email digest) -- summary is now real for ANY project
+    # (see get_project_summary_row), so this flag is what tells the frontend
+    # whether the numbers below feed the org-wide risk view or are a
+    # real-but-standalone read for a project outside that tracking.
+    is_health_tracked = any(r["project_code"] == project_code for r in get_health_report())
     root_causes = summary["root_causes"]
 
     adapter = get_adapter()
@@ -316,10 +324,19 @@ def get_project_health_detail(project_code: str) -> dict:
             "is_long_term_decline": False,
         }
     )
+    # Derived directly from trend_detail (the same calc health_monitor_service
+    # uses to decide the single merged "wsr_risk" root cause) rather than
+    # checking membership in root_causes -- that list only carries ONE
+    # consolidated "wsr_risk" entry now, but this proof still needs to explain
+    # WHICH of the 3 underlying signals actually fired.
+    _fired_deteriorating = trend_detail["trend"] == "deteriorating"
+    _fired_critical = bool(trend_detail["is_critical"])
+    _fired_long_term_decline = bool(trend_detail["is_long_term_decline"])
     wsr_proof = {
-        "fired_deteriorating": "wsr_deteriorating" in root_causes,
-        "fired_critical": "wsr_critical" in root_causes,
-        "fired_long_term_decline": "wsr_long_term_decline" in root_causes,
+        "fired": _fired_deteriorating or _fired_critical or _fired_long_term_decline,
+        "fired_deteriorating": _fired_deteriorating,
+        "fired_critical": _fired_critical,
+        "fired_long_term_decline": _fired_long_term_decline,
         "data_available": summary["wsr_data_available"],
         "worst_signal": summary["wsr_worst_signal"],
         "latest_signal": summary["wsr_latest_signal"],
@@ -387,6 +404,8 @@ def get_project_health_detail(project_code: str) -> dict:
 
     return {
         "project_code": project_code,
+        "is_health_tracked": is_health_tracked,
+        "project_status": project_row.get("project_status") if pd.notna(project_row.get("project_status")) else None,
         "client_id": summary["client_id"],
         "type_of_project": summary["type_of_project"],
         "tech_coe": summary["tech_coe"],
@@ -562,7 +581,7 @@ def get_relief_staffing_candidates(
     (fully_free/under_utilized), and people who are still busy but have a real,
     dated end to that -- "ending_soon" -- shown separately with their actual free
     date so relief isn't limited to only who happens to be idle today."""
-    summary = next((r for r in get_health_report() if r["project_code"] == project_code), None)
+    summary = get_project_summary_row(project_code)
     if summary is None:
         raise ProjectNotFound(project_code)
     root_causes = summary["root_causes"]

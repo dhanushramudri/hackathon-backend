@@ -7,6 +7,7 @@ from app.core.adapter import get_adapter
 from app.core.config import TRANSFORMED_DIR
 from app.core import db as db_module
 from app.engines.role_mix_engine import canonical_project_coe
+from app.services.project_extension_history_service import record_extension
 
 ENDING_SOON_DAYS = 30
 OVER_ALLOCATED_THRESHOLD = 100
@@ -115,6 +116,13 @@ def extend_project_end_date(project_code: str, extended_end_date: str, status: s
         raise ProjectNotFoundForExtension(project_code)
     row_idx = matches.index[0]
 
+    # Whatever end date was in effect right before this change -- the
+    # existing explicit extension if there is one, else the original plan --
+    # so the history record reads as a real chain of "from -> to" transitions.
+    prev_extended = df.at[row_idx, "extended_end_date"]
+    previous_end = str(prev_extended).strip() if pd.notna(prev_extended) and str(prev_extended).strip() else None
+    from_end_date = previous_end or str(df.at[row_idx, "project_end_date"]).strip()
+
     if extended_end_date:
         if status not in EXTENSION_STATUSES:
             raise ValueError(f"status must be one of {sorted(EXTENSION_STATUSES)}")
@@ -126,12 +134,18 @@ def extend_project_end_date(project_code: str, extended_end_date: str, status: s
             raise ValueError("extended_end_date cannot be before the current project_end_date")
         df.at[row_idx, "extended_end_date"] = new_end.strftime("%Y-%m-%d")
         df.at[row_idx, "extended_end_status"] = status
+        to_end_date = df.at[row_idx, "extended_end_date"]
     else:
         df.at[row_idx, "extended_end_date"] = ""
         df.at[row_idx, "extended_end_status"] = ""
+        to_end_date = None
 
     df.to_csv(PROJECTS_CSV, index=False)
     db_module.reload()
+
+    if (from_end_date or "") != (to_end_date or ""):
+        record_extension(project_code, from_end_date, to_end_date, status if to_end_date else None)
+
     return {
         "project_code": project_code,
         "extended_end_date": df.at[row_idx, "extended_end_date"] or None,
@@ -141,6 +155,7 @@ def extend_project_end_date(project_code: str, extended_end_date: str, status: s
 def create_allocation(
     employee_id: str, project_id: str, allocation_pct: float,
     start_date: str, end_date: str, resourcing_status: str = "BILLABLE",
+    shift_type: str | None = None, reviewer_employee_id: str | None = None,
 ) -> dict:
     """Assign an employee to a project -- appends a new allocation row to the
     source CSV (source of truth for every other read in this app) and reloads
@@ -169,11 +184,79 @@ def create_allocation(
         "is_allocation_active": 1,
         "allocation_by_percentage": allocation_pct,
         "is_active_version": 1,
+        "shift_type": shift_type,
+        "reviewer_employee_id": reviewer_employee_id,
     }
     df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
     df.to_csv(ALLOCATIONS_CSV, index=False)
     db_module.reload()
     return new_row
+
+def update_allocation(
+    allocation_id: str,
+    allocation_pct: float,
+    start_date: str,
+    end_date: str,
+    resourcing_status: str,
+    shift_type: str | None = None,
+    reviewer_employee_id: str | None = None,
+) -> dict:
+    """Edits an already-committed allocation row in place -- same source CSV
+    create_allocation appends to, and the same field set the wizard's
+    Resource Allocation step lets an RM fill in for a not-yet-assigned row,
+    now editable after the fact too instead of being frozen the moment it's
+    saved. Full-replace semantics (every field is required) rather than
+    partial-patch -- the caller always has the complete current row already
+    loaded, so there's no ambiguity about "not provided" vs "cleared"."""
+    if not (0 < allocation_pct <= 100):
+        raise ValueError("allocation_pct must be between 0 and 100")
+    if pd.to_datetime(end_date) < pd.to_datetime(start_date):
+        raise ValueError("end_date cannot be before start_date")
+
+    df = pd.read_csv(ALLOCATIONS_CSV, dtype=str)
+    df.columns = [c.strip() for c in df.columns]
+    ids = df["project_rolebased_user_id"].str.strip()
+    matches = df[ids == allocation_id.strip()]
+    if matches.empty:
+        raise AllocationRowNotFound(allocation_id)
+    row_idx = matches.index[0]
+
+    df.at[row_idx, "allocation_by_percentage"] = allocation_pct
+    df.at[row_idx, "allocated_start_date"] = start_date
+    df.at[row_idx, "allocated_end_date"] = end_date
+    df.at[row_idx, "resourcing_status"] = resourcing_status
+    df.at[row_idx, "shift_type"] = shift_type or ""
+    df.at[row_idx, "reviewer_employee_id"] = reviewer_employee_id or ""
+
+    df.to_csv(ALLOCATIONS_CSV, index=False)
+    db_module.reload()
+    return {
+        "allocation_id": allocation_id,
+        "allocation_by_percentage": allocation_pct,
+        "allocated_start_date": start_date,
+        "allocated_end_date": end_date,
+        "resourcing_status": resourcing_status,
+        "shift_type": shift_type or None,
+        "reviewer_employee_id": reviewer_employee_id or None,
+    }
+
+def delete_allocation(allocation_id: str) -> dict:
+    """Permanently removes an allocation row -- for a genuine mistaken
+    assign, not an early end (which would be an edit to allocated_end_date/
+    resourcing_status via update_allocation instead, keeping the real record
+    that the person WAS on the project for that period)."""
+    df = pd.read_csv(ALLOCATIONS_CSV, dtype=str)
+    df.columns = [c.strip() for c in df.columns]
+    ids = df["project_rolebased_user_id"].str.strip()
+    matches = df[ids == allocation_id.strip()]
+    if matches.empty:
+        raise AllocationRowNotFound(allocation_id)
+    row = matches.iloc[0].to_dict()
+
+    df = df[ids != allocation_id.strip()]
+    df.to_csv(ALLOCATIONS_CSV, index=False)
+    db_module.reload()
+    return {"allocation_id": allocation_id, "deleted": True, "employee_id": row.get("employee_id"), "project_id": row.get("project_id")}
 
 def _utilization_band(total_pct: float, client_pct: float) -> str:
     # Over-allocation is judged on client_pct (Client Project/Managed Services/BAU/Sales),
