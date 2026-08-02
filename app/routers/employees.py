@@ -10,6 +10,7 @@ from app.services.employee_profile_service import (
     list_designations,
     list_employees,
 )
+from app.services.timesheet_insights_service import get_employee_timesheet_entries
 
 router = APIRouter(prefix="/employees", tags=["employees"])
 
@@ -57,4 +58,18 @@ def feedback(
     return get_employee_feedback(
         employee_id, weeks_back=weeks_back, coe=coe, project_id=project_id,
         reviewer_employee_id=reviewer_employee_id, theme=theme, ratings=ratings,
+    )
+
+@router.get("/{employee_id}/timesheet")
+def timesheet(
+    employee_id: str,
+    start_date: str | None = Query(default=None, description="YYYY-MM-DD, inclusive"),
+    end_date: str | None = Query(default=None, description="YYYY-MM-DD, inclusive"),
+    project_id: str | None = Query(default=None),
+    billing_status: str | None = Query(default=None),
+) -> dict:
+    """Real per-day timesheet rows for this employee, filterable by date range,
+    project, and billing status -- the raw proof surface for the profile modal."""
+    return get_employee_timesheet_entries(
+        employee_id, start_date=start_date, end_date=end_date, project_id=project_id, billing_status=billing_status,
     )

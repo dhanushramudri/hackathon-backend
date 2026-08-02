@@ -108,6 +108,70 @@ def get_employee_recent_projects(employee_id: str) -> list[dict]:
     by_project = recent.groupby("project_id")["time"].sum().sort_values(ascending=False)
     return [{"project_id": pid, "hours_recent": float(round(h, 1))} for pid, h in by_project.items()]
 
+def get_employee_timesheet_entries(
+    employee_id: str,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    project_id: str | None = None,
+    billing_status: str | None = None,
+) -> dict:
+    """Real per-day timesheet rows for one employee, filterable by date range,
+    project, and billing status -- the raw proof surface behind the profile
+    modal's Timesheet tab, not a derived/aggregate signal."""
+    adapter = get_adapter()
+    timesheets = adapter.get_timesheets()
+    ts = timesheets[timesheets["employee_id"] == employee_id].copy()
+    # A real, sizeable share of raw rows have no billing_status recorded --
+    # an honest "Not set" bucket beats silently dropping them from groupby/filter.
+    ts["billing_status"] = ts["billing_status"].fillna("NOT_SET")
+
+    available_projects = sorted(ts["project_id"].dropna().unique().tolist())
+    data_min_date = ts["date"].min()
+    data_max_date = ts["date"].max()
+
+    if project_id:
+        ts = ts[ts["project_id"] == project_id]
+    if billing_status:
+        ts = ts[ts["billing_status"] == billing_status]
+    if start_date:
+        ts = ts[ts["date"] >= pd.Timestamp(start_date)]
+    if end_date:
+        ts = ts[ts["date"] <= pd.Timestamp(end_date)]
+
+    ts = ts.sort_values("date")
+
+    rows = [
+        {
+            "date": d.strftime("%Y-%m-%d"),
+            "project_id": pid,
+            "job_name": job,
+            "hours": float(round(h, 2)),
+            "status": status,
+            "billing_status": billing,
+        }
+        for d, pid, job, h, status, billing in zip(
+            ts["date"], ts["project_id"], ts["job_name"], ts["time"], ts["status"], ts["billing_status"]
+        )
+    ]
+
+    days_logged = int(ts["date"].nunique())
+    by_project = ts.groupby("project_id")["time"].sum().sort_values(ascending=False) if not ts.empty else pd.Series(dtype=float)
+    by_billing_status = ts.groupby("billing_status")["time"].sum() if not ts.empty else pd.Series(dtype=float)
+
+    return {
+        "employee_id": employee_id,
+        "total_hours": float(round(ts["time"].sum(), 2)) if not ts.empty else 0.0,
+        "days_logged": days_logged,
+        "entry_count": int(len(ts)),
+        "avg_hours_per_logged_day": float(round(ts["time"].sum() / days_logged, 2)) if days_logged > 0 else 0.0,
+        "data_start_date": data_min_date.strftime("%Y-%m-%d") if pd.notna(data_min_date) else None,
+        "data_end_date": data_max_date.strftime("%Y-%m-%d") if pd.notna(data_max_date) else None,
+        "available_projects": available_projects,
+        "by_project": [{"project_id": pid, "hours": float(round(h, 2))} for pid, h in by_project.items()],
+        "by_billing_status": {k: float(round(v, 2)) for k, v in by_billing_status.items()},
+        "rows": rows,
+    }
+
 def get_project_weekly_hours(project_id: str, n_weeks: int = 8) -> list[dict]:
     adapter = get_adapter()
     timesheets = adapter.get_timesheets()

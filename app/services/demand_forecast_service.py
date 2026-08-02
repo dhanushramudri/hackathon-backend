@@ -556,6 +556,7 @@ def get_revenue_target_forecast(
             "forecast": None,
             "design_and_discovery": None,
             "timeline": None,
+            "revenue_hit_estimate": None,
             "error": "No historical project revenue data available to benchmark against.",
         }
 
@@ -658,6 +659,34 @@ def get_revenue_target_forecast(
             "likely_fits": weeks_available >= duration_weeks,
         }
 
+    # Plain calendar estimate for "when do we actually see this revenue" --
+    # start_date_used (real user input, or today if not set) + the same
+    # effective_duration_weeks already used for the revenue math above,
+    # assuming every project in the mix starts together and runs in parallel
+    # (not sequentially -- a fully-staffed team works them concurrently, it
+    # doesn't queue them). This is NOT a hiring-lead-time projection: if
+    # forecast still shows a shortfall, the date is surfaced with an explicit
+    # "assumes_full_staffing" caveat rather than pushed out by a fabricated
+    # hire-by date (no real hiring-lead-time data exists in this org -- see
+    # the target_date param docstring above).
+    revenue_hit_estimate = None
+    if total_delivery_projects > 0:
+        # Same fallback the revenue math itself uses (delivery_revenue_for_duration)
+        # when no explicit duration_weeks/duration_mix was given -- the real
+        # $35k/5-week anchor, not a fresh assumption invented here.
+        effective_weeks_for_date = duration_weeks if duration_weeks and duration_weeks > 0 else DELIVERY_TEMPLATE["duration_weeks"]
+        start_ts = pd.to_datetime(start_date).normalize() if start_date else pd.Timestamp.now().normalize()
+        hit_date = start_ts + pd.Timedelta(weeks=effective_weeks_for_date)
+        shortfall = forecast.get("total_shortfall_headcount", 0) if forecast else 0
+        revenue_hit_estimate = {
+            "start_date_used": start_ts.strftime("%Y-%m-%d"),
+            "hit_date": hit_date.strftime("%Y-%m-%d"),
+            "duration_weeks": round(effective_weeks_for_date, 1),
+            "project_count": total_delivery_projects,
+            "has_staffing_gap": shortfall > 0,
+            "shortfall_headcount": shortfall,
+        }
+
     return {
         "target_revenue_usd": target_revenue_usd,
         "priority_coes": priority_coes,
@@ -669,4 +698,5 @@ def get_revenue_target_forecast(
         "design_and_discovery": design_and_discovery,
         "effective_duration_weeks": round(duration_weeks, 1) if duration_weeks else None,
         "timeline": timeline,
+        "revenue_hit_estimate": revenue_hit_estimate,
     }

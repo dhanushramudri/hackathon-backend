@@ -253,6 +253,12 @@ def get_pipeline_outlook(
             anomaly_by_month[m] = note
 
     demand_counts = in_window.groupby(["month", "is_confirmed"]).size()
+    # A deal_id can span several role-request rows (~5.2 on average) -- one deal
+    # requesting 7 roles shows as "7 confirmed requests" in demand_counts above,
+    # which reads as 7 separate opportunities when it's really 1. Surfaced
+    # alongside it so a small deal_count next to a bigger request count is
+    # self-explanatory instead of looking like a shortfall in the data.
+    deal_counts = in_window.drop_duplicates("deal_id").groupby(["month", "is_confirmed"]).size()
     # A deal_id can span several role-request rows (~5.2 on average) -- dedupe to one row
     # per deal before summing so a project's flat value is counted once, not once per role.
     confirmed_value_by_month = (
@@ -292,7 +298,9 @@ def get_pipeline_outlook(
             {
                 "month": m,
                 "confirmed_demand_count": confirmed_n,
+                "confirmed_deal_count": int(deal_counts.get((m, True), 0)),
                 "unconfirmed_demand_count": unconfirmed_n,
+                "unconfirmed_deal_count": int(deal_counts.get((m, False), 0)),
                 "projected_supply_count": supply_n,
                 "net_confirmed_surplus_shortfall": supply_n - confirmed_n,
                 "early_warning": (supply_n - confirmed_n) < 0,

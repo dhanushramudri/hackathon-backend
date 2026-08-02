@@ -16,6 +16,10 @@ _provider_checked = False
 def _build_providers() -> list[LLMProvider]:
     providers: list[LLMProvider] = []
 
+    if os.environ.get("AZURE_OPENAI_ENDPOINT", "") and os.environ.get("AZURE_OPENAI_API_KEY", ""):
+        from .providers.azure_openai import AzureOpenAIProvider
+        providers.append(AzureOpenAIProvider())
+
     if os.environ.get("GEMINI_API_KEY", ""):
         from .providers.gemini import GeminiProvider
         providers.append(GeminiProvider())

@@ -6,6 +6,7 @@ pandas
 openpyxl
 anthropic
 google-genai
+openai
 python-dotenv
 apscheduler
 sentence-transformers>=2.7.0
