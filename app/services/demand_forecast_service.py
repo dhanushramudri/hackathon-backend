@@ -17,7 +17,6 @@ from app.engines.revenue_engine import (
 from app.engines.role_mix_engine import (
     CANONICAL_COE_MAP,
     DOCX_CATEGORY_MAP,
-    canonical_project_coe,
     get_role_mix_by_category,
     get_role_mix_by_coes,
 )
@@ -503,6 +502,17 @@ def get_revenue_target_forecast(
     type_of_project: str | None = None,
     include: dict[str, bool] | None = None,
     duration_mix: dict[str, float] | None = None,
+    # No real D&D-to-delivery conversion rate exists in this org's data (see
+    # the D&D block below), so this is a user-supplied assumption, not a
+    # fitted figure -- 100% (1 D&D per delivery project, the old fixed
+    # behavior) unless the RM overrides it via the editable win-rate input.
+    dnd_win_rate_pct: float | None = None,
+    # Optional -- when set, adds a plain timeline feasibility check (real
+    # typical project duration vs. real weeks remaining until this date). Not
+    # a hiring-lead-time projection -- there's no real data in this org to
+    # fit one, so a staffing gap is surfaced as a fact (see forecast.breakdown
+    # /pct_achievable_with_current_headcount), never a fabricated "ready by" date.
+    target_date: str | None = None,
 ) -> dict:
     """Reverse the usual forecast question: given a revenue target, what project
     mix (how many of each CoE) gets us there, prioritized toward the CoEs we're
@@ -545,6 +555,7 @@ def get_revenue_target_forecast(
             "pct_of_target_covered": 0.0,
             "forecast": None,
             "design_and_discovery": None,
+            "timeline": None,
             "error": "No historical project revenue data available to benchmark against.",
         }
 
@@ -554,6 +565,10 @@ def get_revenue_target_forecast(
             key=lambda c: -benchmarks[c]["avg_revenue_per_project"],
         )
     priority_coes = [c for c in priority_coes if c in benchmarks]
+
+    # Clamped to [1, 100] -- 0% would make "D&D needed" divide-by-zero/infinite,
+    # and >100% isn't a meaningful win rate.
+    dnd_win_rate = max(1.0, min(100.0, dnd_win_rate_pct if dnd_win_rate_pct is not None else 100.0)) / 100.0
 
     weights = _priority_weights(len(priority_coes))
     project_mix = []
@@ -566,6 +581,10 @@ def get_revenue_target_forecast(
         if project_count <= 0 and avg > 0 and target_share >= avg * MIN_PROJECT_SHARE_FRACTION:
             project_count = 1
         projected_revenue = project_count * avg
+        # How many D&D engagements it takes to land project_count real delivery
+        # projects at the (user-set) win rate -- e.g. 50% win rate needs 2 D&Ds
+        # per delivery project actually won.
+        dnd_engagements_needed = math.ceil(project_count / dnd_win_rate) if project_count > 0 else 0
         project_mix.append({
             "coe": coe,
             "weight_pct": round(weight * 100, 1),
@@ -574,6 +593,7 @@ def get_revenue_target_forecast(
             "avg_revenue_per_project": avg,
             "projected_revenue_usd": projected_revenue,
             "sample_size": b["sample_size"],
+            "dnd_engagements_needed": dnd_engagements_needed,
         })
         if project_count > 0:
             specs.append({
@@ -592,32 +612,51 @@ def get_revenue_target_forecast(
     forecast = get_new_project_forecast(specs, include=include) if specs else None
     total_projected_revenue = sum(m["projected_revenue_usd"] for m in project_mix)
     total_delivery_projects = sum(m["project_count"] for m in project_mix)
+    total_dnd_engagements_needed = sum(m["dnd_engagements_needed"] for m in project_mix)
 
-    # D&D is the real precursor phase most delivery projects go through
-    # before a client commits -- surfaced as prerequisite context (roughly
-    # 1 D&D per delivery project) rather than folded into the revenue math
-    # above, since no real D&D-to-delivery conversion rate exists to model
-    # how many D&Ds it actually takes to land one delivery project.
+    # D&D is the real precursor phase most delivery projects go through before
+    # a client commits -- surfaced as prerequisite context, scaled by the
+    # editable win rate above (100% = old fixed 1:1 behavior) since no real
+    # D&D-to-delivery conversion rate exists in this org's data to fit one.
     dnd_duration = DND_TYPICAL_DURATION_WEEKS
     dnd_revenue_low, dnd_revenue_high = dnd_revenue_range_for_duration(dnd_duration)
     design_and_discovery = (
         {
-            "engagements_needed": total_delivery_projects,
+            "engagements_needed": total_dnd_engagements_needed,
+            "win_rate_pct": round(dnd_win_rate * 100, 1),
             "duration_weeks": dnd_duration,
             "revenue_usd_low": dnd_revenue_low,
             "revenue_usd_high": dnd_revenue_high,
-            "total_revenue_usd_low": total_delivery_projects * dnd_revenue_low,
-            "total_revenue_usd_high": total_delivery_projects * dnd_revenue_high,
+            "total_revenue_usd_low": total_dnd_engagements_needed * dnd_revenue_low,
+            "total_revenue_usd_high": total_dnd_engagements_needed * dnd_revenue_high,
             "role_mix": DND_TEMPLATE["role_mix"],
             "note": (
-                "Clients typically commit to a delivery project only after a paid D&D engagement -- "
-                "shown as prerequisite work, not guaranteed to convert 1:1, and not included in the "
-                "revenue totals above."
+                f"Based on a {round(dnd_win_rate * 100)}% D&D-to-delivery win rate (editable, not a fitted "
+                f"figure -- no real conversion data exists) -- {total_delivery_projects} delivery project(s) "
+                f"need {total_dnd_engagements_needed} D&D engagement(s) at that rate. Clients typically commit "
+                "to a delivery project only after a paid D&D engagement -- not included in the revenue totals above."
             ),
         }
         if total_delivery_projects > 0
         else None
     )
+
+    # Plain timeline feasibility check -- real typical project duration vs.
+    # real weeks remaining until the target date. Deliberately NOT a hiring-
+    # lead-time projection (see the param docstring above): a staffing gap is
+    # reported as a fact via forecast.pct_achievable_with_current_headcount,
+    # never smoothed into a fabricated "ready by" date.
+    timeline = None
+    if target_date and duration_weeks:
+        today = pd.Timestamp.now().normalize()
+        target_ts = pd.to_datetime(target_date).normalize()
+        weeks_available = max((target_ts - today).days / 7, 0)
+        timeline = {
+            "target_date": target_ts.strftime("%Y-%m-%d"),
+            "weeks_available": round(weeks_available, 1),
+            "typical_project_weeks": round(duration_weeks, 1),
+            "likely_fits": weeks_available >= duration_weeks,
+        }
 
     return {
         "target_revenue_usd": target_revenue_usd,
@@ -629,101 +668,5 @@ def get_revenue_target_forecast(
         "forecast": forecast,
         "design_and_discovery": design_and_discovery,
         "effective_duration_weeks": round(duration_weeks, 1) if duration_weeks else None,
-    }
-
-
-FINANCIAL_SUMMARY_TRAILING_MONTHS = 6
-FINANCIAL_SUMMARY_MIN_SAMPLE = 5
-
-
-def _real_dated_projects_with_coe() -> pd.DataFrame:
-    adapter = get_adapter()
-    projects = adapter.get_projects()
-    real = projects[
-        (projects["date_source"].isin(["given", "derived_allocation"]))
-        & (projects["project_status"].isin(["COMPLETE", "ACTIVE"]))
-    ].copy()
-    real = real.dropna(subset=["project_start_date"])
-    real["coe"] = real["tech_coe"].apply(canonical_project_coe)
-    return real
-
-
-def get_financial_summary(
-    target_revenue_usd: float,
-    target_date: str,
-    priority_coes: list[str] | None = None,
-    duration_weeks: int | None = None,
-) -> dict:
-    """CFO view: current vs required revenue run-rate, computed from real
-    project start dates over the trailing months -- not a fabricated growth
-    curve. avg_revenue_per_project is the same rate-anchored DELIVERY_TEMPLATE
-    figure used everywhere else in this feature (see revenue_engine.py);
-    which/how many projects started when comes straight from real rows."""
-    today = pd.Timestamp.now().normalize()
-    target_ts = pd.to_datetime(target_date).normalize()
-
-    benchmarks = get_revenue_benchmarks_by_coe(duration_weeks)
-    if not benchmarks:
-        return {"error": "No historical project revenue data available to benchmark against."}
-
-    coes_in_scope = [c for c in (priority_coes or list(benchmarks.keys())) if c in benchmarks] or list(benchmarks.keys())
-    real = _real_dated_projects_with_coe()
-    scoped = real[real["coe"].isin(coes_in_scope)]
-
-    window_start = today - pd.DateOffset(months=FINANCIAL_SUMMARY_TRAILING_MONTHS)
-    trailing = scoped[(scoped["project_start_date"] > window_start) & (scoped["project_start_date"] <= today)]
-
-    monthly_actual = []
-    cumulative = 0.0
-    for i in range(FINANCIAL_SUMMARY_TRAILING_MONTHS - 1, -1, -1):
-        month_period = (today - pd.DateOffset(months=i)).to_period("M")
-        month_start, month_end = month_period.start_time.normalize(), min(month_period.end_time.normalize(), today)
-        month_coes = trailing[(trailing["project_start_date"] >= month_start) & (trailing["project_start_date"] <= month_end)]["coe"]
-        month_revenue = sum(benchmarks[c]["avg_revenue_per_project"] for c in month_coes if c in benchmarks)
-        cumulative += month_revenue
-        monthly_actual.append({"month": month_start.strftime("%Y-%m"), "cumulative_revenue_usd": round(cumulative, 0)})
-
-    trailing_count = len(trailing)
-    current_run_rate_monthly = round(cumulative / FINANCIAL_SUMMARY_TRAILING_MONTHS, 0)
-
-    months_to_target = max((target_ts - today).days / 30.44, 1 / 30.44)
-    revenue_gap = max(target_revenue_usd - cumulative, 0)
-    required_run_rate_monthly = round(revenue_gap / months_to_target, 0)
-    velocity_gap_monthly = round(required_run_rate_monthly - current_run_rate_monthly, 0)
-    productivity_multiplier = (
-        round(required_run_rate_monthly / current_run_rate_monthly, 2) if current_run_rate_monthly > 0 else None
-    )
-    projected_attainment_date = (
-        (today + pd.DateOffset(months=math.ceil(revenue_gap / current_run_rate_monthly))).strftime("%Y-%m-%d")
-        if current_run_rate_monthly > 0
-        else None
-    )
-
-    per_coe = [
-        {
-            "coe": coe,
-            "current_run_rate_monthly_usd": round(
-                len(trailing[trailing["coe"] == coe]) * benchmarks[coe]["avg_revenue_per_project"] / FINANCIAL_SUMMARY_TRAILING_MONTHS, 0
-            ),
-            "sample_size": len(trailing[trailing["coe"] == coe]),
-        }
-        for coe in coes_in_scope
-    ]
-
-    return {
-        "target_revenue_usd": target_revenue_usd,
-        "target_date": target_ts.strftime("%Y-%m-%d"),
-        "current_run_rate_monthly_usd": current_run_rate_monthly,
-        "required_run_rate_monthly_usd": required_run_rate_monthly,
-        "velocity_gap_monthly_usd": velocity_gap_monthly,
-        "productivity_multiplier": productivity_multiplier,
-        "projected_attainment_date": projected_attainment_date,
-        "monthly_actual": monthly_actual,
-        "required_line": [
-            {"date": today.strftime("%Y-%m-%d"), "cumulative_revenue_usd": round(cumulative, 0)},
-            {"date": target_ts.strftime("%Y-%m-%d"), "cumulative_revenue_usd": round(target_revenue_usd, 0)},
-        ],
-        "per_coe": per_coe,
-        "low_confidence": trailing_count < FINANCIAL_SUMMARY_MIN_SAMPLE,
-        "sample_size": trailing_count,
+        "timeline": timeline,
     }

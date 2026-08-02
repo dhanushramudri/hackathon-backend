@@ -177,6 +177,14 @@ def _real_monthly_history(months_back: int = HISTORY_MONTHS_BACK) -> list[dict]:
                     count = int(((locations == real_loc) & hires_mask).sum())
                     if count:
                         hires_by_location[label] = hires_by_location.get(label, 0) + count
+                # A real employee record can have a blank/unrecognized location
+                # (a genuine gap in the source data, not every hire elsewhere on
+                # this page has one) -- surfaced as its own honest bucket so the
+                # location breakdown always reconciles to the real new_hires
+                # count instead of silently summing to less than it.
+                unattributed = new_hires - sum(hires_by_location.values())
+                if unattributed > 0:
+                    hires_by_location["Unknown"] = unattributed
             if period in bulk_periods:
                 day_counts = joins[hires_mask].value_counts()
                 top_count = int(day_counts.iloc[0])
@@ -249,6 +257,23 @@ def _real_trailing_forecast(history: list[dict], horizon_months: int) -> list[di
     sample_months = len(sample)
     sample_nets = [h["net"] for h in sample]
     avg_net = (sum(sample_nets) / sample_months) if sample_months else 0.0
+    # Hires/resignations decomposed separately (not just net) so the Attrition
+    # & Retention chart can show a predicted continuation of EACH line, not
+    # just the combined headcount effect.
+    avg_hires = (sum(h["new_hires"] for h in sample) / sample_months) if sample_months else 0.0
+    avg_resignations = (sum(h["resignations"] for h in sample) / sample_months) if sample_months else 0.0
+    # Predicted location split for the forecast months -- reuses the SAME
+    # trailing sample's real hires_by_location breakdown (already real-location-
+    # proportioned for gap months, see _real_monthly_history), not a separately
+    # invented distribution, so it's consistent with forecast_new_hires above.
+    location_totals: dict[str, int] = {}
+    for h in sample:
+        for loc, cnt in (h.get("hires_by_location") or {}).items():
+            location_totals[loc] = location_totals.get(loc, 0) + cnt
+    location_total_sum = sum(location_totals.values())
+    forecast_location_share = (
+        {loc: cnt / location_total_sum for loc, cnt in location_totals.items()} if location_total_sum else {}
+    )
     # Range = real observed spread of the SAME trailing months feeding the point
     # forecast (worst vs. best real net-change month), not a fabricated
     # statistical confidence interval -- with only a handful of real months to
@@ -277,6 +302,11 @@ def _real_trailing_forecast(history: list[dict], horizon_months: int) -> list[di
             "upper": round(max(running_lower, running_upper), 1),
             "sample_months": sample_months,
             "low_confidence": sample_months < FORECAST_TRAILING_MONTHS,
+            "forecast_new_hires": round(avg_hires, 1),
+            "forecast_resignations": round(avg_resignations, 1),
+            "forecast_hires_by_location": {
+                loc: round(avg_hires * share) for loc, share in forecast_location_share.items()
+            },
         })
     return forecast
 
@@ -338,10 +368,14 @@ def _compute_insights(history: list[dict], forecast: list[dict], coe: dict, util
         if prior["total_active_headcount"] else None
     )
 
-    forecast_3mo = forecast[2] if len(forecast) > 2 else (forecast[-1] if forecast else None)
+    # End of the REQUESTED horizon (forecast has exactly horizon_months entries),
+    # not a hardcoded 3rd month -- so switching the page's 3M/6M/12M selector
+    # actually changes what these cards/panels show, instead of always freezing
+    # on a fixed 3-month-ahead point regardless of the selected horizon.
+    forecast_end = forecast[-1] if forecast else None
     forecast_change_pct = (
-        round((forecast_3mo["forecast"] - latest["total_active_headcount"]) / latest["total_active_headcount"] * 100, 1)
-        if forecast_3mo and latest["total_active_headcount"] else None
+        round((forecast_end["forecast"] - latest["total_active_headcount"]) / latest["total_active_headcount"] * 100, 1)
+        if forecast_end and latest["total_active_headcount"] else None
     )
 
     productivity_series = _productivity_series(history, forecast)
@@ -349,11 +383,25 @@ def _compute_insights(history: list[dict], forecast: list[dict], coe: dict, util
     productivity_forecast = productivity_series[len(history):]
     current_productivity = productivity_history[-1]
     prior_productivity = productivity_history[lookback_idx]
-    productivity_3mo = productivity_forecast[2] if len(productivity_forecast) > 2 else (productivity_forecast[-1] if productivity_forecast else None)
+    productivity_end = productivity_forecast[-1] if productivity_forecast else None
 
     hires_vs_resignations = [
         {"month": h["month"], "new_hires": h["new_hires"], "resignations": h["resignations"], "net": h["net"]}
         for h in history[-6:]
+    ]
+    # Predicted continuation of the SAME chart -- same trailing-average hires/
+    # resignations feeding the headcount forecast above, extended across the
+    # full requested horizon (not just history), so Attrition & Retention also
+    # responds to the 3M/6M/12M selector instead of only ever showing real
+    # history.
+    hires_vs_resignations_forecast = [
+        {
+            "month": f["month"],
+            "new_hires": f["forecast_new_hires"],
+            "resignations": f["forecast_resignations"],
+            "net": round(f["forecast_new_hires"] - f["forecast_resignations"], 1),
+        }
+        for f in forecast
     ]
 
     risk_flags = []
@@ -392,12 +440,12 @@ def _compute_insights(history: list[dict], forecast: list[dict], coe: dict, util
             f"Headcount has {direction} {abs(headcount_change_pct)}% over the last 3 months "
             f"({prior['total_active_headcount']} → {latest['total_active_headcount']})."
         )
-    if forecast_3mo:
+    if forecast_end:
         forecast_word = "grow" if (forecast_change_pct or 0) > 0 else "decline" if (forecast_change_pct or 0) < 0 else "hold steady"
         executive_summary.append(
-            f"Based on the last {forecast_3mo['sample_months']} real month(s) of net hiring, headcount is projected to "
-            f"{forecast_word} to ~{round(forecast_3mo['forecast'])} by {forecast_3mo['month']} -- "
-            f"{'a low-confidence extrapolation' if forecast_3mo['low_confidence'] else 'a trailing-average extrapolation'}, not a validated model."
+            f"Based on the last {forecast_end['sample_months']} real month(s) of net hiring, headcount is projected to "
+            f"{forecast_word} to ~{round(forecast_end['forecast'])} by {forecast_end['month']} -- "
+            f"{'a low-confidence extrapolation' if forecast_end['low_confidence'] else 'a trailing-average extrapolation'}, not a validated model."
         )
     rev_trend = "up" if current_productivity["revenue_per_head_gbp"] > prior_productivity["revenue_per_head_gbp"] else "down" if current_productivity["revenue_per_head_gbp"] < prior_productivity["revenue_per_head_gbp"] else "flat"
     executive_summary.append(
@@ -425,7 +473,7 @@ def _compute_insights(history: list[dict], forecast: list[dict], coe: dict, util
         "forecast_change_pct": forecast_change_pct,
         "productivity": {
             "current_revenue_per_head_gbp": current_productivity["revenue_per_head_gbp"],
-            "predicted_revenue_per_head_gbp_3mo": productivity_3mo["revenue_per_head_gbp"] if productivity_3mo else None,
+            "predicted_revenue_per_head_gbp_forecast": productivity_end["revenue_per_head_gbp"] if productivity_end else None,
             "history": [
                 {
                     "month": p["month"], "value": p["revenue_per_head_gbp"],
@@ -443,7 +491,7 @@ def _compute_insights(history: list[dict], forecast: list[dict], coe: dict, util
                 for p in productivity_forecast
             ],
             "current_ebitda_margin_pct": current_productivity["ebitda_margin_pct"],
-            "predicted_ebitda_margin_pct_3mo": productivity_3mo["ebitda_margin_pct"] if productivity_3mo else None,
+            "predicted_ebitda_margin_pct_forecast": productivity_end["ebitda_margin_pct"] if productivity_end else None,
             "ebitda_margin_history": [{"month": p["month"], "value": p["ebitda_margin_pct"]} for p in productivity_history],
             "ebitda_margin_forecast": [{"month": p["month"], "value": p["ebitda_margin_pct"]} for p in productivity_forecast],
         },
@@ -453,6 +501,7 @@ def _compute_insights(history: list[dict], forecast: list[dict], coe: dict, util
         },
         "attrition": {
             "hires_vs_resignations": hires_vs_resignations,
+            "hires_vs_resignations_forecast": hires_vs_resignations_forecast,
         },
         "utilization": {
             "free_pool_current": utilization["free_pool_current"],
@@ -573,7 +622,8 @@ def list_raw_tables() -> list[dict]:
     return [
         {"table": "monthly_history", "label": "Real Monthly History", "description": "Real headcount, hires, resignations, and location breakdown per month, computed from employee join/resignation dates."},
         {"table": "coe_breakdown", "label": "Real CoE Breakdown", "description": "Current active headcount tallied by real CoE assignment (from observed skills data), including a real 'Not determined' bucket."},
-        {"table": "forecast", "label": "Forecast", "description": "Trailing-average net-change extrapolation, with real sample size and low-confidence flag."},
+        {"table": "forecast", "label": "Forecast", "description": "Trailing-average net-change extrapolation of headcount, hires, and resignations, with real sample size and low-confidence flag."},
+        {"table": "productivity", "label": "Real Revenue & Margin", "description": "Revenue-per-head and Adj. EBITDA margin per month -- is_real_revenue_anchor marks months matched to the real JMAN FY26 Townhall P&L; all other months (including every forecast month) are extrapolated from that real trend, not independently fabricated."},
     ]
 
 
@@ -585,7 +635,10 @@ def get_raw_table(table: str) -> dict:
         rows = _real_coe_breakdown()["mix"]
     elif table == "forecast":
         rows = _real_trailing_forecast(history, MAX_FORECAST_MONTHS)
+    elif table == "productivity":
+        forecast = _real_trailing_forecast(history, MAX_FORECAST_MONTHS)
+        rows = _productivity_series(history, forecast)
     else:
-        raise ValueError(f"Unknown table {table!r}. Valid options: monthly_history, coe_breakdown, forecast")
+        raise ValueError(f"Unknown table {table!r}. Valid options: monthly_history, coe_breakdown, forecast, productivity")
     spec = next(t for t in list_raw_tables() if t["table"] == table)
     return {**spec, "columns": list(rows[0].keys()) if rows else [], "rows": rows, "row_count": len(rows)}

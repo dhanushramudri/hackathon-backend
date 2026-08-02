@@ -8,7 +8,7 @@ from app.engines.revenue_engine import compute_duration_buckets, get_revenue_ben
 from app.engines.role_mix_engine import get_role_mix_by_coes
 from app.engines.simple_forecast_engine import get_prediction_forecast
 from app.services.demand_forecast_service import (
-    get_financial_summary, get_new_project_forecast, get_revenue_target_forecast, get_top_candidates_for_role,
+    get_new_project_forecast, get_revenue_target_forecast, get_top_candidates_for_role,
 )
 from app.services.pipeline_outlook_service import OUTLOOK_MONTHS, get_pipeline_outlook, get_pipeline_outlook_drilldown
 
@@ -35,17 +35,13 @@ class RevenueTargetRequest(BaseModel):
     duration_weeks: int | None = None
     type_of_project: str | None = None
     duration_mix: dict[str, float] | None = None
+    dnd_win_rate_pct: float | None = None
+    target_date: str | None = None
     include_skill: bool = True
     include_competency: bool = True
     include_availability: bool = True
     include_category_match: bool = False
     include_project_count: bool = False
-
-class FinancialSummaryRequest(BaseModel):
-    target_revenue_usd: float
-    target_date: str
-    priority_coes: list[str] | None = None
-    duration_weeks: int | None = None
 
 @router.post("/new-projects")
 def new_projects(
@@ -91,6 +87,8 @@ def revenue_target(body: RevenueTargetRequest) -> dict:
         duration_weeks=body.duration_weeks,
         type_of_project=body.type_of_project,
         duration_mix=body.duration_mix,
+        dnd_win_rate_pct=body.dnd_win_rate_pct,
+        target_date=body.target_date,
         include={
             "skill": body.include_skill,
             "competency": body.include_competency,
@@ -103,15 +101,6 @@ def revenue_target(body: RevenueTargetRequest) -> dict:
 @router.get("/duration-mix-benchmarks")
 def duration_mix_benchmarks() -> dict:
     return compute_duration_buckets()
-
-@router.post("/financial-summary")
-def financial_summary(body: FinancialSummaryRequest) -> dict:
-    return get_financial_summary(
-        body.target_revenue_usd,
-        body.target_date,
-        priority_coes=body.priority_coes,
-        duration_weeks=body.duration_weeks,
-    )
 
 @router.get("/prediction")
 def prediction(horizon_months: int = 24) -> dict:
