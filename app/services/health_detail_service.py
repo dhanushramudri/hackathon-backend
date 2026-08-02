@@ -12,7 +12,8 @@ from app.services.recommendation_service import (
     _coe_affinity_rank,
 )
 from app.services.health_monitor_service import (
-     DEMO_STATIC_DEVOPS_PROJECT_CODE,
+     DEMO_DEVOPS_SHOWCASE_PROJECT_CODES,
+     DEMO_STATIC_DEVOPS_SOURCE_PROJECT_CODE,
      EXTENSION_DAILY_HOURS,
      count_working_days,
      add_working_days,
@@ -348,7 +349,15 @@ def get_project_health_detail(project_code: str) -> dict:
     if _devops_enabled:
         # _devops_tickets_by_project = group_tickets_by_project_code(fetch_open_devops_tickets())
         _devops_tickets_by_project = group_tickets_by_project_code(fetch_open_devops_tickets_cached())
-        _devops_raw_tickets = _devops_tickets_by_project.get(DEMO_STATIC_DEVOPS_PROJECT_CODE, [])
+        # Same real-per-project lookup as health_monitor_service.get_health_report,
+        # with the same small DEMO showcase exception -- see that module's
+        # DEMO_DEVOPS_SHOWCASE_PROJECT_CODES for why.
+        _devops_lookup_code = (
+            DEMO_STATIC_DEVOPS_SOURCE_PROJECT_CODE
+            if project_code in DEMO_DEVOPS_SHOWCASE_PROJECT_CODES
+            else project_code
+        )
+        _devops_raw_tickets = _devops_tickets_by_project.get(_devops_lookup_code, [])
     else:
         _devops_raw_tickets = []
 

@@ -28,7 +28,6 @@ from app.services.timesheet_insights_service import get_employee_overtime_risk, 
 # ← NEW: DevOps board extension-risk service
 from app.services.devops_insights_service import (
     compute_devops_extension_risk,
-    compute_devops_ticket_stats,
     fetch_open_devops_tickets,
     fetch_open_devops_tickets_cached,
     group_tickets_by_project_code,
@@ -40,16 +39,25 @@ SHADOW_SHARE_THRESHOLD = 0.3
 RAMP_DOWN_WINDOW_DAYS = 30
 UNDERSTAFFED_RATIO_THRESHOLD = 0.75
 STANDARD_MONTHLY_HOURS = 160
-EXTENSION_DAILY_HOURS = 8.0 
+EXTENSION_DAILY_HOURS = 8.0
 
 # ── DEMO ONLY ────────────────────────────────────────────────────────────
-# Statically maps every project's DevOps signal to this one real, busy
-# DevOps project code so every card in the health monitor shows meaningful
-# ticket data during demos. Remove this override (and revert the lookup
-# below to `_devops_tickets_by_project.get(project_code, [])`) once each
-# project has its own real, correctly-tagged AreaPath on the board.
-DEMO_STATIC_DEVOPS_PROJECT_CODE = "JMG_242"
+# Most projects don't have their own tickets tagged to an AreaPath in Azure
+# DevOps yet, so their real per-project lookup below correctly returns no
+# tickets (no extension-risk signal -- honest, not an error). A small,
+# explicit set of already at-risk projects is mapped to one real, busy
+# DevOps project's ticket set instead, so the Extension Risk signal still
+# has a few genuine, showcaseable examples on the health monitor. Every
+# other project is unaffected. Remove this once each project has its own
+# real, correctly-tagged AreaPath on the board.
+DEMO_DEVOPS_SHOWCASE_PROJECT_CODES = {
+    "MYGYM_001", "CLIENT_215_005", "CLIENT_35_004", "CLIENT_31_007", "CLIENT_44_002",
+    "CLIENT_64_002", "CLIENT_97_001", "CLIENT_115_002", "CLIENT_187_007", "CLIENT_136_003",
+    "CLIENT_388_001", "CLIENT_87_006", "CLIENT_89_006",
+}
+DEMO_STATIC_DEVOPS_SOURCE_PROJECT_CODE = "JMG_242"
 # ── END DEMO ─────────────────────────────────────────────────────────────
+
 
 WSR_TREND_RECENT_REPORTS = 3
 WSR_TREND_BASELINE_REPORTS = 3
@@ -506,11 +514,6 @@ def _compute_health_rows(active: pd.DataFrame, churn_p75_override: float | None 
         _devops_tickets_by_project = {}
     # ── END NEW ─────────────────────────────────────────────────────────────
 
-    _demo_devops_tickets = _devops_tickets_by_project.get(DEMO_STATIC_DEVOPS_PROJECT_CODE, [])
-    _demo_devops_ticket_stats = (
-        compute_devops_ticket_stats(_demo_devops_tickets) if _devops_enabled else None
-    )
-
     records = []
     for _, row in active.iterrows():
         expected = get_role_mix(row["type_of_project"], row["tech_coe"], templates=role_mix_templates)
@@ -530,23 +533,20 @@ def _compute_health_rows(active: pd.DataFrame, churn_p75_override: float | None 
         overtime_employee_count = int(row["overtime_employee_count"])
 
         # ── ← NEW: per-project DevOps extension-risk metrics ───────────────
-        # devops_tickets = _devops_tickets_by_project.get(project_code, [])
-        # devops_risk = (
-        #     compute_devops_extension_risk(devops_tickets, row["project_end_date"])
-        #     if _devops_enabled
-        #     else no_devops_config_risk()
-        # )
-        # is_devops_extension_risk = bool(devops_risk["has_devops_extension_risk"])
-
-        # DEMO: force every project to read the same busy DevOps project's
-        # tickets instead of its own (see DEMO_STATIC_DEVOPS_PROJECT_CODE above).
-        devops_tickets = _demo_devops_tickets
-
+        # Each project reads its OWN real tickets (from its own AreaPath) --
+        # most have none tagged in Azure DevOps yet and correctly show no
+        # extension-risk signal, rather than a copy of some other project's
+        # backlog -- except the small DEMO showcase set above.
+        devops_tickets = (
+            _devops_tickets_by_project.get(DEMO_STATIC_DEVOPS_SOURCE_PROJECT_CODE, [])
+            if project_code in DEMO_DEVOPS_SHOWCASE_PROJECT_CODES
+            else _devops_tickets_by_project.get(project_code, [])
+        )
         devops_risk = (
-             compute_devops_extension_risk(devops_tickets, row["effective_end_date"], project_code, ticket_stats=_demo_devops_ticket_stats)
-             if _devops_enabled
-             else no_devops_config_risk()
-         )
+            compute_devops_extension_risk(devops_tickets, row["effective_end_date"], project_code)
+            if _devops_enabled
+            else no_devops_config_risk()
+        )
         is_devops_extension_risk = bool(devops_risk["has_devops_extension_risk"])
         # ── END NEW ─────────────────────────────────────────────────────────
 

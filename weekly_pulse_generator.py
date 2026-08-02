@@ -53,10 +53,23 @@ QUESTIONS = [
 ANSWER_SCALE = [4, 3, 2, 1]
 ANSWER_LABELS = {4: "Strongly agree", 3: "Agree", 2: "Disagree", 1: "Strongly disagree"}
 
-# Base weights for a healthy-skewed team (sums to 1.0), aligned with ANSWER_SCALE
-BASE_WEIGHTS = [0.32, 0.45, 0.16, 0.07]
+# Base weights for a healthy-skewed team (sums to 1.0), aligned with ANSWER_SCALE.
+# Disagree + Strongly disagree share kept low (~8%, roughly 1 disagree per
+# 12 responses) -- the health page's pulse_risk flag fires on ANY disagree
+# across a whole team over 4 weeks, so even a modest per-answer negative rate
+# compounds into most projects being flagged once you have more than a
+# handful of employees/weeks. Keeping the base rate low (and the per-employee
+# bias shift below small) is what actually keeps that fan-out realistic.
+BASE_WEIGHTS = [0.55, 0.37, 0.06, 0.02]
 
 RNG_SEED = 42  # change or remove for different random output each run
+
+# Magnitude of the per-employee sentiment-bias shift (see biased_weights) --
+# lowered alongside BASE_WEIGHTS above so a handful of consistently-lower
+# employees still exist (for burnout/attrition demos) without pushing any
+# single employee's disagree probability high enough to make the "any bad
+# answer" project-level flag near-universal.
+BIAS_SHIFT_MAGNITUDE = 0.05
 
 
 def stable_employee_bias(employee_id: str) -> float:
@@ -74,7 +87,7 @@ def biased_weights(bias: float) -> list[float]:
     based on an employee's bias. bias > 0 => more positive answers,
     bias < 0 => more negative answers."""
     w = list(BASE_WEIGHTS)
-    shift = 0.18 * bias  # magnitude of the effect
+    shift = BIAS_SHIFT_MAGNITUDE * bias  # magnitude of the effect
     # move mass between "Strongly agree/Agree" and "Disagree/Strongly disagree"
     w[0] = max(0.02, w[0] + shift)
     w[1] = max(0.02, w[1] + shift * 0.5)
@@ -195,6 +208,17 @@ def main():
     out_df = out_df[col_order]
 
     print(f"Writing {len(out_df)} weekly pulse rows to {args.output} ...")
+    if args.output.lower().endswith(".csv"):
+        # Matches data/Transformed/10_Weekly_Pulse_dummy.csv's exact column
+        # order and DD-MM-YYYY date-string format (see db.py's
+        # _EXPLICIT_FORMAT_DATE_COLUMNS["weekly_pulse"]) so this can overwrite
+        # that file directly.
+        csv_df = out_df.copy()
+        for col in date_cols:
+            csv_df[col] = csv_df[col].dt.strftime("%d-%m-%Y")
+        csv_df.to_csv(args.output, index=False)
+        print("Done.")
+        return
     with pd.ExcelWriter(args.output, engine="openpyxl", datetime_format="DD-MM-YYYY") as writer:
         out_df.to_excel(writer, sheet_name="weekly_pulse", index=False)
 
