@@ -439,8 +439,17 @@ TOOLS = [
             "write access whatsoever -- INSERT/UPDATE/DELETE/DROP/ALTER/CREATE or any other mutating "
             "statement is rejected outright, and only one statement is allowed per call. If your query "
             "errors (bad column/table name, syntax) or returns an empty/unhelpful result, read the "
-            "error/result and try a corrected query -- you have up to 5 attempts total for this tool "
-            "per question. The real tables and columns available are:\n" + _DB_SCHEMA_TEXT
+            "error/result and try a corrected query -- you MUST actually retry with a fixed query "
+            "when one errors (you have up to 5 attempts total for this tool per question); never give "
+            "up and report the raw error, or a guessed negative answer like 'no results', after only "
+            "one failed attempt. Note: 'cluster' (a numeric 1-5 client-cluster segment) only exists on "
+            "pipeline_forecast.cluster -- the projects table has no cluster column at all (it has "
+            "tech_coe/proposition_coe instead, a different real dimension: technical Center of "
+            "Excellence, not client cluster). Never substitute one for the other. Also note: "
+            "pipeline_forecast has NO project_code/project_id column -- each row is one role-request "
+            "against a deal, not a project; deal_id is the real per-deal identifier there (use "
+            "COUNT(DISTINCT deal_id) for 'how many deals/projects', not project_code, which doesn't "
+            "exist on this table). The real tables and columns available are:\n" + _DB_SCHEMA_TEXT
         ),
         "parameters": {
             "type": "object",
@@ -1074,9 +1083,15 @@ _JSON_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.MULTILINE)
 def _parse_final_answer(content: str | None) -> tuple[str, str]:
     if not content:
         return "I couldn't find an answer to that.", "text"
-    cleaned = _JSON_FENCE_RE.sub("", content.strip())
+    cleaned = _JSON_FENCE_RE.sub("", content.strip()).lstrip()
     try:
-        parsed = json.loads(cleaned)
+        # raw_decode (rather than json.loads) parses just the leading JSON
+        # object and ignores anything after it -- some models occasionally
+        # echo a markdown table after the required JSON object despite the
+        # system prompt saying "ONLY a JSON object", and json.loads rejects
+        # that trailing text outright, dumping the whole raw blob (JSON +
+        # markdown) to the user instead of the clean summary + real table.
+        parsed, _ = json.JSONDecoder().raw_decode(cleaned)
         summary = parsed.get("summary") or content
         fmt = parsed.get("format") if parsed.get("format") in ("table", "stats", "text") else "text"
         return summary, fmt
