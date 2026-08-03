@@ -11,6 +11,7 @@ from app.services.employee_profile_service import (
     list_employees,
 )
 from app.services.timesheet_insights_service import get_employee_timesheet_entries
+from app.engines.pulse_engine import get_employee_all_pulse_responses
 
 router = APIRouter(prefix="/employees", tags=["employees"])
 
@@ -73,3 +74,9 @@ def timesheet(
     return get_employee_timesheet_entries(
         employee_id, start_date=start_date, end_date=end_date, project_id=project_id, billing_status=billing_status,
     )
+
+@router.get("/{employee_id}/pulse")
+def employee_pulse(employee_id: str) -> list[dict]:
+    """Every real Weekly Pulse response this employee has submitted -- backs
+    the Timesheet tab's per-week "Weekly Pulse" button."""
+    return get_employee_all_pulse_responses(employee_id)

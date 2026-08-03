@@ -85,6 +85,31 @@ def get_employee_pulse_table(weeks: int = RECENT_WEEKS) -> pd.DataFrame:
     is_not_happy = recent.groupby("employee_id")["_is_bad"].any().rename("is_not_happy")
     return is_not_happy.to_frame()
 
+def get_employee_all_pulse_responses(employee_id: str) -> list[dict]:
+    """Every real weekly pulse response this employee has ever submitted --
+    no recency window (unlike get_employee_pulse_detail's last-4-weeks scope)
+    -- so a 'Weekly Pulse' button next to ANY real timesheet date can look up
+    the real Q&A for that week, not just the last 4."""
+    df = get_adapter().get_weekly_pulse()
+    rows = df[df["employee_id"] == employee_id].sort_values("week_start_date", ascending=False)
+    return [
+        {
+            "week_start_date": r["week_start_date"].strftime("%Y-%m-%d"),
+            "week_end_date": r["week_end_date"].strftime("%Y-%m-%d"),
+            "is_not_happy": bool(any(r[q] <= DISAGREE_MAX_SCORE for q in NOT_HAPPY_QUESTIONS)),
+            "answers": [
+                {
+                    "question": QUESTION_LABELS[q],
+                    "score": int(r[q]),
+                    "meaning": SCALE_MEANING[int(r[q])],
+                }
+                for q in ALL_QUESTIONS
+            ],
+        }
+        for _, r in rows.iterrows()
+    ]
+
+
 def get_employee_pulse_detail(employee_id: str, weeks: int = RECENT_WEEKS) -> dict | None:
     """Full recent-response record for one employee -- the "proof" behind the
     Not happy flag: every response in the window, most recent first, all 5
