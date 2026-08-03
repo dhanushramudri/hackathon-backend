@@ -53,6 +53,9 @@ class DataSourceAdapter(ABC):
     @abstractmethod
     def get_hr_feedback(self) -> pd.DataFrame: ...
 
+    @abstractmethod
+    def get_coe_skills_mapping(self) -> pd.DataFrame: ...
+
 class LocalAdapter(DataSourceAdapter):
 
     def _query(self, table: str) -> pd.DataFrame:
@@ -112,6 +115,9 @@ class LocalAdapter(DataSourceAdapter):
     def get_hr_feedback(self) -> pd.DataFrame:
         return self._query("hr_feedback")
 
+    def get_coe_skills_mapping(self) -> pd.DataFrame:
+        return self._query("coe_skills_mapping")
+
 class JinApiAdapter(DataSourceAdapter):
 
     def __init__(self, base_url: str, api_key: str):
@@ -162,6 +168,9 @@ class JinApiAdapter(DataSourceAdapter):
 
     def get_weekly_pulse(self) -> pd.DataFrame:
         self._not_implemented("/api/weekly-pulse")
+
+    def get_coe_skills_mapping(self) -> pd.DataFrame:
+        self._not_implemented("/api/coe-skills-mapping")
 
 def get_adapter() -> DataSourceAdapter:
     return LocalAdapter()

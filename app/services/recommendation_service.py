@@ -7,6 +7,7 @@ from app.core.adapter import get_adapter
 from app.engines import scoring
 from app.engines.role_hierarchy import adjacent_designations, same_level_peers
 from app.engines.employee_coe import get_employee_primary_coe_map
+from app.engines.pipeline_skill_inference import infer_required_skills_for_pipeline_row
 from app.engines.resource_code_decoder import decode_resource_code
 from app.engines.skillset_classifier import classify_skillset, classify_skillset_with_proof
 from app.engines import embedding_engine
@@ -829,6 +830,23 @@ def get_recommendations_for_pipeline_row(
     _skillset = _skillset_raw if isinstance(_skillset_raw, str) else ""
     _solution = row.get("solution")
     requested_solution = _solution if isinstance(_solution, str) and _solution.strip() else None
+
+    # No real skillset text was ever given for this role request (a real gap
+    # in ~53% of pipeline rows -- HubSpot deals nobody typed a skills list
+    # for) -- infer a real, defensible one instead of leaving every candidate
+    # unscoreable. See app/engines/pipeline_skill_inference.py for the exact
+    # priority chain (past-CoE-history -> AI semantic match -> org baseline).
+    required_skill_source = "given"
+    inferred_skill_info: dict | None = None
+    if not _skillset.strip():
+        inferred_skill_info = infer_required_skills_for_pipeline_row(
+            resources_requested=row.get("resources_requested"),
+            solution=requested_solution,
+            comments=row.get("comments"),
+        )
+        _skillset = inferred_skill_info["skillset_text"]
+        required_skill_source = inferred_skill_info["source"]
+
     result = get_recommendations(
         skillset_text=_skillset,
         likely_start_date=str(row.get("likely_start_date")),
@@ -874,6 +892,11 @@ def get_recommendations_for_pipeline_row(
         "skillset_coe_categories": requested_coe_categories,
         "skillset_classification_proof": skillset_classification_proof,
         "requested_designations": requested_designations,
+        # "given" when the deal author's own real skillset text was used;
+        # otherwise which fallback tier of infer_required_skills_for_pipeline_row
+        # supplied it (see that module's docstring for the full priority chain).
+        "required_skill_source": required_skill_source,
+        "inferred_skill_info": inferred_skill_info,
     }
 
     if pd.notna(deal_id):
@@ -1279,6 +1302,7 @@ def list_deals() -> list[dict]:
                 "deal_stage_hubspot": _safe_str(row.get("deal_stage_hubspot")),
                 "start_date_confirmed": _safe_str(row.get("start_date_confirmed")),
                 "is_late_notice": _is_late_notice(row.get("likely_start_date"), row.get("request_received")),
+                "requested_designations": decode_resource_code(row.get("resources_requested")),
             }
             for idx, row in row_list
         ]
@@ -1637,6 +1661,22 @@ def get_coverage_summary() -> dict:
     for row_index, row in pipeline.iterrows():
         _skillset_raw = row.get("skillset", "")
         _skillset = _skillset_raw if isinstance(_skillset_raw, str) else ""
+        real_skillset_given = bool(_skillset.strip())
+
+        # No real skillset text was given -- infer one (real CoE history, then
+        # AI semantic match, then org baseline -- see pipeline_skill_inference.py)
+        # so this row still gets scored, rather than sitting permanently
+        # unscoreable. real_skillset_given (tracked separately below) keeps the
+        # "deal author never specified skills" data-hygiene signal honest.
+        if not real_skillset_given:
+            _solution = row.get("solution")
+            inferred = infer_required_skills_for_pipeline_row(
+                resources_requested=row.get("resources_requested"),
+                solution=_solution if isinstance(_solution, str) and _solution.strip() else None,
+                comments=row.get("comments"),
+            )
+            _skillset = inferred["skillset_text"]
+
         required_phrases = scoring.tokenize_skillset(_skillset)
         required_phrases = scoring.enrich_required_phrases(required_phrases, pipeline_skillset)
         has_skillset = bool(required_phrases)
@@ -1649,6 +1689,7 @@ def get_coverage_summary() -> dict:
                 "top_candidate_signal": None,
                 "top_bucket": None,
                 "has_skillset": False,
+                "real_skillset_given": real_skillset_given,
             })
             continue
 
@@ -1676,10 +1717,16 @@ def get_coverage_summary() -> dict:
             "top_candidate_signal": best_signal,
             "top_bucket": best_bucket,
             "has_skillset": True,
+            "real_skillset_given": real_skillset_given,
         })
 
     total = len(rows)
+    # Now near-zero -- inference almost always produces *something* scoreable.
+    # Kept distinct from no_real_skillset_given_count (the real, still-useful
+    # "deal author never actually specified skills" data-hygiene signal) so
+    # neither number silently absorbs the other's meaning.
     no_skillset_count = sum(1 for r in rows if not r["has_skillset"])
+    no_real_skillset_given_count = sum(1 for r in rows if not r["real_skillset_given"])
     hire_count = sum(1 for r in rows if r["top_candidate_signal"] == "hire")
     redeploy_count = sum(1 for r in rows if r["top_candidate_signal"] == "redeploy")
     training_count = sum(1 for r in rows if r["top_candidate_signal"] == "redeploy_with_training")
@@ -1687,6 +1734,7 @@ def get_coverage_summary() -> dict:
     result = {
         "total_demand_rows": total,
         "no_skillset_specified_count": no_skillset_count,
+        "no_real_skillset_given_count": no_real_skillset_given_count,
         "redeploy_ready_count": redeploy_count,
         "redeploy_with_training_count": training_count,
         "hire_signal_count": hire_count,

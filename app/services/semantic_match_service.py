@@ -7,6 +7,7 @@ from app.ai import llm
 from app.ai.providers.base import QuotaExceededError
 from app.core.adapter import get_adapter
 from app.engines import scoring
+from app.engines.pipeline_skill_inference import infer_required_skills_for_pipeline_row
 from app.services.employee_profile_service import skills_for
 from app.services.recommendation_service import RowIndexOutOfRange, availability_as_of
 
@@ -127,14 +128,28 @@ def get_semantic_match_suggestions(row_index: int) -> dict:
 
     row = pipeline.iloc[row_index]
     skillset_text = row.get("skillset")
+    required_skill_source = "given"
     if not skillset_text or pd.isna(skillset_text):
-        return {
-            "available": True,
-            "requirement": None,
-            "matches": [],
-            "candidates_considered": 0,
-            "no_match_found": True,
-        }
+        # No real skillset was given -- fall back to the same real-data
+        # inference used everywhere else on this row (past CoE history, then
+        # AI semantic similarity, then org baseline) instead of dead-ending
+        # here. See app/engines/pipeline_skill_inference.py.
+        _solution = row.get("solution")
+        inferred = infer_required_skills_for_pipeline_row(
+            resources_requested=row.get("resources_requested"),
+            solution=_solution if isinstance(_solution, str) and _solution.strip() else None,
+            comments=row.get("comments"),
+        )
+        skillset_text = inferred["skillset_text"]
+        required_skill_source = inferred["source"]
+        if not skillset_text:
+            return {
+                "available": True,
+                "requirement": None,
+                "matches": [],
+                "candidates_considered": 0,
+                "no_match_found": True,
+            }
 
     provider = llm.get_provider()
     if provider is None:
@@ -177,6 +192,7 @@ def get_semantic_match_suggestions(row_index: int) -> dict:
     return {
         "available": True,
         "requirement": skillset_text,
+        "required_skill_source": required_skill_source,
         "matches": verified,
         "candidates_considered": len(pool),
         "no_match_found": len(verified) == 0,

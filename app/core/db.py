@@ -5,7 +5,7 @@ from functools import lru_cache
 import duckdb
 import pandas as pd
 
-from app.core.config import DUCKDB_PATH, PIPELINE_XLSX, TRANSFORMED_DIR
+from app.core.config import BACKEND_ROOT, DUCKDB_PATH, PIPELINE_XLSX, TRANSFORMED_DIR
 
 _DATE_COLUMNS = {
     "projects": ["project_start_date", "project_end_date", "extended_end_date"],
@@ -45,6 +45,14 @@ _PIPELINE_SHEETS = {
     "Skillset": "pipeline_skillset",
     "Hierarchy": "pipeline_hierarchy",
     "6 Months Revenue": "pipeline_revenue",
+}
+
+# Loaded from the backend root (not data/Transformed) since it's a curated
+# reference file, not a raw pipeline/HR export -- a real per-CoE
+# required-skills list used as a fallback source when a pipeline deal has no
+# skillset text of its own (see app/engines/pipeline_skill_inference.py).
+_ROOT_CSV_TABLES = {
+    "coe_skills_mapping": "COE_Skills_Mapping.csv",
 }
 
 _PIPELINE_FORECAST_FFILL_COLUMNS = [
@@ -152,11 +160,21 @@ def _load_all(con: duckdb.DuckDBPyConnection) -> None:
         con.execute(f"CREATE OR REPLACE TABLE {table} AS SELECT * FROM df_tmp")
         con.unregister("df_tmp")
 
+    for table, filename in _ROOT_CSV_TABLES.items():
+        path = BACKEND_ROOT / filename
+        df = pd.read_csv(path)
+        df = _sanitize_columns(df)
+        df = _strip_string_values(df)
+        df = df.dropna(subset=["coe"])  # source file has a trailing blank line
+        con.register("df_tmp", df)
+        con.execute(f"CREATE OR REPLACE TABLE {table} AS SELECT * FROM df_tmp")
+        con.unregister("df_tmp")
+
 def get_cursor() -> duckdb.DuckDBPyConnection:
     return get_connection().cursor()
 
 def _all_table_names() -> list[str]:
-    return list(_CSV_TABLES.keys()) + list(_PIPELINE_SHEETS.values())
+    return list(_CSV_TABLES.keys()) + list(_PIPELINE_SHEETS.values()) + list(_ROOT_CSV_TABLES.keys())
 
 def table_counts() -> dict[str, int]:
     return {t: get_cursor().execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in _all_table_names()}
