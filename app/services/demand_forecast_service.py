@@ -14,6 +14,7 @@ from app.engines.revenue_engine import (
     dnd_revenue_range_for_duration,
     get_revenue_benchmarks_by_coe,
 )
+from app.engines.pipeline_skill_inference import infer_skills_for_coes
 from app.engines.role_mix_engine import (
     CANONICAL_COE_MAP,
     DOCX_CATEGORY_MAP,
@@ -146,6 +147,17 @@ def _score_candidates(
     else:
         candidates.sort(key=lambda c: -c["skill_score"])
 
+def _spec_tech_coes(spec: dict) -> set[str]:
+    """Raw tech_coe-vocabulary aliases implied by a spec's `coes` selection
+    (via CANONICAL_COE_MAP) or, absent that, its `category` (via
+    DOCX_CATEGORY_MAP's tech_coe_any) -- same resolution used for
+    experience/category-match scoring, reused here to also backfill a missing
+    required_skills list (see get_new_project_forecast)."""
+    tech_coes = {alias for coe in (spec.get("coes") or []) for alias in CANONICAL_COE_MAP.get(coe, [coe])}
+    if not tech_coes and spec.get("category"):
+        tech_coes = set(DOCX_CATEGORY_MAP.get(spec["category"], {}).get("tech_coe_any", []))
+    return tech_coes
+
 def _resolve_role_mix(spec: dict) -> dict:
     if spec.get("role_mix_overrides"):
         return {
@@ -174,6 +186,22 @@ def get_new_project_forecast(specs: list[dict], include: dict[str, bool] | None 
     experience_profiles = experience_engine.build_employee_experience_profiles()
     tech_coes_by_key: dict[tuple[str, str], set[str]] = {}
 
+    # Backfill required_skills from the spec's CoE/category when nobody set an
+    # explicit skillset -- otherwise skill_index below stays None and every
+    # candidate silently skips skill/competency scoring (shows 0%/0% in the
+    # UI, availability-only ranking) even though we know which real CoE
+    # skillset this role should be judged against.
+    for spec in specs:
+        if spec.get("required_skills"):
+            continue
+        tech_coes = _spec_tech_coes(spec)
+        if not tech_coes:
+            continue
+        inferred = infer_skills_for_coes(tech_coes)
+        if inferred:
+            spec["required_skills"] = inferred
+            spec["_skills_inferred"] = True
+
     all_required_skills = sorted({s.lower() for spec in specs for s in (spec.get("required_skills") or [])})
     skill_index = None
     competency_index = None
@@ -201,17 +229,7 @@ def get_new_project_forecast(specs: list[dict], include: dict[str, bool] | None 
         )
         date_key = spec.get("start_date") or today_key
         duration_weeks_by_date.setdefault(date_key, spec.get("duration_weeks"))
-        spec_tech_coes = {alias for coe in (spec.get("coes") or []) for alias in CANONICAL_COE_MAP.get(coe, [coe])}
-        # "Quick-fill from a project category" specs never carry `coes` (frontend
-        # sends coes=undefined whenever category is set -- see toForecastSpec in
-        # forecast/new-project/page.tsx), so without this fallback every
-        # category-based spec silently got zero category_match/project_count
-        # signal no matter what Advanced Filters selected. DOCX_CATEGORY_MAP's
-        # tech_coe_any is already raw tech_coe vocabulary -- no further mapping
-        # needed (unlike CANONICAL_COE_MAP above, which bridges canonical CoE
-        # names to that same vocabulary for the `coes` case).
-        if not spec_tech_coes and spec.get("category"):
-            spec_tech_coes = set(DOCX_CATEGORY_MAP.get(spec["category"], {}).get("tech_coe_any", []))
+        spec_tech_coes = _spec_tech_coes(spec)
         # role_mix carries every designation ever seen on a past project, even ones that
         # showed up on a single one-off engagement (prevalence_pct in the low single
         # digits). Rounding even a 5% historical fte need up to "you must hire 1 of

@@ -138,6 +138,24 @@ def _coe_reference_embedding_index() -> dict | None:
     return index or None
 
 
+def infer_skills_for_coes(tech_coes) -> list[str]:
+    """Real per-CoE required skills (COE_Skills_Mapping.csv) for a set/list of
+    raw tech_coe-vocabulary strings (e.g. Forecast spec `coes`/category
+    aliases), resolved to canonical CoEs and unioned. Used to backfill a
+    required_skills list when a caller only knows *which CoE* a role belongs
+    to, not an explicit skillset -- without this, skill/competency scoring is
+    skipped entirely (skill_index stays None) and every candidate shows 0%."""
+    skill_lists = _coe_skill_lists()
+    canon_coes = {canonical_project_coe(t) for t in tech_coes}
+    canon_coes.discard(None)
+    phrases: list[str] = []
+    for coe in canon_coes:
+        for s in skill_lists.get(coe, []):
+            if s not in phrases:
+                phrases.append(s)
+    return phrases[:TOP_N_INFERRED_SKILLS]
+
+
 def infer_required_skills_for_pipeline_row(
     resources_requested,
     solution: str | None,
