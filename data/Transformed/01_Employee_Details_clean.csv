@@ -1,0 +1,1128 @@
+employee_id,employee_full_name,location,date_of_join,date_of_resignation,job_name,department_name,manager_employee_id,account_status,is_active_version
+100122,,,15-09-2014,,,,,1,1
+100129,,,09-03-2015,,,,,1,1
+100131,,,18-05-2015,,,,,1,1
+100132,,,11-06-2015,,,,,1,1
+100137,,,16-03-2016,,,,,1,1
+100138,,,01-06-2016,,,,,1,1
+100139,,,01-06-2016,,,,,1,1
+100141,,,01-06-2016,,,,,1,1
+100144,,,01-07-2016,,,,,1,1
+100150,,,01-10-2016,,,,,1,1
+100155,,,20-02-2017,,,,,1,1
+100170,,,05-06-2017,,,,,1,1
+100174,,,08-01-2018,,,,,1,1
+400102,,,05-06-2017,,,,,1,1
+400104,,,05-06-2017,,,,,1,1
+400107,,,05-06-2017,,,,,1,1
+500101,,,19-06-2017,,,,,1,1
+EXT001,,,30-10-2024,,,,,1,1
+EXT003,,,16-12-2024,,,,,1,1
+EXT014,,,25-04-2023,,Contractor,,,1,1
+EXT018,,,24-09-2025,,Contractor,,,1,1
+EXT019,,,27-01-2025,,Student,,,1,1
+EXT020,,,25-11-2025,,Workday Contractor,,,1,1
+EXT021,,,25-11-2025,,Workday Contractor,,,1,1
+EXT022,,,12-12-2025,,Contractor,,,1,1
+EXT025,,,18-01-2026,,Contractor,,,1,1
+EXT026,,,08-01-2026,,Contractor,,,1,1
+INT032,,Chennai,22-01-2024,,Intern,,,0,1
+INT045,,Chennai,22-01-2024,,Intern,,,0,1
+INT086,,Chennai,20-01-2025,,Intern,,,1,1
+INT101,,Chennai,20-01-2025,,Intern,,,0,1
+INT106,,Chennai,20-01-2025,,Intern,,,1,1
+INT113,,Chennai,20-01-2025,,Intern,,,0,1
+INT127,,Chennai,20-01-2025,,Intern,,,1,1
+INT134,,Chennai,20-01-2025,,Intern,,,0,1
+JMD1,,Chennai,01-04-2017,,Chief Technology Officer,,,1,1
+JMD10,,,05-05-2014,,,,,0,1
+JMD100,,Chennai,01-06-2021,,Solutions Enabler,,,0,1
+JMD101,,,01-06-2021,,,,,1,1
+JMD103,,Chennai,01-06-2021,,Software Engineer,,,0,1
+JMD104,,Chennai,01-06-2021,,,,,0,1
+JMD105,,Chennai,01-06-2021,,Solutions Enabler,,,1,1
+JMD107,,Chennai,01-06-2021,,Senior Software Engineer,,,1,1
+JMD109,,Chennai,01-06-2021,,Software Engineer,,,0,1
+JMD11,,,19-08-2015,,,,,0,1
+JMD111,,Chennai,01-06-2021,,Software Engineer,,,0,1
+JMD114,,Chennai,01-06-2021,,Software Engineer,,,0,1
+JMD119,,Chennai,09-06-2021,,Software Engineer,,,0,1
+JMD121,,Chennai,06-09-2021,,Senior Software Engineer,,,0,1
+JMD122,,Chennai,06-09-2021,,Software Engineer,,,0,1
+JMD124,,Chennai,06-09-2021,,Software Engineer,,,0,1
+JMD127,,Chennai,06-09-2021,,Software Engineer,,,0,1
+JMD13,,,12-10-2015,,,,,0,1
+JMD133,,Chennai,20-10-2021,,Senior Software Engineer,,,0,1
+JMD134,,Chennai,01-12-2021,,Talent Acquisition,,,0,1
+JMD138,,Chennai,13-12-2021,,Software Engineer,,,0,1
+JMD139,,Chennai,13-12-2021,,Software Engineer,,,0,1
+JMD14,,Chennai,10-11-2015,,Solutions Consultant,,,0,1
+JMD142,,Chennai,13-12-2021,,Senior Software Engineer,,,0,1
+JMD146,,,13-12-2021,,,,,1,1
+JMD147,,Chennai,13-12-2021,,Solutions Enabler,,,0,1
+JMD149,,Chennai,13-12-2021,,Solutions Enabler,,,1,1
+JMD15,,Chennai,01-06-2016,,Solutions Enabler,,,0,1
+JMD150,,Chennai,13-12-2021,,Software Engineer,,,0,1
+JMD154,,Chennai,13-12-2021,,Software Engineer,,,0,1
+JMD160,,Chennai,14-12-2021,,Solutions Manager,,,0,1
+JMD162,,Chennai,17-01-2022,,Delivery Head,,,0,1
+JMD163,,Chennai,07-02-2022,,Senior Software Engineer,,,0,1
+JMD165,,Chennai,14-02-2022,,Solutions Enabler,,,0,1
+JMD167,,Chennai,07-03-2022,,Software Engineer,,,0,1
+JMD168,,,07-03-2022,,,,,1,1
+JMD169,,Chennai,14-03-2022,,Software Engineer,,,0,1
+JMD17,,,01-07-2016,,,,,0,1
+JMD170,,Chennai,14-03-2022,,Software Engineer,,,0,1
+JMD171,,Chennai,14-03-2022,,Software Engineer,,,0,1
+JMD176,,,01-06-2021,,,,,1,1
+JMD18,,,01-09-2016,,,,,0,1
+JMD182,,Chennai,31-10-2022,,Solutions Enabler,,,0,1
+JMD183,,Chennai,07-11-2022,,Solutions Enabler,,,1,1
+JMD185,,Chennai,02-01-2023,,Senior Software Engineer,,,1,1
+JMD194,,Chennai,22-03-2023,,,,,0,1
+JMD196,,Chennai,01-04-2023,,,,,1,1
+JMD197,,Chennai,01-08-2022,,Head of Global Compliance,,,1,1
+JMD199,,Chennai,02-06-2023,,Talent Acquisition,,,0,1
+JMD2,,,28-12-2009,,,,,0,1
+JMD209,,Chennai,24-07-2023,,Senior Software Engineer,,,1,1
+JMD21,,Chennai,12-09-2016,,Business Manager,,,0,1
+JMD23,,,17-10-2016,,,,,0,1
+JMD231,,Chennai,24-07-2023,,Software Engineer,,,0,1
+JMD24,,,21-10-2016,,,,,0,1
+JMD245,,Chennai,24-07-2023,,Senior Software Engineer,,,1,1
+JMD248,,Chennai,24-08-2023,,Senior Software Engineer,,,0,1
+JMD25,,,25-11-2016,,,,,0,1
+JMD250,,Chennai,03-10-2023,,People Associate,,,0,1
+JMD254,,Chennai,20-11-2023,,Solutions Consultant,,,0,1
+JMD256,,Chennai,03-01-2024,,Principal Technology Architect,,,1,1
+JMD26,,Chennai,30-06-2014,,Solutions Consultant,,,0,1
+JMD270,,Chennai,17-06-2024,,Software Engineer,,,1,1
+JMD283,,Chennai,01-07-2024,,Software Engineer,,,0,1
+JMD286,,Chennai,01-07-2024,,Software Engineer,,,0,1
+JMD288,,Chennai,01-07-2024,,Senior Software Engineer,,,1,1
+JMD289,,Chennai,01-07-2024,,Software Engineer,,,0,1
+JMD29,,,04-09-2017,,,,,0,1
+JMD290,,Chennai,01-07-2024,,Software Engineer,,,1,1
+JMD298,,Chennai,01-07-2024,,Software Engineer,,,0,1
+JMD30,,Chennai,13-12-2017,,Software Engineer,,,0,1
+JMD300,,Chennai,01-07-2024,,Software Engineer,,,0,1
+JMD302,,Chennai,01-07-2024,,Software Engineer,,,0,1
+JMD305,,Chennai,01-07-2024,,Software Engineer,,,1,1
+JMD306,,Chennai,01-07-2024,,Software Engineer,,,0,1
+JMD308,,Chennai,01-07-2024,,Software Engineer,,,0,1
+JMD310,,Chennai,01-07-2024,,Software Engineer,,,0,1
+JMD311,,Chennai,01-07-2024,,Software Engineer,,,0,1
+JMD313,,Chennai,22-07-2024,,Software Engineer,Delivery,,1,1
+JMD32,,,01-01-2018,,,,,0,1
+JMD326,,Chennai,22-07-2024,,Software Engineer,,,0,1
+JMD33,,,01-01-2018,,,,,1,1
+JMD330,,Chennai,22-07-2024,,Trainee Software Engineer,,,0,1
+JMD332,,Chennai,22-07-2024,,Software Engineer,,,0,1
+JMD333,,Chennai,22-07-2024,,Trainee Software Engineer,,,0,1
+JMD337,,Chennai,22-07-2024,,Trainee Software Engineer,,,0,1
+JMD34,,,01-01-2018,,,,,0,1
+JMD342,,Chennai,22-07-2024,,Trainee Software Engineer,,,0,1
+JMD343,,Chennai,22-07-2024,,Software Engineer,,,1,1
+JMD35,,,05-06-2017,,,,,0,1
+JMD36,,,01-01-2018,,,,,0,1
+JMD362,,Chennai,22-07-2024,,Trainee Software Engineer,,,0,1
+JMD366,,Chennai,22-07-2024,,Trainee Software Engineer,,,0,1
+JMD367,,Chennai,24-07-2024,,Principal Technology Architect,,,0,1
+JMD368,,Chennai,22-07-2024,,Software Engineer,,,1,1
+JMD369,,Chennai,28-08-2024,,Senior Human Resource Business Partner,,,0,1
+JMD370,,Chennai,03-06-2024,,,,,1,1
+JMD38,,Chennai,01-01-2018,,Senior Software Engineer,,,0,1
+JMD40,,Chennai,01-01-2018,,Senior Software Engineer,,,0,1
+JMD43,,,17-01-2018,,,,,0,1
+JMD44,,,01-03-2018,,,,,0,1
+JMD45,,Chennai,01-12-2018,,Senior Software Engineer,,,0,1
+JMD46,,,16-07-2018,,,,,0,1
+JMD463,,,22-01-2026,,Senior Software Engineer,,,1,1
+JMD48,,,06-08-2018,,,,,1,1
+JMD49,,,20-08-2018,,,,,1,1
+JMD50,,,20-08-2018,,,,,1,1
+JMD51,,Chennai,01-03-2019,,Software Engineer,,,0,1
+JMD52,,,01-03-2019,,,,,0,1
+JMD53,,Chennai,01-03-2019,,Senior Software Engineer,,,0,1
+JMD54,,,01-03-2019,,,,,0,1
+JMD55,,Chennai,01-03-2019,,Software Engineer,,,0,1
+JMD58,,Chennai,01-03-2019,,Software Engineer,,,0,1
+JMD59,,Chennai,01-03-2019,,Senior Software Engineer,,,0,1
+JMD60,,Chennai,01-03-2019,,Software Engineer,,,0,1
+JMD61,,Chennai,01-03-2019,,,,,0,1
+JMD62,,Chennai,01-03-2019,,Software Engineer,,,0,1
+JMD63,,,01-03-2019,,,,,0,1
+JMD64,,,27-08-2018,,,,,1,1
+JMD641,,,11-06-2026,,Solutions Enabler,,,1,1
+JMD645,,,29-07-2026,,IT Solution Consultant,,,1,1
+JMD66,,,27-08-2018,,,,,1,1
+JMD67,,,27-08-2018,,,,,1,1
+JMD70,,,20-11-2018,,,,,0,1
+JMD71,,,21-11-2018,,,,,0,1
+JMD72,,,25-03-2019,,,,,0,1
+JMD73,,,01-04-2019,,,,,1,1
+JMD74,,Chennai,06-05-2019,,,,,0,1
+JMD75,,Chennai,20-05-2019,,Senior Software Engineer,,,0,1
+JMD76,,,04-07-2019,,,,,0,1
+JMD69,,,01-10-2018,,,,,0,1
+JMD78,,Chennai,19-08-2019,,Software Engineer,,,0,1
+JMD79,,,19-08-2019,,,,,1,1
+JMD80,,,19-08-2019,,,,,1,1
+JMD85,,Chennai,19-08-2019,,Software Engineer,,,0,1
+JMD86,,,19-08-2019,,,,,1,1
+JMD87,,Chennai,01-07-2020,,Solutions Enabler,,,0,1
+JMD88,,,19-08-2019,,,,,1,1
+JMD8888,,,22-01-2023,,,,,1,1
+JMD83,,,19-08-2019,,,,,1,1
+JMD9,,,24-03-2014,,,,,0,1
+JMD90,,,19-08-2019,,,,,1,1
+JMD95,,,19-08-2019,,,,,1,1
+JMD9999,,,22-01-2023,,,,,1,1
+JMG000,,,03-06-2026,,Work Experience,,,1,1
+JMG07,,London,17-06-2019,,Intern,,,0,1
+JMG09,,London,13-08-2018,,Intern,,,0,1
+JMG10,,London,05-01-2016,,Manager,,,0,1
+JMD97,,Chennai,03-02-2020,,Delivery Head,,,0,1
+JMD98,,Chennai,07-12-2020,,Solutions Manager,,,0,1
+JMG105,,London,28-02-2022,,Consultant,,,0,1
+JMG111,,London,19-04-2022,,Associate Consultant,,,0,1
+JMG112,,London,01-04-2022,,Senior Consultant,,,0,1
+JMG113,,London,06-06-2022,,Consultant,,,0,1
+JMG115,,London,06-06-2022,,Consultant,,,0,1
+JMG116,,London,06-06-2022,,Associate Consultant,,,0,1
+JMG118,,London,04-07-2022,,Commercial Analyst,,,0,1
+JMG119,,London,18-07-2022,,Finance Executive,,,0,1
+JMG121,,London,29-07-2022,,Intern,,,0,1
+JMG125,,London,12-09-2022,,Senior Associate Consultant,,,0,1
+JMG126,,London,22-05-2023,,Senior Associate Consultant,,,0,1
+JMG127,,London,12-09-2022,,Associate Consultant,,,0,1
+JMG123,,London,12-09-2022,,Associate Consultant,,,0,1
+JMG135,,London,26-09-2022,,Associate Consultant,,,0,1
+JMG136,,London,03-10-2022,,,,,0,1
+JMG139,,London,10-10-2022,,Operations Associate,,,0,1
+JMG140,,London,10-10-2022,,Intern,,,0,1
+JMG142,,London,31-10-2022,,Senior Associate Consultant,,,0,1
+JMG143,,London,31-10-2022,,Senior Associate Consultant,,,0,1
+JMG145,,London,14-11-2022,,Talent Acquisition,,,0,1
+JMG148,,London,03-01-2023,,Intern,,,0,1
+JMG151,,London,09-01-2023,,Associate Consultant,,,0,1
+JMG152,,London,16-01-2023,,Associate Consultant,,,0,1
+JMG153,,London,23-01-2023,,Senior Associate Consultant,,,0,1
+JMG15,,London,19-12-2016,,Principal,,,0,1
+JMG160,,London,27-02-2023,,Associate Consultant,,,0,1
+JMG161,,London,06-03-2023,,Associate Partner,,,1,1
+JMG162,,London,17-10-2022,,Intern,,,0,1
+JMG173,,,10-05-2023,,,,,1,1
+JMG175,,London,01-05-2023,,Associate Partner,,,0,1
+JMG178,,London,24-04-2023,,,,,0,1
+JMG180,,London,02-05-2023,,Intern,,,0,1
+JMG181,,London,05-06-2023,,Associate Partner,,,1,1
+JMG182,,London,08-06-2023,,Associate Consultant,,,0,1
+JMG183,,London,08-06-2023,,Consultant,,,0,1
+JMG184,,London,08-06-2023,,Consultant,,,0,1
+JMG185,,London,19-06-2023,,Associate Consultant,,,1,1
+JMG186,,London,03-07-2023,,Principal,,,0,1
+JMG191,,,07-08-2023,,,,,1,1
+JMG192,,London,19-06-2023,,Intern,,,0,1
+JMG200,,London,24-07-2023,,Intern,,,0,1
+JMG204,,London,07-08-2023,,Senior Associate Consultant,,,0,1
+JMG21,,London,01-01-2014,,Chief Executive Officer,,,1,1
+JMG210,,London,21-08-2023,,Senior Consultant,,,0,1
+JMG211,,London,21-08-2023,,Consultant,,,0,1
+JMG213,,London,04-09-2023,,Senior Associate Consultant,,,0,1
+JMG214,,London,05-09-2023,,Associate Consultant,,,0,1
+JMG215,,London,18-09-2023,,Intern,,,0,1
+JMG216,,London,18-09-2023,,Intern,,,0,1
+JMG207,,London,21-08-2023,,Manager,,,1,1
+JMG208,,London,21-08-2023,,Senior Consultant,,,1,1
+JMG22,,London,08-01-2018,,Principal,,,0,1
+JMG221,,New York,09-10-2023,,Associate Partner,,,0,1
+JMG223,,London,16-10-2023,,Intern,,,0,1
+JMG224,,London,07-11-2023,,Intern,,,0,1
+JMG226,,London,20-11-2023,,Intern,,,0,1
+JMG227,,London,02-01-2024,,Associate Partner,,,0,1
+JMG228,,London,08-01-2024,,Marketing Manager,,,0,1
+JMG229,,London,01-09-2023,,Non-executive Director,,,1,1
+JMG23,,London,02-05-2018,,Consultant,,,0,1
+JMG234,,London,10-06-2024,,Executive Assistant,,,0,1
+JMG237,,London,01-07-2024,,Associate Consultant,,,0,1
+JMG27,,London,30-07-2018,,Intern,,,0,1
+JMG270,,,12-02-2024,,,,,1,1
+JMG28,,London,30-07-2018,,Intern,,,0,1
+JMG303,,London,01-08-2024,,Principal,,,0,1
+JMG304,,London,05-08-2024,,Intern,,,0,1
+JMG31,,London,16-10-2017,,Principal,,,0,1
+JMG311,,London,07-10-2024,,Associate Consultant,,,1,1
+JMG320,,London,16-12-2024,,Leadership,,,1,1
+JMG325,,London,03-02-2025,,Resourcing Manager,,,0,1
+JMG328,,,03-03-2025,,,,,1,1
+JMG337,,London,04-03-2025,,Associate Consultant,,,1,1
+JMG340,,London,07-04-2025,,Associate Consultant,,,1,1
+JMG348,,London,02-06-2025,,Intern,,,0,1
+JMG349,,London,02-06-2025,,Associate Consultant,,,0,1
+JMG350,,London,07-07-2025,,Intern,,,0,1
+JMG351,,London,07-09-2026,,Associate Consultant,,,0,1
+JMG36,,London,21-01-2019,,Associate Consultant,,,0,1
+JMG39,,London,18-02-2019,,Intern,,,0,1
+JMG397,,,07-09-2026,,Associate Consultant,,,1,1
+JMG41,,London,03-06-2019,,Intern,,,0,1
+JMG410,,,09-02-2026,,Intern,,,1,1
+JMG412,,,07-09-2026,,Associate Consultant,,,1,1
+JMG414,,,18-02-2026,,Intern,,,1,1
+JMG419,,,07-09-2026,,Associate Consultant,,,1,1
+JMG423,,,07-09-2026,,Associate Consultant,,,1,1
+JMG424,,,07-09-2026,,Graduate Intern,,,1,1
+JMG427,,,07-09-2026,,Associate Consultant,,,1,1
+JMG43,,London,24-06-2019,,Intern,,,0,1
+JMG432,,,03-08-2026,,Associate Consultant,,,1,1
+JMG437,,,07-09-2026,,Graduate Intern,,,1,1
+JMG435,,,03-08-2026,,Associate Consultant,,,1,1
+JMG442,,,07-09-2026,,Graduate Intern,,,1,1
+JMG451,,,10-05-2026,,Consultant,,,1,1
+JMG452,,,03-08-2026,,Manager,,,1,1
+JMG454,,,03-08-2026,,Associate Consultant,,,1,1
+JMG46,,London,01-07-2019,,Intern,,,0,1
+JMG461,,,15-06-2026,,Senior Associate Consultant,,,1,1
+JMG466,,,19-06-2026,,Senior Associate Consultant,,,1,1
+JMG467,,,11-02-2026,,Senior Associate Consultant,,,1,1
+JMG469,,,10-05-2026,,Graduate Intern,,,1,1
+JMG47,,London,01-07-2019,,Intern,,,0,1
+JMG471,,,15-07-2026,,Graduate Intern,,,1,1
+JMG48,,London,01-07-2019,,Intern,,,0,1
+JMG53,,London,25-06-2018,,Principal,,,1,1
+JMG56,,London,07-10-2019,,Manager,,,0,1
+JMG57,,London,10-02-2020,,Intern,,,0,1
+JMG58,,London,02-01-2020,,Intern,,,0,1
+JMG65,,London,13-07-2020,,Intern,,,0,1
+JMG66,,London,01-09-2020,,Consultant,,,0,1
+JMG67,,London,01-09-2020,,Associate Consultant,,,0,1
+JMG61,,London,12-03-2020,,Intern,,,0,1
+JMG63,,London,27-04-2020,,Intern,,,0,1
+JMG70,,London,05-07-2021,,Intern,,,0,1
+JML-002,,,01-07-2015,,,,,1,1
+JML-005,,,13-06-2016,,,,,1,1
+JML-007,,,06-09-2016,,,,,1,1
+JML-008,,,22-11-2016,,,,,1,1
+JML-011,,,03-07-2017,,,,,1,1
+JML-013,,,31-07-2017,,,,,1,1
+JML-014,,London,01-09-2017,,Partner,,,0,1
+JML-015,,,25-09-2017,,,,,1,1
+JML-017,,,20-10-2017,,,,,1,1
+JML-019,,,08-12-2017,,,,,1,1
+JML-021,,,01-01-2018,,,,,1,1
+JML-024,,,18-06-2018,,,,,1,1
+JML-026,,,25-06-2018,,,,,1,1
+JML-029,,,02-07-2018,,,,,1,1
+JML-034,,,20-08-2018,,,,,1,1
+JML-035,,,20-08-2018,,,,,1,1
+JML-037,,,08-10-2018,,,,,1,1
+JML-038,,,08-10-2018,,,,,1,1
+JML-040,,,04-02-2019,,,,,1,1
+JML101,,,25-10-2021,,,,,1,1
+JML102,,,28-11-2021,,,,,1,1
+JML104,,,13-01-2022,,,,,1,1
+JML105,,,17-02-2022,,,,,1,1
+JML108,,,28-02-2022,,,,,1,1
+JML109,,,28-02-2022,,,,,1,1
+JML110,,,07-03-2022,,,,,1,1
+JML111,,,14-03-2022,,,,,1,1
+JML112,,,21-03-2022,,,,,1,1
+JML122,,,25-07-2022,,,,,1,1
+JML40,,,11-02-2019,,,,,1,1
+JML41,,,01-02-2019,,,,,1,1
+JML43,,,26-02-2019,,,,,1,1
+JML44,,,15-04-2019,,,,,1,1
+JML49,,,01-07-2019,,,,,1,1
+JML53,,,08-07-2019,,,,,1,1
+JML55,,,19-08-2019,,,,,1,1
+JML56,,,23-09-2019,,,,,1,1
+JML61,,,03-02-2020,,,,,1,1
+JML63,,,10-03-2020,,,,,1,1
+JML64,,,06-04-2020,,,,,1,1
+JML70,,,19-10-2020,,,,,1,1
+JML72,,,01-03-2021,,,,,1,1
+JML73,,,08-03-2021,,,,,1,1
+JML76,,,06-04-2021,,,,,1,1
+JML79,,,10-05-2021,,,,,1,1
+JML80,,,10-05-2021,,,,,1,1
+JML82,,,07-06-2021,,,,,1,1
+JML85,,,28-06-2021,,,,,1,1
+JML90,,,19-07-2021,,,,,1,1
+JML91,,,19-08-2021,,,,,1,1
+JML97,,,20-09-2021,,,,,1,1
+JML98,,,27-09-2021,,,,,1,1
+JMU001,,New York,02-01-2024,,Leadership,,,1,1
+JMG9,,,03-07-2017,,,,,1,1
+JMG90,,London,23-08-2021,,Senior Consultant,,,0,1
+JMG91,,London,06-09-2021,,Senior Associate Consultant,,,0,1
+JMG93,,London,09-06-2021,,Associate Consultant,,,0,1
+JMG94,,London,07-09-2021,,Leadership,,,0,1
+JMU005,,New York,07-10-2024,,Associate Consultant,,,0,1
+JMU009,,New York,02-07-2025,,,,,0,1
+TRN02,,,14-12-2020,,,,,1,1
+TRN06,,,14-12-2020,,,,,1,1
+TRN07,,,14-12-2020,,,,,1,1
+TRN10,,,14-12-2020,,,,,1,1
+TRN12,,,14-12-2020,,,,,1,1
+TRN14,,,14-12-2020,,,,,1,1
+TRN16,,,14-12-2020,,,,,1,1
+TRN18,,,14-12-2020,,,,,1,1
+TRN19,,,14-12-2020,,,,,1,1
+TRN20,,,14-12-2020,,,,,1,1
+TRN21,,,14-12-2020,,,,,1,1
+TRN24,,,14-12-2020,,,,,1,1
+JMUExternal,,,01-08-2024,,,,,1,1
+JMU31,,,06-04-2026,,Associate Consultant,,JMU003,1,1
+JMU013,,New York,07-07-2025,,Senior Associate Consultant,,JMU003,0,1
+JMU024,,,13-07-2026,,Associate Consultant,,JMU003,1,1
+JMG363,,,06-10-2025,,Consultant,,JMG124,1,1
+JMG365,,,06-10-2025,,Associate Consultant,,JMG124,1,1
+JMG335,,London,04-03-2025,,Senior Associate Consultant,,JMG124,1,1
+JMD518,,,01-06-2026,,Software Engineer,,JMD334,1,1
+JMD497,,,01-06-2026,,Software Engineer,,JMD334,1,1
+JMD428,,,02-06-2025,,Software Engineer,,JMD223,1,1
+JMD352,,Chennai,22-07-2024,,Senior Software Engineer,,JMD223,1,1
+JMD379,,Chennai,21-04-2025,,Consultant,,JMD376,1,1
+JMD42,,Chennai,01-01-2018,,Principal Technology Architect,,JMD376,1,1
+JMD478,,,24-03-2026,,Consultant,,JMD376,1,1
+JMD19,,Chennai,01-09-2016,,Technology Solutions Architect,,JMD376,1,1
+JMD173,,Chennai,05-02-2022,,Solutions Consultant,,JMD376,1,1
+JMD125,,Chennai,06-09-2021,,Solutions Consultant,,JMD376,1,1
+JMD237,,Chennai,24-07-2023,,Solutions Enabler,,JMD179,1,1
+JMD524,,,01-06-2026,,Software Engineer,,JMD179,1,1
+JMD418,,,02-06-2025,,Software Engineer,,JMD179,1,1
+JMD350,,Chennai,22-07-2024,,Senior Software Engineer,,JMD179,1,1
+JMD317,,Chennai,22-07-2024,,Senior Software Engineer,,JMD179,1,1
+JMD496,,,01-06-2026,,Software Engineer,,JMD359,1,1
+JMD502,,,01-06-2026,,Software Engineer,,JMD359,1,1
+JMD567,,,01-06-2026,,Software Engineer,,JMD210,1,1
+JMU026,,,05-01-2026,,Associate Consultant,,JMG81,1,1
+JMU012,,New York,07-07-2025,,Associate Consultant,,JMG81,0,1
+JMU019,,,02-09-2025,,Associate Consultant,,JMG81,1,1
+JMU044,,,06-07-2026,,Intern,,JMG81,1,1
+JMU048,,,22-07-2026,,Senior Associate Consultant,,JMG81,1,1
+JMD334,,Chennai,22-07-2024,,Senior Software Engineer,,JMD233,1,1
+JMD355,,Chennai,22-07-2024,,Senior Software Engineer,,JMD233,1,1
+JMD630,,,01-06-2026,,Software Engineer,,JMD239,1,1
+JMD554,,,01-06-2026,,Software Engineer,,JMD401,1,1
+JMG97,,London,04-10-2021,,Manager,,JMG313,1,1
+JMG394,,,15-04-2026,,Principal,,JMG313,1,1
+JMG77,,London,04-05-2021,,Manager,,JMG313,1,1
+JMG81,,New York,28-06-2021,,Manager,,JMG313,1,1
+JMG450,,,06-07-2026,,Undergraduate Intern,,JMG306,1,1
+JMG406,,,11-05-2026,,Senior Associate Consultant,,JMG307,1,1
+JMG373,,,03-11-2025,,Associate Consultant,,JMG307,1,1
+JMG332,,London,04-03-2025,,Associate Consultant,,JMG307,1,1
+JMD373,,Chennai,21-10-2024,,Senior Finance Executive,,JMG203,1,1
+JMD393,,,02-06-2025,,Software Engineer,,JMD225,1,1
+JMD508,,,01-06-2026,,Software Engineer,,JMD225,1,1
+JMD456,,,03-12-2025,,Senior Software Engineer,,JMD225,1,1
+JMD581,,,01-06-2026,,Software Engineer,,JMD339,1,1
+JMG236,,London,24-06-2024,,Manager,,JMG366,1,1
+JMG72,,London,08-03-2021,,Manager,,JMG366,1,1
+JMD181,,London,01-09-2022,,Senior Solutions Consultant,,JMG366,1,1
+JMD145,,Chennai,13-12-2021,,Solutions Enabler,,JMD16,1,1
+JMD195,,Chennai,03-04-2023,,Senior Solutions Consultant,,JMD16,1,1
+JMD382,,Chennai,26-05-2025,,Solutions Consultant,,JMD16,0,1
+JMD608,,,01-06-2026,,Software Engineer,,JMD402,1,1
+JMG86,,New York,05-07-2021,,Senior Consultant,Delivery,,1,1
+JMG52,,New York,10-07-2017,,Principal,,JMG300,1,1
+JMG366,,,01-06-2025,,Associate Partner,,JMG300,1,1
+JMG42,,London,09-07-2015,,Associate Partner,,JMG300,1,1
+JMU016,,New York,07-07-2025,,Associate Partner,,JMG300,0,1
+JMG313,,London,07-05-2024,,Associate Partner,,JMG300,1,1
+JMG301,,London,22-07-2024,,Associate Partner,,JMG300,1,1
+JMG29,,London,15-06-2016,,Associate Partner,,JMG300,1,1
+JMG220,,London,02-10-2023,,Principal,,JMG300,1,1
+JMG217,,London,18-09-2023,,Associate Partner,,JMG300,1,1
+JMD522,,,01-06-2026,,Software Engineer,,JMD188,1,1
+JMG443,,,06-07-2026,,Graduate Intern,,JMG209,1,1
+JMD358,,Chennai,22-07-2024,,Senior Software Engineer,,JMD96,1,1
+JMD353,,Chennai,22-07-2024,,Senior Software Engineer,,JMD96,1,1
+JMD339,,Chennai,22-07-2024,,Senior Software Engineer,,JMD96,1,1
+JMD188,,Chennai,01-02-2023,,Solutions Enabler,,JMD96,1,1
+JMD384,,,02-06-2025,,Software Engineer,,JMD263,1,1
+JMD391,,,02-06-2025,,Software Engineer,,JMD263,1,1
+JMD547,,,01-06-2026,,Software Engineer,,JMD263,1,1
+JMD374,,Chennai,20-01-2025,,People Operations & Admin,,JMD462,1,1
+JMD255,,Chennai,01-11-2021,,Administration Executive,,JMD462,1,1
+JMD582,,,01-06-2026,,Software Engineer,,JMD293,1,1
+JMD628,,,01-06-2026,,Software Engineer,,JMD216,1,1
+JMD108,,Chennai,01-06-2021,,Senior Software Engineer,,JMD216,1,1
+JMD338,,Chennai,22-07-2024,,Senior Software Engineer,,JMD216,1,1
+JMD500,,,01-06-2026,,Software Engineer,,JMD361,1,1
+JMD398,,,02-06-2025,,Software Engineer,,JMD313,1,1
+JMD447,,,04-08-2025,,Software Engineer,,JMD313,1,1
+JMD610,,,01-06-2026,,Software Engineer,,JMD313,1,1
+JMD618,,,01-06-2026,,Software Engineer,,JMD148,1,1
+JMD410,,,02-06-2025,,Software Engineer,,JMD148,1,1
+JMD236,,Chennai,24-07-2023,,Solutions Enabler,,JMD148,1,1
+JMD228,,Chennai,24-07-2023,,Solutions Enabler,,JMD39,1,1
+JMD253,,Chennai,20-11-2023,,Solutions Enabler,,JMD39,1,1
+JMD268,,Chennai,03-06-2024,,Solutions Enabler,,JMD39,1,1
+JMD92,,Chennai,01-07-2020,,Solutions Enabler,,JMD39,1,1
+JMG403,,,02-02-2026,,Associate Consultant,,JMG310,1,1
+JMG382,,,05-01-2026,,Associate Consultant,,JMG310,1,1
+JMG453,,,03-08-2026,,Consultant,,JMG107,1,1
+JMG209,,London,08-09-2025,,Senior Associate Consultant,,JMG107,0,1
+JMG190,,London,02-09-2024,,Senior Associate Consultant,,JMG107,1,1
+JMG310,,London,07-10-2024,,Consultant,,JMG107,1,1
+JMG202,,New York,07-08-2023,,Senior Associate Consultant,,JMG44,1,1
+JMU12,,New York,08-08-2024,,Consultant,,JMG44,1,1
+JMU029,,,03-08-2026,,Associate Consultant,,JMG44,1,1
+JMD584,,,01-06-2026,,Software Engineer,,JMD186,1,1
+JMD600,,,01-06-2026,,Software Engineer,,JMD136,1,1
+JMD309,,Chennai,01-07-2024,,Senior Software Engineer,,JMD136,1,1
+JMD301,,Chennai,01-07-2024,,Senior Software Engineer,,JMD136,1,1
+JMD215,,Chennai,24-07-2023,,Senior Software Engineer,,JMD136,1,1
+JMD484,,,27-04-2026,,Solutions Enabler,,JMD136,1,1
+JMD503,,,01-06-2026,,Software Engineer,,JMD364,1,1
+JMD601,,,01-06-2026,,Software Engineer,,JMD364,1,1
+JMG218,,London,18-09-2023,,Manager,,JMG42,1,1
+JMG357,,,11-08-2025,,Principal,,JMG42,1,1
+JMG49,,New York,01-07-2019,,Principal,,JMG42,1,1
+JMG51,,London,30-09-2019,,Principal,,JMG42,1,1
+JMG85,,London,05-07-2021,,Senior Consultant,,JMG42,1,1
+JMG79,,London,25-05-2021,,Manager,,JMG42,1,1
+JMD99,,Chennai,01-06-2021,,Senior Software Engineer,,JMD140,1,1
+JMD220,,Chennai,24-07-2023,,Senior Software Engineer,,JMD140,1,1
+JMD269,,Chennai,17-06-2024,,Solutions Enabler,,JMD140,1,1
+JMD261,,Chennai,03-06-2024,,Senior Software Engineer,,JMD140,1,1
+JMD559,,,01-06-2026,,Software Engineer,,JMD232,1,1
+JMG334,,London,04-08-2025,,Senior Associate Consultant,,JMG157,0,1
+JMG428,,,07-04-2026,,Senior Associate Consultant,,JMG157,1,1
+JMG407,,,02-02-2026,,Associate Consultant,,JMG157,1,1
+JMD526,,,01-06-2026,,Software Engineer,,JMD299,1,1
+JMG399,,,02-03-2026,,Associate Consultant,,JMG100,1,1
+JMG381,,,20-11-2025,,Consultant,,JMG100,1,1
+JMG431,,,15-04-2026,,Senior Associate Consultant,,JMG100,1,1
+JMG438,,,15-04-2026,,Associate Consultant,,JMG100,1,1
+JMG82,,London,07-07-2025,,Consultant,,JMG149,0,1
+JMG462,,,15-06-2026,,Senior Associate Consultant,,JMG149,1,1
+JMG422,,,07-04-2026,,Consultant,,JMG149,1,1
+JMG235,,London,24-06-2024,,Consultant,,JMG149,1,1
+JMG189,,London,16-09-2025,,Senior Associate Consultant,,JMG149,0,1
+JMG154,,London,06-02-2023,,Consultant,,JMG149,1,1
+JMG434,,,06-07-2026,,Graduate Intern,,JMG381,1,1
+JMD390,,,02-06-2025,,Software Engineer,,JMD156,1,1
+JMD267,,Chennai,03-06-2024,,Solutions Enabler,,JMD156,1,1
+JMD282,,Chennai,01-07-2024,,Senior Software Engineer,,JMD156,1,1
+JMU017,,New York,04-08-2025,,Associate Consultant,,JMG128,0,1
+JMU036,,,30-06-2026,,Associate Consultant,,JMG128,1,1
+JMD566,,,01-06-2026,,Software Engineer,,JMD445,1,1
+JMD455,,,24-11-2025,,Senior Software Engineer,,JMD106,1,1
+JMD278,,Chennai,17-06-2024,,Senior Software Engineer,,JMD106,1,1
+JMD131,,Chennai,06-09-2021,,Solutions Enabler,,JMD106,1,1
+JMG388,,,02-02-2026,,Senior Associate Consultant,,JMG156,1,1
+JMG353,,London,06-10-2025,,Associate Consultant,,JMG156,0,1
+JMD588,,,01-06-2026,,Software Engineer,,JMD235,1,1
+JMD395,,,02-06-2025,,Software Engineer,,JMD235,1,1
+JMD403,,,02-06-2025,,Software Engineer,,JMD235,1,1
+JMD451,,,04-08-2025,,Software Engineer,,JMD276,1,1
+JMD564,,,01-06-2026,,Software Engineer,,JMD276,1,1
+JMD498,,,01-06-2026,,Software Engineer,,JMD350,1,1
+JMD594,,,01-06-2026,,Software Engineer,,JMD350,1,1
+JMD635,,,03-06-2026,,Software Engineer,,JMD242,1,1
+JMD589,,,01-06-2026,,Software Engineer,,JMD356,1,1
+JMD448,,,04-08-2025,,Software Engineer,,JMD356,1,1
+JMD203,,Chennai,17-07-2023,,Senior Software Engineer,,JMD184,1,1
+JMD156,,Chennai,13-12-2021,,Solutions Consultant,,JMD195,1,1
+JMD68,,Chennai,01-03-2019,,Solutions Enabler,,JMD195,1,1
+JMD204,,Chennai,24-07-2023,,Senior Software Engineer,,JMD189,1,1
+JMD359,,Chennai,22-07-2024,,Senior Software Engineer,,JMD189,1,1
+JMD423,,,02-06-2025,,Software Engineer,,JMD92,1,1
+JMD425,,,02-06-2025,,Software Engineer,,JMD92,1,1
+JMD294,,Chennai,01-07-2024,,Senior Software Engineer,,JMD92,1,1
+JMD365,,Chennai,22-07-2024,,Senior Software Engineer,,JMD84,1,1
+JMD454,,,24-11-2025,,Senior Software Engineer,,JMD84,1,1
+JMD624,,,01-06-2026,,Software Engineer,,JMD84,1,1
+JMD520,,,01-06-2026,,Software Engineer,,JMD329,1,1
+JMD449,,,04-08-2025,,Software Engineer,,JMD329,1,1
+JMD549,,,01-06-2026,,Software Engineer,,JMD363,1,1
+JMD604,,,01-06-2026,,Software Engineer,,JMD363,1,1
+JMD504,,,01-06-2026,,Software Engineer,,JMD244,1,1
+JMD602,,,01-06-2026,,Software Engineer,,JMD354,1,1
+JMD529,,,01-06-2026,,Software Engineer,,JMD287,1,1
+JMD521,,,01-06-2026,,Software Engineer,,JMD213,1,1
+JMD394,,,02-06-2025,,Software Engineer,,JMD261,1,1
+JMD583,,,01-06-2026,,Software Engineer,,JMD261,1,1
+JMG124,,London,12-09-2022,,Senior Consultant,,JMG29,1,1
+JMG380,,,05-01-2026,,Principal,,JMG29,1,1
+JMG87,,London,12-07-2021,,Principal,,JMG29,1,1
+JMG98,,London,18-10-2021,,Manager,,JMG29,1,1
+JMG468,,,06-07-2026,,Senior Associate Consultant,,JMG342,1,1
+JMG460,,,09-06-2026,,Associate Consultant,,JMG342,1,1
+JMG433,,,08-03-2026,,Graduate Intern,,JMG342,1,1
+JMG396,,,06-07-2026,,Associate Consultant,,JMG342,1,1
+JMD443,,,04-08-2025,,Software Engineer,,JMD435,1,1
+JMD445,,,04-08-2025,,Software Engineer,,JMD435,1,1
+JMD439,,,07-07-2025,,Software Engineer,,JMD435,1,1
+JMD407,,,02-06-2025,,Software Engineer,,JMD275,1,1
+JMD603,,,01-06-2026,,Software Engineer,,JMD275,1,1
+JMG359,,,11-08-2025,,Associate Consultant,,JMG338,1,1
+JMG426,,,07-04-2026,,Associate Consultant,,JMG338,1,1
+JMD517,,,01-06-2026,,Software Engineer,,JMD439,1,1
+JMD385,,,02-06-2025,,Software Engineer,,JMD264,1,1
+JMD633,,,01-06-2026,,Software Engineer,,JMD264,1,1
+JMG354,,London,09-06-2025,,Principal,,JMG24,0,1
+JMG59,,New York,27-01-2020,,Principal,,JMG24,1,1
+JMG64,,London,06-07-2020,,Manager,,JMG24,1,1
+JMG69,,London,11-01-2021,,Manager,,JMG24,1,1
+JMD41,,Chennai,01-01-2018,,Principal Architect,,JMG24,1,1
+JMD405,,,02-06-2025,,Software Engineer,,JMD227,1,1
+JMD429,,,02-06-2025,,Software Engineer,,JMD227,1,1
+JMD483,,,27-04-2026,,Software Engineer,,JMD227,1,1
+JMD621,,,01-06-2026,,Software Engineer,,JMD227,1,1
+JMD420,,,02-06-2025,,Software Engineer,,JMD57,1,1
+JMD319,,Chennai,22-07-2024,,Senior Software Engineer,,JMD57,1,1
+JMD191,,Chennai,01-02-2023,,Senior Software Engineer,,JMD57,1,1
+JMD113,,Chennai,01-06-2021,,Solutions Enabler,,JMD57,1,1
+JMD532,,,01-06-2026,,Software Engineer,,JMD281,1,1
+JMD539,,,01-06-2026,,Software Engineer,,JMD281,1,1
+JMD480,,,06-04-2026,,Solutions Enabler,,JMD112,1,1
+JMD356,,Chennai,22-07-2024,,Senior Software Engineer,,JMD112,1,1
+JMD406,,,02-06-2025,,Software Engineer,,JMD112,1,1
+JMD402,,,02-06-2025,,Senior Software Engineer,,JMD112,1,1
+JMD304,,Chennai,01-07-2024,,Software Engineer,,JMD112,1,1
+JMD272,,Chennai,17-06-2024,,Solutions Enabler,,JMD112,1,1
+INT165,,,03-02-2026,,Trainee Software Engineer,,JMD249,1,1
+INT173,,,03-02-2026,,Trainee Software Engineer,,JMD249,1,1
+INT195,,,03-02-2026,,Trainee Software Engineer,,JMD249,1,1
+JMD151,,Chennai,13-12-2021,,Solutions Enabler,,JMD89,1,1
+JMD200,,Chennai,05-06-2023,,Solutions Enabler,,JMD89,1,1
+JMD481,,,07-04-2026,,Senior Software Engineer,,JMD89,1,1
+JMG386,,,02-02-2026,,Resourcing Manager,,JMG464,1,1
+JMD442,,,04-08-2025,,Software Engineer,,JMD379,1,1
+JMD444,,,04-08-2025,,Software Engineer,,JMD379,1,1
+JMD380,,Chennai,30-04-2025,,Software Engineer,,JMD379,1,1
+JMD331,,Chennai,22-07-2024,,Senior Software Engineer,,JMD379,1,1
+JMD615,,,01-06-2026,,Software Engineer,,JMD280,1,1
+JMG352,,London,07-07-2025,,Senior Associate Consultant,,JMG222,1,1
+JMG239,,London,08-07-2024,,Associate Consultant,,JMG222,1,1
+JMG383,,,19-01-2026,,Senior Associate Consultant,,JMG222,1,1
+JMG390,,,02-02-2026,,Associate Consultant,,JMG146,1,1
+JMG361,,,06-10-2025,,Associate Consultant,,JMG146,1,1
+JMG331,,London,03-02-2025,,Senior Associate Consultant,,JMG146,1,1
+JMG203,,London,07-08-2023,,FP&A Business Partner,,JMG314,1,1
+JMG368,,,13-10-2025,,FP&A Manager,,JMG314,1,1
+JMG470,,,21-07-2026,,FP&A Business Partner,,JMG314,1,1
+JMU018,,,02-09-2025,,Associate Consultant,,JMG114,1,1
+JMU014,,New York,07-07-2025,,Senior Associate Consultant,,JMG114,0,1
+JMU007,,New York,11-11-2024,,Associate Consultant,,JMG114,1,1
+JMU047,,,22-07-2026,,Associate Consultant,,JMG114,1,1
+JMG170,,New York,06-02-2023,,Senior Consultant,,JMG114,1,1
+JMG445,,,05-05-2026,,Senior Legal Counsel,,JMG360,1,1
+JMG418,,,02-03-2026,,Senior Legal Counsel & Head of Privacy,,JMG360,1,1
+JMD491,,,22-05-2026,,Legal Counsel,,JMG360,1,1
+EXT015,,,06-10-2025,,Contractor,,JMG217,1,1
+JMG364,,,19-01-2026,,Principal,,JMG217,1,1
+JMG391,,,02-03-2026,,Manager,,JMG217,1,1
+JMG188,,London,03-07-2023,,Manager,,JMG217,1,1
+JMG302,,London,22-07-2024,,Manager,,JMG217,1,1
+JMD6,,London,18-03-2013,,Solutions Consultant,,JMG217,1,1
+JMG100,,London,28-11-2021,,Senior Consultant,,JMG217,1,1
+JMD637,,,03-06-2026,,Software Engineer,,JMD240,1,1
+JMD452,,,04-08-2025,,Software Engineer,,JMD240,1,1
+JMD531,,,01-06-2026,,Software Engineer,,JMD240,1,1
+JMD519,,,01-06-2026,,Software Engineer,,JMD240,1,1
+JMD446,,,04-08-2025,,Software Engineer,,JMD240,1,1
+JMD558,,,01-06-2026,,Software Engineer,,JMD321,1,1
+JMD586,,,01-06-2026,,Software Engineer,,JMD321,1,1
+JMD459,,,20-08-2025,,IT Support Engineer,,JMD371,1,1
+JMD436,,,01-07-2025,,IT Support Engineer,,JMD371,1,1
+JMD437,,,10-09-2025,,Senior IT Infrastructure Engineer,,JMD371,1,1
+JMG379,,,19-01-2026,,Associate Consultant,,JMG225,1,1
+JMG377,,,05-01-2026,,Senior Associate Consultant,,JMG225,1,1
+JMG187,,London,03-07-2023,,Senior Associate Consultant,,JMG225,1,1
+JMG404,,,02-03-2026,,Associate Consultant,,JMG144,1,1
+JMG411,,,01-06-2026,,Associate Consultant,,JMG144,1,1
+JMD590,,,01-06-2026,,Software Engineer,,JMD324,1,1
+JMD625,,,01-06-2026,,Software Engineer,,JMD351,1,1
+JMD434,,,21-07-2025,,Solutions Enabler,,JMD91,1,1
+JMD316,,Chennai,22-07-2024,,Senior Software Engineer,,JMD91,1,1
+JMD486,,,30-04-2026,,Solutions Enabler,,JMD91,1,1
+JMD207,,Chennai,24-07-2023,,Senior Software Engineer,,JMD91,1,1
+JMD273,,Chennai,17-06-2024,,Senior Software Engineer,,JMD91,1,1
+JMG144,,London,14-11-2022,,Consultant,,JMG133,1,1
+JMG347,,London,02-06-2025,,Senior Associate Consultant,,JMG133,1,1
+JMG393,,,15-04-2026,,Senior Associate Consultant,,JMG133,1,1
+JMD599,,,01-06-2026,,Software Engineer,,JMD208,1,1
+JMD487,,,07-05-2026,,Associate HRBP,,JMD202,1,1
+JMD375,,Chennai,10-02-2025,,Associate HRBP,,JMD202,1,1
+JMD357,,Chennai,22-07-2024,,Senior Software Engineer,,JMD200,1,1
+JMD441,,,04-08-2025,,Software Engineer,,JMD200,1,1
+JMD392,,,02-06-2025,,Software Engineer,,JMD200,1,1
+JMD562,,,01-06-2026,,Software Engineer,,JMD224,1,1
+JMD525,,,01-06-2026,,Software Engineer,,JMD204,1,1
+JMD530,,,01-06-2026,,Software Engineer,,JMD204,1,1
+JMD315,,Chennai,22-07-2024,,Software Engineer,,JMD204,1,1
+JMD274,,Chennai,17-06-2024,,Solutions Enabler,,JMD145,1,1
+JMD414,,,02-06-2025,,Software Engineer,,JMD145,1,1
+JMD550,,,01-06-2026,,Software Engineer,,JMD346,1,1
+JMD563,,,01-06-2026,,Software Engineer,,JMD322,1,1
+JMD574,,,01-06-2026,,Software Engineer,,JMD322,1,1
+JMD427,,,02-06-2025,,Software Engineer,,JMD338,1,1
+JMD596,,,01-06-2026,,Software Engineer,,JMD338,1,1
+JMG308,,London,02-09-2024,,Associate Consultant,,JMG218,1,1
+JMD37,,Chennai,01-01-2018,,Senior Solutions Consultant,,JMD5,1,1
+JMD57,,Chennai,01-03-2019,,Solutions Consultant,,JMD5,1,1
+JMD22,,Chennai,01-10-2016,,Solutions Consultant,,JMD5,1,1
+JMD166,,Chennai,21-02-2022,,Solutions Consultant,,JMD5,1,1
+JMD179,,Chennai,01-09-2022,,Solutions Consultant,,JMD5,1,1
+JMD141,,Chennai,13-12-2021,,Solutions Consultant,,JMD5,1,1
+JMD216,,Chennai,24-07-2023,,Solutions Enabler,,JMD226,1,1
+JMD187,,Chennai,01-02-2023,,Solutions Enabler,,JMD226,1,1
+JMD291,,Chennai,01-07-2024,,Solutions Enabler,,JMD226,1,1
+JMAN000037,,,07-08-2026,,Senior Associate Consultant,,JMD478,1,1
+JMD548,,,01-06-2026,,Software Engineer,,JMD478,1,1
+JMD505,,,01-06-2026,,Software Engineer,,JMD478,1,1
+JMD568,,,01-06-2026,,Software Engineer,,JMD269,1,1
+JMD533,,,01-06-2026,,Software Engineer,,JMD341,1,1
+JMG316,,London,04-11-2024,,People Partner,,JMG171,1,1
+JMG376,,,26-11-2025,,TA Partner,,JMG171,1,1
+JMG384,,,26-01-2026,,HRBP,,JMG171,1,1
+JMG392,,,09-03-2026,,HR Business Partner,,JMG171,1,1
+JMU008,,New York,18-02-2025,,People and Internal Communications Associate,,JMG171,1,1
+JMU004,,New York,05-08-2024,,Operations Lead,,JMG171,1,1
+JMG225,,London,20-11-2023,,Senior Consultant,,JMD3,1,1
+JMU020,,,02-09-2025,,Associate Consultant,,JMG159,1,1
+JMU037,,,03-08-2026,,Associate Consultant,,JMG159,1,1
+JMU32,,,06-04-2026,,Associate Consultant,,JMG159,1,1
+JMU030,,,02-02-2026,,Senior Associate Consultant,,JMG64,1,1
+JMU028,,,13-07-2026,,Associate Consultant,,JMG64,1,1
+JMU045,,,03-08-2026,,Senior Associate Consultant,,JMG64,1,1
+JMG131,,London,08-08-2025,,Consultant,,JMG64,0,1
+JMD575,,,01-06-2026,,Software Engineer,,JMD218,1,1
+JMD476,,,09-03-2026,,Senior Software Engineer,,JMD218,1,1
+JMD417,,,02-06-2025,,Software Engineer,,JMD218,1,1
+JMD642,,,03-02-2026,,Software Engineer,,JMD318,1,1
+JMG417,,,01-04-2026,,Associate Consultant,,JMG321,1,1
+JMU043,,,13-07-2026,,Associate Consultant,,JMG170,1,1
+JMU034,,,01-06-2026,,Intern,,JMG170,1,1
+JMU010,,New York,02-07-2025,,Undergraduate Intern,,JMG170,0,1
+JMG206,,London,07-08-2023,,Associate Consultant,Delivery,,1,1
+JMD399,,,02-06-2025,,Software Engineer,,JMD214,1,1
+JMD470,,,13-02-2026,,Software Engineer,,JMD214,1,1
+JMD636,,,04-06-2026,,Software Engineer,,JMD340,1,1
+JMD354,,Chennai,22-07-2024,,Senior Software Engineer,,JMD180,1,1
+JMD224,,Chennai,24-07-2023,,Senior Software Engineer,,JMD180,1,1
+JMD241,,Chennai,24-07-2023,,Solutions Enabler,,JMD180,1,1
+JMG355,,London,07-07-2025,,Senior Associate Consultant,,JMG117,0,1
+JMG356,,,04-08-2025,,Associate Consultant,,JMG117,1,1
+JMG375,,,09-07-2026,,Associate Consultant,,JMG117,1,1
+JMD572,,,01-06-2026,,Software Engineer,,JMD285,1,1
+JMD576,,,01-06-2026,,Software Engineer,,JMD285,1,1
+JMD509,,,01-06-2026,,Software Engineer,,JMD158,1,1
+JMD325,,Chennai,22-07-2024,,Senior Software Engineer,,JMD158,1,1
+JMD613,,,01-06-2026,,Software Engineer,,JMD158,1,1
+JMG345,,London,01-09-2025,,Associate Consultant,,JMG86,0,1
+JMG338,,London,07-04-2025,,Consultant,,JMG86,0,1
+JMG322,,London,06-01-2025,,Senior Associate Consultant,,JMG86,1,1
+JMG400,,,05-05-2026,,Consultant,,JMG86,1,1
+JMD243,,Chennai,24-07-2023,,Solutions Enabler,,JMD157,1,1
+JMD221,,Chennai,24-07-2023,,Solutions Enabler,,JMD157,1,1
+JMD205,,Chennai,24-07-2023,,Solutions Enabler,,JMD157,1,1
+JMD617,,,01-06-2026,,Software Engineer,,JMD284,1,1
+JMD229,,Chennai,24-07-2023,,Senior Software Engineer,,JMD47,1,1
+JMD295,,Chennai,01-07-2024,,Solutions Enabler,,JMD47,1,1
+JMD361,,Chennai,22-07-2024,,Senior Software Engineer,,JMD47,1,1
+JMD408,,,02-06-2025,,Software Engineer,,JMD47,1,1
+EXT016,,,25-11-2024,,Events Manager - Contractor,,JMD432,1,1
+JMG326,,London,20-01-2025,,Marketing Manager,,JMD432,1,1
+JMG444,,,05-05-2026,,Senior Associate Consultant,,JMG150,1,1
+JMG405,,,21-02-2026,,Senior Associate Consultant,,JMG150,1,1
+JMG238,,London,01-09-2025,,Senior Associate Consultant,,JMG150,0,1
+JMG230,,London,25-04-2024,,Senior Associate Consultant,,JMG150,1,1
+JMD89,,Chennai,01-08-2020,,Senior Solutions Consultant,,JMD42,1,1
+JMD152,,Chennai,13-12-2021,,Solutions Consultant,,JMD42,1,1
+JMD263,,Chennai,03-06-2024,,Solutions Enabler,,JMD42,1,1
+JMD435,,,21-07-2025,,Solutions Consultant,,JMD42,1,1
+JMD492,,,01-06-2026,,Consultant,,JMD42,1,1
+JMG300,,London,01-04-2024,,Partner,Support,,1,1
+JMD557,,,01-06-2026,,Software Engineer,,JMD155,1,1
+JMD422,,,02-06-2025,,Software Engineer,,JMD155,1,1
+JMD335,,Chennai,22-07-2024,,Senior Software Engineer,,JMD155,1,1
+JMD411,,,02-06-2025,,Software Engineer,,JMD355,1,1
+JMD546,,,01-06-2026,,Software Engineer,,JMD355,1,1
+JMD259,,Chennai,03-06-2024,,Senior Software Engineer,,JMD246,1,1
+JMD281,,Chennai,01-07-2024,,Senior Software Engineer,,JMD246,1,1
+JMD515,,,01-06-2026,,Software Engineer,,JMD220,1,1
+JMD477,,,20-03-2026,,Software Engineer,,JMD220,1,1
+JMD397,,,02-06-2025,,Software Engineer,,JMD336,1,1
+JMD592,,,01-06-2026,,Software Engineer,,JMD336,1,1
+JMD389,,,02-06-2025,,Software Engineer,,JMD37,1,1
+JMD323,,Chennai,22-07-2024,,Software Engineer,,JMD37,1,1
+JMD239,,Chennai,24-07-2023,,Senior Software Engineer,,JMD37,1,1
+JMD201,,Chennai,05-06-2023,,Solutions Enabler,,JMD37,1,1
+JMG420,,,09-03-2026,,Associate Consultant,,JMG130,1,1
+JMG362,,,03-11-2025,,Associate Consultant,,JMG130,1,1
+JMD280,,Chennai,01-07-2024,,Solutions Enabler,,JMD174,1,1
+JMD266,,Chennai,03-06-2024,,Solutions Enabler,,JMD174,1,1
+JMD186,,Chennai,01-02-2023,,Solutions Enabler,,JMD174,1,1
+JMD345,,Chennai,22-07-2024,,Senior Software Engineer,,JMD174,1,1
+JMD348,,Chennai,22-07-2024,,Senior Software Engineer,,JMD174,1,1
+JMG385,,,12-12-2025,,Associate Consultant,,JMG82,1,1
+JMG401,,,05-05-2026,,Associate Consultant,,JMG82,1,1
+JMD545,,,01-06-2026,,Software Engineer,,JMD201,1,1
+JMD578,,,01-06-2026,,Software Engineer,,JMD201,1,1
+JMD544,,,01-06-2026,,Software Engineer,,JMD238,1,1
+JMD580,,,01-06-2026,,Software Engineer,,JMD238,1,1
+JMD158,,Chennai,13-12-2021,,Solutions Enabler,,JMD93,1,1
+JMD159,,Chennai,13-12-2021,,Senior Software Engineer,,JMD93,1,1
+JMD190,,Chennai,01-02-2023,,Solutions Enabler,,JMD93,1,1
+JMD501,,,01-06-2026,,Software Engineer,,JMD360,1,1
+JMG128,,New York,12-09-2022,,Senior Consultant,,JMG59,1,1
+JMG134,,London,20-09-2022,,Senior Consultant,,JMG59,1,1
+JMD605,,,01-06-2026,,Software Engineer,,JMD279,1,1
+JMD631,,,01-06-2026,,Software Engineer,,JMD130,1,1
+JMD340,,Chennai,22-07-2024,,Senior Software Engineer,,JMD130,1,1
+JMD415,,,02-06-2025,,Senior Software Engineer,,JMD130,1,1
+JMD217,,Chennai,24-07-2023,,Solutions Enabler,,JMD130,1,1
+JMD218,,Chennai,24-07-2023,,Solutions Consultant,,JMD130,1,1
+JMG409,,,09-02-2026,,Intern,,JMG302,1,1
+JMD240,,Chennai,24-07-2023,,Solutions Enabler,,JMD495,1,1
+JMD276,,Chennai,17-06-2024,,Senior Software Engineer,,JMD495,1,1
+JMD303,,Chennai,01-07-2024,,Solutions Enabler,,JMD495,1,1
+JMD430,,,02-06-2025,,Software Engineer,,JMD495,1,1
+JMU011,,New York,02-06-2025,,Senior Associate Consultant,,JMG134,0,1
+JMU038,,,03-08-2026,,Associate Consultant,,JMG134,1,1
+JMU023,,,02-12-2025,,Associate Consultant,,JMG134,1,1
+JMD516,,,01-06-2026,,Software Engineer,,JMD278,1,1
+JMG440,,,01-06-2026,,Graduate Intern,,JMG319,1,1
+JMD346,,Chennai,22-07-2024,,Senior Software Engineer,,JMD243,1,1
+JMD321,,Chennai,22-07-2024,,Senior Software Engineer,,JMD243,1,1
+JMD322,,Chennai,22-07-2024,,Software Engineer,,JMD243,1,1
+JMD622,,,01-06-2026,,Software Engineer,,JMD438,1,1
+JMD606,,,01-06-2026,,Software Engineer,,JMD108,1,1
+JMD609,,,01-06-2026,,Software Engineer,,JMD108,1,1
+JMD551,,,01-06-2026,,Software Engineer,,JMD292,1,1
+JMD507,,,01-06-2026,,Software Engineer,,JMD292,1,1
+JMG358,,,03-08-2026,,Associate Consultant,,JMG206,1,1
+JMG436,,,05-05-2026,,Senior Associate Consultant,,JMG206,1,1
+JMG402,,,02-03-2026,,Associate Consultant,,JMG206,1,1
+JMG369,,,03-11-2025,,Associate Consultant,,JMG206,1,1
+JMD351,,Chennai,22-07-2024,,Senior Software Engineer,,JMD137,1,1
+JMG465,,,01-07-2026,,Transaction Prep Support,,JMG305,1,1
+JMG76,,London,04-05-2021,,Operations Lead,,JMG305,1,1
+JMG330,,London,27-01-2025,,Head of Financial Control,,JMG305,1,1
+JMG314,,London,01-10-2024,,Head of FP&A,,JMG305,1,1
+JMG137,,London,03-10-2022,,Interim Head of Resourcing,,JMG305,0,1
+JMG171,,London,20-03-2023,,Head of HR,,JMG305,1,1
+JMD84,,Chennai,01-07-2020,,Solutions Consultant,,JMD27,1,1
+JMD227,,Chennai,24-07-2023,,Solutions Enabler,,JMD27,1,1
+JMD230,,Chennai,24-07-2023,,Solutions Enabler,,JMD27,1,1
+JMD208,,Chennai,24-07-2023,,Senior Software Engineer,,JMD27,1,1
+JMD161,,Chennai,14-12-2021,,Solutions Enabler,,JMD27,1,1
+JMD132,,Chennai,06-09-2021,,Senior Solutions Consultant,,JMD27,1,1
+JMD128,,Chennai,06-09-2021,,Solutions Consultant,,JMD27,1,1
+JMU006,,New York,04-11-2024,,Consultant,,JMG49,1,1
+JMU003,,New York,10-06-2024,,Senior Consultant,,JMG49,1,1
+JMD552,,,01-06-2026,,Software Engineer,,JMD331,1,1
+JMD538,,,01-06-2026,,Software Engineer,,JMD331,1,1
+JMD377,,Chennai,03-03-2025,,Finance Controller,,JMG330,1,1
+JMG378,,,08-03-2026,,Group Financial Controller,,JMG330,1,1
+JMG232,,London,01-11-2023,,Finance Assistant,,JMG330,1,1
+JMD94,,Chennai,01-07-2020,,Senior Solutions Consultant,,JMD372,1,1
+JMD5,,Chennai,01-11-2012,,Principal Technology Architect,,JMD372,1,1
+JMD495,,,01-06-2026,,Consultant,,JMD372,1,1
+JMD143,,Chennai,13-12-2021,,Solutions Enabler,,JMD372,1,1
+JMD184,,Chennai,02-12-2022,,Solutions Consultant,,JMD372,1,1
+JMD112,,Chennai,01-06-2021,,Solutions Consultant,,JMD372,1,1
+JMD363,,Chennai,22-07-2024,,Senior Software Engineer,,JMD166,1,1
+JMD364,,Chennai,22-07-2024,,Senior Software Engineer,,JMD166,1,1
+JMD318,,Chennai,22-07-2024,,Senior Software Engineer,,JMD166,1,1
+JMD419,,,02-06-2025,,Software Engineer,,JMD166,1,1
+JMD126,,Chennai,06-09-2021,,Solutions Consultant,,JMD118,1,1
+JMD130,,Chennai,06-09-2021,,Solutions Consultant,,JMD118,1,1
+JMD91,,Chennai,01-07-2020,,Senior Solutions Consultant,,JMD118,1,1
+JMD77,,Chennai,01-07-2020,,Senior Solutions Consultant,,JMD118,1,1
+JMD120,,Chennai,06-09-2021,,Senior Software Engineer,,JMD4,1,1
+JMD212,,Chennai,24-07-2023,,Solutions Enabler,,JMD4,1,1
+JMG117,,London,20-06-2022,,Senior Consultant,,JMG122,1,1
+JMG315,,London,04-11-2024,,Consultant,,JMG122,1,1
+JMG439,,,06-07-2026,,Senior Associate Consultant,,JMG122,1,1
+JMG430,,,07-04-2026,,Senior Associate Consultant,,JMG122,1,1
+JMD612,,,01-06-2026,,Software Engineer,,JMD187,1,1
+JMD347,,Chennai,22-07-2024,,Senior Software Engineer,,JMD187,1,1
+JMD39,,Chennai,01-01-2018,,Senior Solutions Consultant,,JMD12,1,1
+JMD297,,Chennai,01-07-2024,,Software Engineer,,JMD12,1,1
+JMD174,,Chennai,16-05-2022,,Solutions Consultant,,JMD12,1,1
+JMD96,,Chennai,01-08-2020,,Solutions Consultant,,JMD12,1,1
+JMD65,,Chennai,01-03-2019,,Solutions Enabler,,JMD12,1,1
+JMD82,,Chennai,01-07-2020,,Senior Solutions Consultant,,JMD12,1,1
+JMD431,,,02-06-2025,,Software Engineer,,JMD190,1,1
+JMD511,,,01-06-2026,,Software Engineer,,JMD190,1,1
+JMD473,,,16-02-2026,,Software Engineer,,JMD190,1,1
+JMD488,,,19-05-2026,,Associate Consultant,,JMD152,1,1
+JMD387,,,02-06-2025,,Software Engineer,,JMD152,1,1
+JMD260,,Chennai,03-06-2024,,Solutions Enabler,,JMD152,1,1
+JMD247,,Chennai,24-07-2023,,Senior Software Engineer,,JMD258,1,1
+JMD222,,Chennai,24-07-2023,,Senior Software Engineer,,JMD258,1,1
+JMD235,,Chennai,24-07-2023,,Solutions Enabler,,JMD258,1,1
+JMD457,,,08-12-2025,,Senior Software Engineer,,JMD258,1,1
+JMD569,,,01-06-2026,,Software Engineer,,JMD258,1,1
+JMD598,,,01-06-2026,,Software Engineer,,JMD466,1,1
+JMD238,,Chennai,24-07-2023,,Senior Software Engineer,,JMD221,1,1
+JMD296,,Chennai,01-07-2024,,Senior Software Engineer,,JMD221,1,1
+JMD541,,,01-06-2026,,Software Engineer,,JMD259,1,1
+JMD542,,,02-06-2026,,Software Engineer,,JMD259,1,1
+JMD31,,Chennai,01-01-2018,,Senior Solutions Consultant,,JMD8,1,1
+JMD27,,Chennai,01-04-2017,,Technology Solutions Architect,,JMD8,1,1
+JMD135,,Chennai,13-12-2021,,Solutions Consultant,,JMD8,1,1
+JMAN000038,,,11-08-2026,,Solutions Consultant,,JMD8,1,1
+JMD81,,Chennai,01-07-2020,,Senior Solutions Consultant,,JMD8,1,1
+JMG129,,London,13-02-2026,,Consultant,,JMG73,1,1
+JMG318,,London,18-11-2024,,Associate Consultant,,JMG73,1,1
+JMG343,,London,06-10-2025,,Associate Consultant,,JMG73,0,1
+JMG415,,,07-04-2026,,Senior Associate Consultant,,JMG73,1,1
+JMG92,,London,06-09-2021,,Senior Consultant,,JMG73,1,1
+JMD252,,Chennai,14-11-2023,,Senior Finance Executive,,JMG378,1,1
+JMD265,,Chennai,03-06-2024,,Senior Software Engineer,,JMD172,1,1
+JMD287,,Chennai,01-07-2024,,Senior Software Engineer,,JMD172,1,1
+JMD466,,,28-01-2026,,Solutions Enabler,,JMD172,1,1
+JMD438,,,13-10-2025,,Solutions Enabler,,JMD172,1,1
+JMD537,,,01-06-2026,,Software Engineer,,JMD260,1,1
+JMD597,,,01-06-2026,,Software Engineer,,JMD260,1,1
+JMG464,,,15-06-2026,,Head of Resource Management,,JMD471,1,1
+JMD378,,Chennai,21-04-2025,,Resourcing Manager,,JMD471,1,1
+JMG372,,,03-11-2025,,Associate Consultant,,JMG92,1,1
+JMD593,,,01-06-2026,,Software Engineer,,JMD141,1,1
+JMD413,,,02-06-2025,,Software Engineer,,JMD141,1,1
+JMD474,,,23-02-2026,,Software Engineer,,JMD141,1,1
+JMD482,,,21-04-2026,,Senior Software Engineer,,JMD141,1,1
+JMD192,,Chennai,01-02-2023,,Solutions Enabler,,JMD141,1,1
+JMD560,,,01-06-2026,,Software Engineer,,JMD365,1,1
+JMD556,,,01-06-2026,,Software Engineer,,JMD271,1,1
+JMD587,,,01-06-2026,,Software Engineer,,JMD237,1,1
+JMG339,,London,07-04-2025,,Senior Associate Consultant,,JMG72,1,1
+JMG306,,London,19-08-2024,,Senior Associate Consultant,,JMG72,1,1
+JMG441,,,06-07-2026,,Senior Associate Consultant,,JMG72,1,1
+JMD461,,,05-01-2026,,Software Engineer,,JMD230,1,1
+JMD400,,,02-06-2025,,Software Engineer,,JMD230,1,1
+JMD640,,,11-06-2026,,Software Engineer,,JMD159,1,1
+JMD634,,,01-06-2026,,Software Engineer,,JMD241,1,1
+JMD344,,Chennai,22-07-2024,,Senior Software Engineer,,JMD241,1,1
+JMD553,,,01-06-2026,,Software Engineer,,JMD241,1,1
+JMG458,,,06-07-2026,,Associate Consultant,,JMG344,1,1
+JMG425,,,03-08-2026,,Associate Consultant,,JMG344,1,1
+JMG395,,,01-06-2026,,Associate Consultant,,JMG344,1,1
+JMG408,,,09-03-2026,,Consultant,,JMG220,1,1
+JMG473,,,27-07-2026,,Consultant,,JMG220,1,1
+JMG73,,London,15-03-2021,,Manager,,JMG220,1,1
+JMG222,,London,16-10-2023,,Senior Consultant,,JMG220,1,1
+JMD471,,,15-02-2026,,Head of Delivery Governance & Enablement,,JMD1,1,1
+JMD472,,,15-02-2026,,Principal Architect,,JMD1,1,1
+JMD372,,Chennai,04-10-2024,,Principal Data Scientist,,JMD1,1,1
+JMD383,,Chennai,02-06-2025,,Principal Technology Architect,,JMD1,1,1
+JMD376,,Chennai,19-02-2025,,Principal Consultant,,JMD1,1,1
+JMD432,,Chennai,07-07-2025,,Chief of Staff to the CTO,,JMD1,0,1
+JMD433,,Chennai,07-07-2025,,Head of HR & Operations,,JMD1,0,1
+JMD3,,London,03-09-2012,,Partner,,JMD1,1,1
+JMD28,,Chennai,05-04-2017,,Principal Technology Architect,,JMD1,1,1
+JMD257,,Chennai,02-05-2024,,Principal Technology Architect,,JMD1,1,1
+CRN11,,,04-05-2026,,HR consultant,,JMD1,1,1
+JMD177,,Chennai,01-09-2022,,Senior Software Engineer,,JMD77,1,1
+JMD292,,Chennai,01-07-2024,,Solutions Enabler,,JMD77,1,1
+JMD210,,Chennai,24-07-2023,,Senior Software Engineer,,JMD77,1,1
+JMD485,,,28-04-2026,,Software Engineer,,JMD77,1,1
+JMD193,,Chennai,09-03-2023,,Solutions Enabler,,JMD94,1,1
+JMD198,,Chennai,02-05-2023,,Senior Software Engineer,,JMD94,1,1
+JMG413,,,02-03-2026,,Associate Consultant,,JMG158,1,1
+JMG387,,,12-12-2025,,Associate Consultant,,JMG158,1,1
+JMD490,,,22-05-2026,,Senior Software Engineer,,JMD65,1,1
+JMD421,,,02-06-2025,,Software Engineer,,JMD65,1,1
+JMD527,,,01-06-2026,,Software Engineer,,JMD229,1,1
+JMD523,,,01-06-2026,,Software Engineer,,JMD357,1,1
+JMD499,,,01-06-2026,,Software Engineer,,JMD234,1,1
+JMD614,,,01-06-2026,,Software Engineer,,JMD234,1,1
+JMG321,,London,06-01-2025,,Consultant,,JMG77,1,1
+JMG309,,London,06-01-2025,,Senior Associate Consultant,,JMG77,1,1
+JMG370,,,03-11-2025,,Associate Consultant,,JMG77,1,1
+JMG456,,,06-07-2026,,IT Apprentice,,JMG374,1,1
+JMD607,,,01-06-2026,,Software Engineer,,JMD267,1,1
+JMG107,,London,28-02-2022,,Manager,,JMG51,1,1
+JMG122,,London,08-08-2022,,Manager,,JMG51,1,1
+JMG147,,London,03-01-2023,,Senior Associate Consultant,,JMG51,1,1
+JMG157,,London,20-02-2023,,Senior Consultant,,JMG51,1,1
+JMG447,,,03-08-2026,,Senior Consultant,,JMG51,1,1
+JMG398,,,09-03-2026,,Senior Consultant,,JMG51,1,1
+JMD328,,Chennai,22-07-2024,,Senior Software Engineer,,JMD212,1,1
+JMD426,,,02-06-2025,,Software Engineer,,JMD253,1,1
+JMD404,,,02-06-2025,,Software Engineer,,JMD296,1,1
+JMD585,,,01-06-2026,,Software Engineer,,JMD296,1,1
+JMD534,,,01-06-2026,,Software Engineer,,JMD294,1,1
+JMD458,,,12-12-2025,,Senior Software Engineer,,JMD219,1,1
+JMD349,,Chennai,22-07-2024,,Senior Software Engineer,,JMD219,1,1
+JMD307,,Chennai,01-07-2024,,Senior Software Engineer,,JMD219,1,1
+JMD629,,,01-06-2026,,Software Engineer,,JMD219,1,1
+JMD595,,,01-06-2026,,Software Engineer,,JMD482,1,1
+JMG150,,London,03-01-2023,,Manager,,JMG87,1,1
+JMG149,,London,03-01-2023,,Manager,,JMG87,1,1
+JMG219,,London,18-09-2023,,Senior Consultant,,JMG87,1,1
+JMG389,,,02-03-2026,,Senior Consultant,,JMG87,1,1
+JMD591,,,01-06-2026,,Software Engineer,,JMD434,1,1
+JMD223,,Chennai,24-07-2023,,Solutions Enabler,,JMD19,1,1
+JMD180,,Chennai,01-09-2022,,Solutions Consultant,,JMD19,1,1
+JMD137,,Chennai,13-12-2021,,Solutions Enabler,,JMD19,1,1
+JMD116,,Chennai,01-06-2021,,Solutions Consultant,,JMD19,1,1
+JMD409,,,02-06-2025,,Software Engineer,,JMD303,1,1
+JMD514,,,01-06-2026,,Software Engineer,,JMD303,1,1
+JMD577,,,01-06-2026,,Software Engineer,,JMD303,1,1
+JMD570,,,01-06-2026,,Software Engineer,,JMD358,1,1
+JMD465,,,22-01-2026,,Senior Software Engineer,,JMD173,1,1
+JMD232,,Chennai,24-07-2023,,Senior Software Engineer,,JMD173,1,1
+JMD285,,Chennai,01-07-2024,,Senior Software Engineer,,JMD173,1,1
+JMD277,,Chennai,17-06-2024,,Senior Software Engineer,,JMD173,1,1
+JMD251,,Chennai,01-11-2023,,Senior People Operations,,JMD433,1,1
+JMD249,,Chennai,25-09-2023,,Talent Acquisition Partner,,JMD433,1,1
+JMD202,,Chennai,17-07-2023,,People Lead,,JMD433,1,1
+JMD462,,,19-01-2026,,Admin Manager,,JMD433,1,1
+JMD493,,,01-06-2026,,Workday Enabler,,JMD433,1,1
+JMD381,,Chennai,12-05-2025,,Talent Acquisition Partner,,JMD433,0,1
+JMD644,,,28-07-2026,,Workday Analyst,,JMD433,1,1
+JMD324,,Chennai,22-07-2024,,Senior Software Engineer,,JMD82,1,1
+JMD386,,,02-06-2025,,Software Engineer,,JMD82,1,1
+JMD102,,Chennai,01-06-2021,,Solutions Enabler,,JMD82,1,1
+JMD129,,Chennai,06-09-2021,,Solutions Enabler,,JMD82,1,1
+JMD155,,Chennai,13-12-2021,,Solutions Consultant,,JMD82,1,1
+JMD264,,Chennai,03-06-2024,,Solutions Enabler,,JMD82,1,1
+JMD293,,Chennai,01-07-2024,,Senior Software Engineer,,JMD82,1,1
+JMD513,,,01-06-2026,,Software Engineer,,JMD301,1,1
+JMD042,,,01-06-2026,,Chief People Officer,,JMG21,1,1
+EXT017,,,10-01-2025,,Contractor,,JMG21,1,1
+JMG11,,London,23-01-2020,,Operations Associate Consultant,,JMG21,1,1
+JMG327,,London,21-02-2025,,Principal,,JMG21,1,1
+JMG323,,London,03-02-2025,,Head of Talent,,JMG21,1,1
+JMG305,,London,12-08-2024,,Chief Financial Officer,,JMG21,1,1
+JMG24,,New York,06-11-2017,,Partner,,JMG21,1,1
+JMG360,,,20-10-2025,,General Counsel,,JMG21,1,1
+JMG367,,,09-06-2025,,Associate Partner,,JMG21,1,1
+JMD388,,,02-06-2025,,Software Engineer,,JMD143,1,1
+JMD450,,,04-08-2025,,Software Engineer,,JMD143,1,1
+JMD329,,Chennai,22-07-2024,,Senior Software Engineer,,JMD143,1,1
+JMD211,,Chennai,24-07-2023,,Solutions Enabler,,JMD68,1,1
+JMD632,,,01-06-2026,,Software Engineer,,JMD273,1,1
+JMD12,,Chennai,21-09-2015,,Technology Solutions Architect,,JMD28,1,1
+JMD16,,Chennai,01-06-2016,,Technology Solutions Architect,,JMD257,1,1
+JMD371,,Chennai,09-09-2024,,IT Infrastructure Enabler,,JMD257,1,1
+JMD7,,Chennai,05-11-2012,,Senior Solutions Consultant,,JMD257,1,1
+JMD464,,,21-01-2026,,Senior TA Coordinator,,JMD381,1,1
+JMD460,,,03-07-2025,,TA Coordinator,,JMD381,1,1
+INT280,,,03-02-2026,,Trainee Software Engineer,,JMD381,1,1
+INT304,,,03-02-2026,,Trainee Software Engineer,,JMD381,1,1
+INT001,,,12-01-2026,,TA Intern,,JMD381,1,1
+JMG344,,London,02-06-2025,,Consultant,,JMG69,0,1
+JMG341,,London,22-04-2025,,Senior Associate Consultant,,JMG69,1,1
+JMG312,,London,07-10-2024,,Senior Associate Consultant,,JMG69,1,1
+JMG156,,London,20-02-2023,,Senior Consultant,,JMG69,1,1
+JMD611,,,01-06-2026,,Software Engineer,,JMD262,1,1
+JMD510,,,01-06-2026,,Software Engineer,,JMD262,1,1
+JMU021,,,08-03-2026,,Senior HRBP,,JMD042,1,1
+JMD47,,Chennai,01-03-2019,,Solutions Consultant,,JMD382,1,1
+JMD475,,,04-03-2026,,Senior Software Engineer,,JMD382,1,1
+JMD56,,Chennai,01-03-2019,,Solutions Consultant,,JMD382,1,1
+JMD164,,Chennai,07-02-2022,,Senior Software Engineer,,JMD382,1,1
+JMD206,,Chennai,24-07-2023,,Solutions Enabler,,JMD382,1,1
+JMD219,,Chennai,24-07-2023,,Solutions Consultant,,JMD31,1,1
+JMD258,,Chennai,29-05-2024,,Solutions Consultant,,JMD31,1,1
+JMD123,,Chennai,06-09-2021,,Solutions Enabler,,JMD31,1,1
+JMD136,,Chennai,13-12-2021,,Solutions Consultant,,JMD31,1,1
+JMD93,,Chennai,01-07-2020,,Solutions Consultant,,JMD31,1,1
+JMD616,,,01-06-2026,,Software Engineer,,JMD480,1,1
+JMD623,,,01-06-2026,,Software Engineer,,JMD480,1,1
+JMD189,,Chennai,01-02-2023,,Solutions Enabler,,JMD144,1,1
+JMD246,,Chennai,24-07-2023,,Solutions Enabler,,JMD144,1,1
+JMD233,,Chennai,24-07-2023,,Solutions Enabler,,JMD144,1,1
+JMD579,,,01-06-2026,,Software Engineer,,JMD228,1,1
+JMD20,,New York,01-09-2016,,Principal Architect,,JMU016,1,1
+JMG114,,New York,06-06-2022,,Manager,,JMU016,1,1
+JMG371,,,27-10-2025,,Principal,,JMU016,1,1
+JMG44,,New York,25-06-2018,,Manager,,JMU016,1,1
+JMD619,,,01-06-2026,,Software Engineer,,JMD319,1,1
+JMD535,,,01-06-2026,,Software Engineer,,JMD268,1,1
+JMD453,,,04-08-2025,,Software Engineer,,JMD272,1,1
+JMD401,,,02-06-2025,,Senior Software Engineer,,JMD272,1,1
+JMD627,,,01-06-2026,,Software Engineer,,JMD272,1,1
+JMG130,,London,26-09-2022,,Consultant,,JMG97,1,1
+JMG146,,London,12-12-2022,,Senior Consultant,,JMG97,1,1
+JMG342,,London,06-05-2025,,Senior Consultant,,JMG97,0,1
+JMG421,,,15-04-2026,,Consultant,,JMG97,1,1
+JMD8,,Chennai,14-11-2013,,Principal Technology Architect,,JMD383,1,1
+JMD118,,Chennai,09-06-2021,,Senior Solutions Consultant,,JMD383,1,1
+JMD175,,Chennai,04-07-2022,,Finance Officer,,JMD377,1,1
+CRN12,,,13-05-2026,,Associate Finance Controller,,JMD377,1,1
+JMD468,,,09-02-2026,,Finance Specialist,,JMD377,1,1
+JMD489,,,20-05-2026,,Finance Executive,,JMD377,1,1
+JMD494,,,01-06-2026,,Finance Executive,,JMD377,1,1
+JMD440,,,30-10-2025,,Finance Executive,,JMD377,1,1
+JMD4,,Chennai,01-10-2012,,Solutions Consultant,,JMD7,1,1
+JMD157,,Chennai,13-12-2021,,Solutions Consultant,,JMD7,1,1
+JMD144,,Chennai,13-12-2021,,Solutions Consultant,,JMD7,1,1
+JMD226,,Chennai,24-07-2023,,Solutions Consultant,,JMD7,1,1
+JMD643,,,23-07-2026,,Senior Solutions Consultant,,JMD7,1,1
+JMD479,,,31-03-2026,,Manager,,JMD472,1,1
+JMD512,,,01-06-2026,,Software Engineer,,JMD472,1,1
+JMD467,,,28-01-2026,,Consultant,,JMD472,1,1
+JMD543,,,01-06-2026,,Software Engineer,,JMD131,1,1
+JMD225,,Chennai,24-07-2023,,Solutions Enabler,,JMD81,1,1
+JMD148,,Chennai,13-12-2021,,Solutions Enabler,,JMD81,1,1
+JMD140,,Chennai,13-12-2021,,Senior Solutions Consultant,,JMD81,1,1
+JMD117,,Chennai,01-06-2021,,Solutions Enabler,,JMD81,1,1
+JMD172,,Chennai,16-03-2022,,Solutions Consultant,,JMD81,1,1
+JMD106,,Chennai,01-06-2021,,Solutions Consultant,,JMD81,1,1
+JMD312,,Chennai,01-07-2024,,Senior Software Engineer,,JMD291,1,1
+JMD327,,Chennai,22-07-2024,,Senior Software Engineer,,JMD291,1,1
+JMD571,,,01-06-2026,,Software Engineer,,JMD380,1,1
+JMD540,,,01-06-2026,,Software Engineer,,JMD135,1,1
+JMD262,,Chennai,03-06-2024,,Senior Software Engineer,,JMD135,1,1
+JMD234,,Chennai,24-07-2023,,Senior Software Engineer,,JMD135,1,1
+JMD214,,Chennai,24-07-2023,,Solutions Enabler,,JMD135,1,1
+JMD178,,Chennai,01-09-2022,,Senior Software Engineer,,JMD135,1,1
+JMD639,,,08-06-2026,,Senior Software Engineer,,JMD135,1,1
+JMD565,,,01-06-2026,,Software Engineer,,JMD192,1,1
+JMU33,,,27-04-2026,,Associate Consultant,,JMU12,1,1
+JMD536,,,01-06-2026,,Software Engineer,,JMD277,1,1
+JMD416,,,02-06-2025,,Software Engineer,,JMD295,1,1
+JMG416,,,06-07-2026,,Undergraduate Intern,,JMG187,1,1
+JMD320,,Chennai,22-07-2024,,Senior Software Engineer,,JMD116,1,1
+JMD279,,Chennai,17-06-2024,,Senior Software Engineer,,JMD116,1,1
+JMD314,,Chennai,22-07-2024,,Senior Software Engineer,,JMD116,1,1
+JMD412,,,02-06-2025,,Software Engineer,,JMD113,1,1
+JMD626,,,01-06-2026,,Software Engineer,,JMD113,1,1
+JMG133,,London,03-10-2022,,Manager,,JMG52,1,1
+JMG141,,London,03-10-2022,,Senior Consultant,,JMG52,1,1
+JMG159,,London,20-02-2023,,Senior Consultant,,JMG52,1,1
+JMD620,,,01-06-2026,,Software Engineer,,JMD222,1,1
+JMD341,,Chennai,22-07-2024,,Senior Software Engineer,,JMD126,1,1
+JMD299,,Chennai,01-07-2024,,Senior Software Engineer,,JMD126,1,1
+JMD213,,Chennai,24-07-2023,,Senior Software Engineer,,JMD126,1,1
+JMD153,,Chennai,13-12-2021,,Senior Software Engineer,,JMD205,1,1
+JMD336,,Chennai,22-07-2024,,Senior Software Engineer,,JMD205,1,1
+JMD424,,,02-06-2025,,Software Engineer,,JMD205,1,1
+JMD360,,Chennai,22-07-2024,,Senior Software Engineer,,JMD56,1,1
+JMD284,,Chennai,01-07-2024,,Senior Software Engineer,,JMD56,1,1
+JMD271,,Chennai,17-06-2024,,Senior Software Engineer,,JMD56,1,1
+JMD275,,Chennai,17-06-2024,,Solutions Enabler,,JMD56,1,1
+JMG212,,London,04-09-2023,,Senior Associate Consultant,,JMG98,1,1
+JMG158,,London,20-02-2023,,Consultant,,JMG98,1,1
+JMG329,,London,07-04-2025,,Senior Associate Consultant,,JMG98,0,1
+JMG319,,London,06-01-2025,,Consultant,,JMG98,1,1
+JMG336,,London,04-03-2025,,Office Manager,,JMG76,1,1
+JMG346,,London,19-05-2025,,EA and Team Assistant,,JMG76,1,1
+JMG374,,,11-11-2025,,IT Manager,,JMG76,1,1
+JMU027,,,06-01-2026,,Internal Comms Project Manager,,JMG76,1,1
+JMG459,,,06-07-2026,,Undergraduate Intern,,JMG190,1,1
+JMD638,,,03-06-2026,,Senior Software Engineer,,JMD128,1,1
+JMD244,,Chennai,24-07-2023,,Senior Software Engineer,,JMD128,1,1
+JMD242,,Chennai,24-07-2023,,Senior Software Engineer,,JMD128,1,1
+JMD469,,,10-02-2026,,Senior Software Engineer,,JMD128,1,1
+JMD555,,,01-06-2026,,Software Engineer,,JMD265,1,1
+JMD396,,,02-06-2025,,Software Engineer,,JMD265,1,1
+JMU039,,,18-05-2026,,Office Manager,,JMU021,1,1
+JMU040,,,18-05-2026,,Talent Acquisition Partner,,JMU021,1,1
+JMU041,,,01-06-2026,,HR Intern,,JMU021,1,1
+JMG448,,,01-06-2026,,Senior Associate Consultant,,JMG236,1,1
+JMG446,,,01-06-2026,,Senior Associate Consultant,,JMG236,1,1
+JMG333,,London,02-06-2025,,Consultant,,JMG236,0,1
+JMG324,,London,03-02-2025,,Senior Associate Consultant,,JMG236,1,1
+JMG307,,London,19-08-2024,,Senior Consultant,,JMG236,1,1
