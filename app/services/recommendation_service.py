@@ -13,6 +13,7 @@ from app.engines.skillset_classifier import classify_skillset, classify_skillset
 from app.engines import embedding_engine
 from app.engines import experience_engine
 from app.engines import availability_hold
+from app.services.allocation_report_service import NON_CLIENT_PROJECT_TYPES
 from app.services.rate_card_service import get_hourly_rate
 
 from app.engines.employee_coe import get_employee_primary_coe_map
@@ -98,16 +99,25 @@ def availability_as_of(allocations: pd.DataFrame, as_of_date: pd.Timestamp) -> p
         & (allocations["allocated_start_date"] <= as_of_date)
         & (allocations["allocated_end_date"] >= as_of_date)
     ]
-    # Internal-project work is discretionary ("contribute when you have time"), not a
-    # hard commitment -- it must never count as "busy" when checking real capacity for
-    # a new client engagement, redeployment, or AI semantic match. Every caller of this
-    # function (get_recommendations, get_redeploy_candidates_as_of, semantic match) goes
-    # through here, so the fix is centralized.
+    # Internal/BAU/Sales work is discretionary ("contribute when you have time"), not a
+    # hard client commitment -- it must never count as "busy" when checking real capacity
+    # for a new client engagement, redeployment, or AI semantic match. Every caller of this
+    # function (get_recommendations, get_redeploy_candidates_as_of, semantic match, and the
+    # New Project wizard's per-role candidate auto-suggestion) goes through here, so the fix
+    # is centralized. This originally only excluded "Internal Project" -- confirmed real
+    # data showed that's not enough: with BAU Activity buckets carrying blanket far-future
+    # (2030+) "evergreen" end dates, virtually every real employee shows 12-17 concurrent
+    # 100% BAU allocations that were still counting as "busy" here, pushing available_pct_
+    # as_of to ~0% for real, genuinely-available people (confirmed: real Associate Partners/
+    # Principal Architects/Senior Associate Consultants exist and aren't all departed, yet
+    # the wizard's candidate suggestion came back empty for those exact designations).
+    # NON_CLIENT_PROJECT_TYPES ({Internal Project, BAU Activity, Sales Activity}) is the
+    # same set already used for employee_client_allocation_pct in allocation_report_service.py.
     projects = get_adapter().get_projects()[["project_code", "type_of_project"]].rename(
         columns={"project_code": "project_id"}
     )
     active_then = active_then.merge(projects, on="project_id", how="left")
-    client_only = active_then[active_then["type_of_project"] != INTERNAL_PROJECT_TYPE]
+    client_only = active_then[~active_then["type_of_project"].isin(NON_CLIENT_PROJECT_TYPES)]
     busy_pct = client_only.groupby("employee_id")["allocation_by_percentage"].sum()
     return busy_pct
 
@@ -373,11 +383,21 @@ def get_recommendations(
     # practical effect as include_below_capacity, but ranked/labelled as
     # near-capacity rather than as an explicit override).
     near_capacity_tolerance_pct: float = DEFAULT_NEAR_CAPACITY_TOLERANCE_PCT,
+    # Another pool-composition gate, not a ranking weight: whether skill/
+    # competency rows sourced from an uploaded resume or LinkedIn PDF (see
+    # resume_skill_service.py) feed the match at all. On by default -- they're
+    # already discounted below "observed" data (scoring.IMPUTED_SKILL_DISCOUNT)
+    # -- but an RM can turn this off to rank purely on the org's own verified
+    # skill/competency records.
+    include_resume_linkedin: bool = True,
 ) -> dict:
 
     adapter = get_adapter()
     employees = adapter.get_employees() if employees is None else employees
-    competencies = adapter.get_competencies() if competencies is None else competencies
+    competencies = (
+        scoring.filter_resume_linkedin_competencies(adapter.get_competencies(), include_resume_linkedin)
+        if competencies is None else competencies
+    )
     allocations = adapter.get_allocations() if allocations is None else allocations
     pipeline_skillset = adapter.get_pipeline_skillset() if pipeline_skillset is None else pipeline_skillset
 
@@ -386,7 +406,10 @@ def get_recommendations(
     required_phrases = scoring.tokenize_skillset(skillset_text)
     required_phrases = scoring.enrich_required_phrases(required_phrases, pipeline_skillset)
     if skill_index is None:
-        skills = adapter.get_skills() if skills is None else skills
+        skills = (
+            scoring.filter_resume_linkedin_skills(adapter.get_skills(), include_resume_linkedin)
+            if skills is None else skills
+        )
         skill_index = scoring.build_employee_skill_index(skills)
     if employee_coe_map is None:
         employee_coe_map = get_employee_primary_coe_map()
@@ -405,7 +428,10 @@ def get_recommendations(
     # Compute one job-description embedding, then batch cosine-sim across all
     # employees in a single numpy matmul — total overhead ~1-2 ms.
     if emp_embedding_index is None:
-        _skills_df = skills if skills is not None else adapter.get_skills()
+        _skills_df = (
+            skills if skills is not None
+            else scoring.filter_resume_linkedin_skills(adapter.get_skills(), include_resume_linkedin)
+        )
         emp_embedding_index = embedding_engine.build_employee_embedding_index(_skills_df)
 
     job_vec = embedding_engine.embed_jobspec(skillset_text) if skillset_text else None
@@ -816,6 +842,7 @@ def get_recommendations_for_pipeline_row(
     include_cost_efficiency: bool = False,
     include_below_capacity: bool = False,
     near_capacity_tolerance_pct: float = DEFAULT_NEAR_CAPACITY_TOLERANCE_PCT,
+    include_resume_linkedin: bool = True,
     **prefetched
 ) -> dict:
     adapter = get_adapter()
@@ -864,6 +891,7 @@ def get_recommendations_for_pipeline_row(
         include_below_capacity=include_below_capacity,
         include_coe_affinity=include_coe_affinity,
         near_capacity_tolerance_pct=near_capacity_tolerance_pct,
+        include_resume_linkedin=include_resume_linkedin,
         **prefetched,
     )
     cluster = row.get("cluster")
@@ -1500,6 +1528,7 @@ def get_backfill_candidates(
     include_cost_efficiency: bool = False,
     include_below_capacity: bool = False,
     near_capacity_tolerance_pct: float = DEFAULT_NEAR_CAPACITY_TOLERANCE_PCT,
+    include_resume_linkedin: bool = True,
 ) -> dict:
     """Find who can replace an employee if they are pulled from source_project_id.
 
@@ -1568,6 +1597,7 @@ def get_backfill_candidates(
         include_cost_efficiency=include_cost_efficiency,
         include_below_capacity=include_below_capacity,
         near_capacity_tolerance_pct=near_capacity_tolerance_pct,
+        include_resume_linkedin=include_resume_linkedin,
     )
 
     leaves = adapter.get_leaves()

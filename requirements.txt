@@ -8,7 +8,9 @@ anthropic
 google-genai
 openai
 python-dotenv
+requests
 apscheduler
 sentence-transformers>=2.7.0
 transformers>=4.30.0
 vaderSentiment>=3.3.2
+pyodbc>=5.0

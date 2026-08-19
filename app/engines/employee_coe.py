@@ -28,8 +28,8 @@ def get_employee_primary_coe_map() -> dict[str, str]:
     observed = skills[(skills["skill_source"] == "observed") & (~skills["coe"].isin(GENERIC_SKILL_COES))]
     result: dict[str, str] = {}
     if not observed.empty:
-        mode_coe = observed.groupby("employee_id")["coe"].agg(lambda s: s.mode().iat[0])
-        result = {emp_id: _canonicalize(coe) for emp_id, coe in mode_coe.items()}
+        mode_coe = observed.groupby("employee_id")["coe"].agg(lambda s: s.mode().iat[0] if not s.mode().empty else None)
+        result = {emp_id: _canonicalize(coe) for emp_id, coe in mode_coe.items() if coe is not None}
 
     _cache = result
     _cache_fingerprint = fingerprint

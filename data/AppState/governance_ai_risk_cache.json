@@ -1,0 +1,273 @@
+{
+  "WRS_002::flags::4651a34e4df9619783ad": {
+    "risk_description": "The Scope area is flagged, indicating potential risks related to project deliverables, objectives, or requirements that could impact successful delivery.",
+    "mitigation_steps": "Review the project's scope documentation and engage with key stakeholders to identify and clarify any misalignments or changes in scope."
+  },
+  "SAB_002::flags::8d8d3665639b9c99d010": {
+    "risk_description": "The flagged areas of Schedule and CSAT indicate potential risks to on-time delivery and client satisfaction, which could impact project outcomes if not addressed promptly.",
+    "mitigation_steps": "Conduct a focused review with the project team to identify root causes for the Schedule and CSAT flags and develop an action plan to address any issues."
+  },
+  "KSY_007::flags::b7a72c4ec9570acd52c8": {
+    "risk_description": "The Schedule and Team areas are flagged, indicating potential delays in delivery timelines and/or resource constraints impacting project progress.",
+    "mitigation_steps": "Conduct a focused review with the project team to assess timeline adherence and resource allocation, identifying any immediate blockers or capacity gaps."
+  },
+  "AXC_002::flags::24ef460ee483649978e1": {
+    "risk_description": "CSAT and Team are flagged, indicating potential risks to client satisfaction and team performance, which could impact delivery timelines or quality.",
+    "mitigation_steps": "Schedule a meeting with the delivery team to review current challenges and gather insights on client satisfaction and team dynamics."
+  },
+  "JMG_267::flags::218887269ad5946d9dc5": {
+    "risk_description": "The Team area is flagged, indicating potential challenges with resource availability, capacity, or team performance that could impact delivery timelines or quality.",
+    "mitigation_steps": "Schedule a meeting with the team lead to review current capacity, workload distribution, and any blockers affecting performance."
+  },
+  "CSD_002::flags::6cdfae37458eb216a19e": {
+    "risk_description": "The Schedule and Quality areas are flagged, indicating potential delays in delivery timelines and risks to meeting expected standards or requirements.",
+    "mitigation_steps": "Conduct a focused review with the project team to identify root causes and assess the impact of the flagged areas on overall delivery."
+  },
+  "SHG_007::flags::4651a34e4df9619783ad": {
+    "risk_description": "The Scope area is flagged, indicating potential risks related to project deliverables, objectives, or boundaries that may impact delivery timelines or outcomes.",
+    "mitigation_steps": "Review the project's scope documentation and engage with key stakeholders to identify and clarify any ambiguities or changes in scope."
+  },
+  "SLF_002::flags::0a8adac9d6d5f4d14ee8": {
+    "risk_description": "The Schedule is flagged, indicating potential delays or challenges in meeting project timelines, which could impact overall delivery.",
+    "mitigation_steps": "Conduct a detailed review of the project timeline and milestones to identify specific areas of delay or risk and engage with the team to assess root causes."
+  },
+  "BMF_005::flags::2f579336ccaf4a495025": {
+    "risk_description": "The flagged areas of Schedule, Quality, and CSAT indicate potential delays, issues with deliverable standards, and client satisfaction concerns, which collectively pose a significant risk to successful project delivery.",
+    "mitigation_steps": "Conduct a focused review with the project team to assess root causes for the flagged areas and develop an action plan to address any identified issues."
+  },
+  "PHG_002::flags::6e90f843aa117b615801": {
+    "risk_description": "The flagged areas of Scope, Schedule, Quality, CSAT, and Team indicate potential risks to project delivery, including misaligned objectives, timeline delays, compromised deliverable standards, client dissatisfaction, and team performance or capacity issues.",
+    "mitigation_steps": "Conduct a focused review meeting with key stakeholders to assess the root causes of the flagged areas and prioritize immediate corrective actions."
+  },
+  "PFC_003::flags::4651a34e4df9619783ad": {
+    "risk_description": "The Scope area is flagged, indicating potential challenges or uncertainties related to project deliverables, objectives, or boundaries that could impact delivery timelines or outcomes.",
+    "mitigation_steps": "Review the project's scope documentation and engage with key stakeholders to clarify and confirm scope boundaries and any recent changes."
+  },
+  "DNS_011::flags::a60f2c73604f623449f2": {
+    "risk_description": "The Quality area is flagged, indicating potential issues with meeting delivery standards or requirements, which could impact project outcomes.",
+    "mitigation_steps": "Conduct a review of current quality assurance processes and outputs to identify any deviations or areas requiring improvement."
+  },
+  "PHN_003::flags::0a8adac9d6d5f4d14ee8": {
+    "risk_description": "The Schedule is flagged, indicating potential delays or challenges in meeting project timelines, which could impact overall delivery.",
+    "mitigation_steps": "Review the project plan and milestones to identify any slippages or dependencies causing the delay, and engage with the team to assess corrective actions."
+  },
+  "GIA_003::flags::d7d601be8fb04d5d4cd6": {
+    "risk_description": "The Scope and Schedule areas are flagged, indicating potential risks to project deliverables and timelines that could impact overall delivery success.",
+    "mitigation_steps": "Conduct a detailed review of the project plan and milestones to identify specific issues causing the flags and engage with relevant stakeholders to assess and address potential impacts."
+  },
+  "NSH_002::flags::b7a72c4ec9570acd52c8": {
+    "risk_description": "The Schedule and Team areas are flagged, indicating potential delays in timelines and/or challenges with resource availability or team performance, which could impact delivery progress.",
+    "mitigation_steps": "Conduct a focused review with the project team to assess current schedule adherence and identify any resource or performance issues contributing to the flags."
+  },
+  "NSH_002::comment::018ddffe5acfa947c67b": {
+    "comment": "Delivery signals show concerns with a deteriorating WSR trend, upcoming allocation changes for 14 team members, despite all DevOps tickets being closed and 291 hours logged last week."
+  },
+  "CTV_003::comment::3728c5905da40624b71b": {
+    "comment": "All DevOps tickets were closed, but delivery signals indicate a deteriorating WSR trend despite 131 hours logged by four team members last week."
+  },
+  "MSQ_002::comment::e7dc6ff45b10aa50c0e8": {
+    "comment": "All DevOps tickets are closed, 282 hours were logged by 9 team members last week, and 7 team members are ending allocation within 21 days with stable WSR trends."
+  },
+  "CON_003::comment::bcf57ef83d69a83ce9a1": {
+    "comment": "Delivery progress is stable, but DevOps faces a 16-hour capacity shortfall with one task blocked and minimal hours logged by the team last week."
+  },
+  "GIA_003::comment::321f8e475f6381595e8a": {
+    "comment": "All DevOps tickets were closed, but delivery signals indicate a deteriorating WSR trend despite 376 hours logged by 11 team members last week."
+  },
+  "LBR_005::comment::4af5ee74c916898d5fde": {
+    "comment": "Delivery is progressing with 54 hours remaining in DevOps, 20 hours logged last week, and three team members nearing the end of their allocation in 21 days."
+  },
+  "JMG_267::comment::7d8f89610386a11c20aa": {
+    "comment": "All DevOps tickets are closed, but delivery capacity may be impacted as 5 team members are ending allocation within 21 days and only 11 hours were logged last week."
+  },
+  "KSY_007::comment::10b9aac63ce688c56b2e": {
+    "comment": "Delivery is stable with all DevOps tickets closed, 83 hours logged by 2 team members last week, and 4 new team members onboarded recently."
+  },
+  "AXC_002::comment::3b7a17c3259f48aff03f": {
+    "comment": "All DevOps tickets were closed, with 182 hours logged by 7 team members last week, and the WSR trend is improving."
+  },
+  "KSY_002::comment::752872b57fa568938ecc": {
+    "comment": "Delivery is facing challenges with no timesheet hours logged last week, a deteriorating WSR trend, and 4 new team members onboarded recently, despite all DevOps tickets being closed."
+  },
+  "KSY_006::comment::03acff6c9f6306ac3b4f": {
+    "comment": "Delivery remains stable with 327 hours logged last week, all DevOps tickets closed, and 11 new team members onboarded in the past 14 days."
+  },
+  "KSY_008::comment::7c432ae8f3a1565f8934": {
+    "comment": "Delivery is progressing with all DevOps tickets closed, improving WSR trend, and recent team changes including 6 new members and 1 ending allocation soon."
+  },
+  "WRS_002::comment::a1ee014effbc54ec9762": {
+    "comment": "All DevOps tickets were closed, but delivery signals show a deteriorating WSR trend despite 297 hours logged by 9 team members last week."
+  },
+  "PHN_003::comment::21504be70aac4e43017c": {
+    "comment": "Delivery remains stable with all DevOps tickets closed, 262 hours logged by 8 team members, and 14 allocations ending within the next 21 days."
+  },
+  "UPR_009::comment::fc9fde73286b29e61d51": {
+    "comment": "Delivery progress is stable with 175 hours logged last week, but 11 DevOps tasks are blocked and 6 team members will end allocation within 21 days."
+  },
+  "VTP_006::comment::cbabfd2d90819baebb06": {
+    "comment": "Delivery is improving with all DevOps tickets closed, 151 hours logged by 5 team members last week, and 7 new team members onboarded in the last 14 days."
+  },
+  "IIR_002::comment::5f9498658771119e5fac": {
+    "comment": "All DevOps tickets are closed, delivery signals show stable trends with 20 hours logged last week, and 3 team members are ending allocation within 21 days."
+  },
+  "THP_001::comment::785de5309fa6e58bd730": {
+    "comment": "Delivery is stable with all DevOps tickets closed, minimal hours logged last week, and three team members nearing the end of their allocation."
+  },
+  "CSD_002::comment::2ead785da3d66542e689": {
+    "comment": "Delivery is stable with 1 DevOps task blocked, 7 in progress, 29 hours remaining, and 3 team members nearing the end of their allocation within 21 days."
+  },
+  "SHG_007::comment::7d4da2d53a788c1392d1": {
+    "comment": "Delivery progress is at risk with deteriorating WSR trends, upcoming team roll-offs, and recent onboarding, despite all DevOps tickets being closed and consistent effort logged."
+  },
+  "SLF_002::comment::a177b051c018ba4ab8a3": {
+    "comment": "All DevOps tickets are closed, but delivery signals show a deteriorating WSR trend despite 268 hours logged last week across 10 team members, including 1 recent joiner."
+  },
+  "BMF_005::comment::7e4c73cb5bceebbc792b": {
+    "comment": "All DevOps tickets were closed, but delivery signals show a deteriorating WSR trend despite 267 hours logged last week by 9 team members."
+  },
+  "PHG_002::comment::eb7725fa799967708d43": {
+    "comment": "Delivery remains stable with all DevOps tickets closed, consistent work logged, recent team changes, and upcoming allocation transitions for 13 members within 21 days."
+  },
+  "DNS_011::comment::d7b7c881c7ded392a72d": {
+    "comment": "Delivery progress is constrained by a 9-hour capacity shortfall, 1 blocked DevOps task, and upcoming allocation losses for 4 team members within 21 days."
+  },
+  "PEC_003::comment::90b4cbbca96af5865232": {
+    "comment": "Delivery is stable with all DevOps tickets closed, 88 hours logged by 3 team members, and 13 allocations ending within 21 days."
+  },
+  "PEC_007::comment::9cccd3c1f495ebbbe926": {
+    "comment": "Delivery is progressing with all DevOps tickets closed, improving WSR trend, and recent team changes including one new member and an upcoming allocation end."
+  },
+  "TNM_002::comment::fd70ab5a5979b38a4d50": {
+    "comment": "Delivery is stable with 14 DevOps tasks in progress, an 18-hour capacity shortfall, and team changes including recent onboarding and upcoming allocation endings within 21 days."
+  },
+  "JUN_002::comment::6662c1954dace29d1688": {
+    "comment": "Delivery is stable with 4 DevOps tasks in progress, 2 hours remaining, minimal logged hours last week, and 1 team member nearing end of allocation in 21 days."
+  },
+  "JMG_267::comment::f4e1fc2bd9c899de4344": {
+    "comment": "Delivery is on track with no open DevOps tickets, though 5 team members are nearing the end of their allocation within 21 days."
+  },
+  "KSY_007::comment::a42f32ebb7c798b0a422": {
+    "comment": "Delivery is stable with 83 hours logged last week, no open DevOps tickets, and four new team members onboarded in the past 14 days."
+  },
+  "AXC_002::comment::e4c779d2512d476a4d01": {
+    "comment": "Delivery is on track with an improving WSR trend, 182 hours logged last week by 7 team members, and no open DevOps tickets."
+  },
+  "KSY_006::comment::6e011d59dffcf401ddc1": {
+    "comment": "Delivery is stable with 327 hours logged last week by 8 team members, while 11 new team members have joined in the past 14 days."
+  },
+  "KSY_008::comment::5e78efcc220288b93c12": {
+    "comment": "Delivery is progressing well with improving weekly status reports, clear DevOps board, and recent team changes including 6 new members and 1 nearing allocation end."
+  },
+  "MSQ_002::comment::a26739be9d8cfdf14aab": {
+    "comment": "Delivery is stable with 282 hours logged last week, no open DevOps tickets, and 7 team members nearing the end of their allocation within 21 days."
+  },
+  "GIA_003::comment::174ee0a44ef3e36ba416": {
+    "comment": "Delivery is active with 376 hours logged by 11 team members last week, but the WSR trend indicates a deteriorating trajectory despite DevOps being on track."
+  },
+  "NSH_002::comment::76d697f77ad7c0b1d31e": {
+    "comment": "Delivery is active with 291 hours logged last week, but 14 team members are nearing allocation end and WSR trend is deteriorating despite DevOps being on track."
+  },
+  "WRS_002::comment::a4e2187424fbeb2f45d0": {
+    "comment": "Delivery is active with 297 hours logged by 9 team members last week, but the WSR trend indicates a deteriorating trajectory despite no open DevOps tickets."
+  },
+  "CTV_003::comment::3f36ca19df92e404af34": {
+    "comment": "Delivery is active with 131 hours logged by 4 team members last week, but the WSR trend is deteriorating despite DevOps being on track with no open tickets."
+  },
+  "SHG_007::comment::3a5f4e05c87a43755ed6": {
+    "comment": "Delivery is active with 265 hours logged last week, but the WSR trend is deteriorating as 8 team members near allocation end within 21 days."
+  },
+  "SLF_002::comment::e7179a19e3377cf3d309": {
+    "comment": "Delivery is progressing with 268 hours logged last week, but the WSR trend is deteriorating despite no open DevOps tickets and one recent team addition."
+  },
+  "BMF_005::comment::1f71c07a335bf4af9e28": {
+    "comment": "Delivery is active with 267 hours logged by 9 team members last week, but the WSR trend is deteriorating despite DevOps being on track with no open tickets."
+  },
+  "PHG_002::comment::ab334396450bb8f6cc4c": {
+    "comment": "Delivery is stable with consistent work logged, no DevOps issues, and recent team transitions as 13 members onboarded while 13 are nearing allocation end."
+  },
+  "PHN_003::comment::dee8e03926b72b147fc7": {
+    "comment": "Delivery is stable with 262 hours logged last week, no open DevOps tickets, but 14 team members are nearing the end of their allocation within 21 days."
+  },
+  "VTP_006::comment::05d2777b5ae3a9136c04": {
+    "comment": "Delivery is progressing with 151 hours logged last week, an improving WSR trend, and recent onboarding of 7 team members; DevOps remains on track with no open tickets."
+  },
+  "IIR_002::comment::cf36d1d745a03801fd95": {
+    "comment": "Delivery is stable with no open DevOps tickets, 20 hours logged last week, and three team members nearing the end of their allocation within 21 days."
+  },
+  "THP_001::comment::9e461636458d5cc1f1b9": {
+    "comment": "Delivery is stable with no open DevOps tickets, minimal hours logged last week, and three team members nearing the end of their allocation in 21 days."
+  },
+  "PEC_003::comment::157bafad3cca0b0d8f98": {
+    "comment": "Delivery is stable with 88 hours logged last week, no open DevOps tickets, and 13 team members nearing the end of their allocation within 21 days."
+  },
+  "PEC_007::comment::4f654f373996a5df8160": {
+    "comment": "Delivery is progressing well with DevOps on track, improving WSR trends, and recent team changes including one member starting and another nearing allocation end."
+  },
+  "cluster::2::a6904dd20024d5fe3a2e": {
+    "summary": "Cluster 2 shows mixed health: 3 Red (MSQ_002, SAB_002, WRS_002), 2 Amber (GIA_003, NSH_002), 8 Green. No logged risks, but flagged risks in GIA_003, NSH_002, WRS_002, SAB_002, and MSQ_002 require attention. No projects starting or ending this week; focus on detailed reviews for CTV_003, MSQ_002, CON_003, GIA_003, and NSH_002."
+  },
+  "cluster::4::a654743d2c4e429ae8b8": {
+    "summary": "Cluster 4 requires attention this week: 4 projects Red (CSD_002, SHG_007, SLF_002, PHG_002), with flagged risks across Scope, Schedule, Quality, and CSAT. No logged risks yet, but BMF_005 and PHG_002 are critical to monitor given multi-area concerns. No new kickoffs; GLS_015 wraps up on schedule."
+  },
+  "cluster::5::600dd773f5c2328c2648": {
+    "summary": "Cluster 5 remains healthy: 4 Green, 1 Amber (DNS_011 flagged for Quality concerns, not yet logged as a risk), no Red. PEC_007 ends this week; no new projects kicking off. DNS_011 is the key item to watch during today's detailed review."
+  },
+  "cluster::2::f89dcbe11b6307fca2e2": {
+    "summary": "Cluster 2 shows mixed health: 3 projects red (GIA_003, NSH_002, SAB_002) with flagged risks in Scope, Schedule, and CSAT; 2 amber (WRS_002, MSQ_002) driven by scope and client dependencies. No logged risks, but GIA_003 and NSH_002 are key watch areas for delivery impact. 8 projects remain green; no new kickoffs or closures this week."
+  },
+  "cluster::4::0106e7756f5dc32a442b": {
+    "summary": "Cluster 4 shows strain: 4 projects red (CSD_002, SHG_007, SLF_002, PFC_003), 2 amber (BMF_005, PHG_002), with no logged risks but flagged concerns across Schedule, Scope, Quality, and CSAT. No new kickoffs this week; GLS_015 completes on schedule. Focus today on detailed reviews for CSD_002, SHG_007, SLF_002, BMF_005, and PHG_002."
+  },
+  "cluster::5::82dfc14bff8ba8c62ed6": {
+    "summary": "Cluster 5 remains healthy: 4 projects green, no red, 1 amber (DNS_011 flagged for Quality concerns, not yet a logged risk). No projects kick off this week; PEC_007 is scheduled to conclude. DNS_011 is the key watch item for delivery standards in this week's end-to-end reviews."
+  },
+  "cluster::2::3f44bcd5117f6af08866": {
+    "summary": "Cluster 2 remains stable overall, with 8 projects green and no logged risks, but 3 projects are red: Inflexion - Giacom - Implementation Phase, nShift Build Phase, and CVC Credit - Sabio - Exit Cube Build Phase 1. Amber projects Lightyear Capital - Wren Sterling - Phase 2 and 23MSQ - Ericsson MVP Build show flagged areas but no logged risks yet. No projects are kicking off or completing this week; 5 projects, including Inflexion - Giacom and nShift, are set for detailed review."
+  },
+  "cluster::4::9a8d44f1a5af741013c6": {
+    "summary": "Cluster 4 shows strain: 4 projects Red (Flexpoint Ford - Clearstead - Managed Service, Apiary - Shaw Gibbs - Acquisition Integrations, TA - Solifi - Phase 2 Build, Proficy - Combined Reporting Build) and 2 Amber (Horizon - Boston MFO - Data Platform & Full Reporting Suites Build, Bridgepoint - Prescient - Phase 2 Build). No logged risks, but flagged concerns across Schedule, Scope, Quality, and CSAT on key projects. Levine Leichtman - GLAS - BAU and Handover wraps this week; no new kickoffs scheduled."
+  },
+  "cluster::5::6f9cbd3498ba5c3cee13": {
+    "summary": "Cluster 5 remains healthy overall -- 4 projects green, no red, and no logged risks. IK Partners - Dains Accountants - Managed Service is amber, flagged for Quality concerns that could impact delivery. No kickoffs this week; Platinum Equity - Peli BioThermal - TCO Model Build ends as scheduled."
+  },
+  "cluster::1::points::2e590135ee7d1ed2e6b1": {
+    "points": [
+      "Cluster 1 remains broadly healthy with no red WSRs, no real logged risks, and five of six projects green.",
+      "Oakley Cap - Phenna - Customer Reporting Enhancements is flagged amber due to potential schedule delays, which will be reviewed in detail today.",
+      "No projects are scheduled to kick off, end, or extend this week.",
+      "Five projects, including Oakley Cap - Phenna and BC Partners - vetPartners, are selected for this week's detailed end-to-end review."
+    ]
+  },
+  "cluster::3::points::5d763d5499a6b9f7b69b": {
+    "points": [
+      "Cluster 3 remains broadly healthy with no red WSRs, no real logged risks, and four projects in green status.",
+      "Three projects are amber: Insight - Kaseya - Data Products Pod 2 (RevOps) flagged for potential schedule and team risks, HIG - Axis CLC - Strategic Reporting Build flagged for CSAT and team risks, and JDWH 2.0 Platform Build flagged for team risks.",
+      "No projects are scheduled to kick off this week, while HIG - Hibu - Dashboard Enhancements is set to complete or extend.",
+      "Five projects, including JDWH 2.0 Platform Build and Insight - Kaseya - Data Products Pod 2 (RevOps), are selected for this week's detailed end-to-end review."
+    ]
+  },
+  "cluster::4::points::9a8d44f1a5af741013c6": {
+    "points": [
+      "Cluster 4 has 4 Red projects this week: Flexpoint Ford - Clearstead - Managed Service, Apiary - Shaw Gibbs - Acquisition Integrations, TA - Solifi - Phase 2 Build, and Proficy - Combined Reporting Build; all flagged areas will be reviewed in detail today.",
+      "Amber projects Horizon - Boston MFO - Data Platform & Full Reporting Suites Build and Bridgepoint - Prescient - Phase 2 Build show multiple flagged areas, including Schedule, Quality, and CSAT risks, requiring close monitoring.",
+      "No new projects are kicking off this week, and Levine Leichtman - GLAS - BAU and Handover is on track to complete as scheduled.",
+      "Cluster 4 remains broadly healthy with 8 Green projects and no real logged risks reported."
+    ]
+  },
+  "cluster::2::points::3f44bcd5117f6af08866": {
+    "points": [
+      "Cluster 2 - Tigris has 3 Red WSR projects: Inflexion - Giacom - Implementation Phase, nShift Build Phase, and CVC Credit - Sabio - Exit Cube Build Phase 1, all flagged for potential risks impacting delivery timelines, scope, or client satisfaction.",
+      "Amber WSR projects include Lightyear Capital - Wren Sterling - Phase 2 and 23MSQ - Ericsson MVP Build, with flagged concerns around scope and client dependencies.",
+      "No real risks have been logged this week, and 8 of 13 projects remain Green, indicating overall cluster health.",
+      "No projects are scheduled to kick off, end, or extend this week; 5 projects are selected for detailed review, including Inflexion - Giacom - Implementation Phase and 23MSQ - Ericsson MVP Build."
+    ]
+  },
+  "cluster::5::points::6f9cbd3498ba5c3cee13": {
+    "points": [
+      "Cluster 5 remains healthy with no red WSRs and no real logged risks across all five projects.",
+      "IK Partners - Dains Accountants - Managed Service is flagged amber due to potential quality concerns, which could impact delivery standards.",
+      "No projects are scheduled to kick off this week, while Platinum Equity - Peli BioThermal - TCO Model Build is set to complete on schedule.",
+      "This week's detailed end-to-end reviews include IK Partners - Dains Accountants - Managed Service and Platinum Equity - Peli BioThermal - TCO Model Build, among others."
+    ]
+  }
+}

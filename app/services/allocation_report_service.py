@@ -15,6 +15,17 @@ UNDER_UTILIZED_THRESHOLD = 70
 STANDARD_HOURS_PER_DAY = 8
 UNPLANNED_ABSENCE_WINDOW_DAYS = 14
 INTERNAL_PROJECT_TYPE = "Internal Project"
+# Real data has richer type_of_project values than this app's original
+# "Client Project" vs "Internal Project" binary assumption (confirmed:
+# 'Client Project', 'Internal Project', 'Managed Services', 'BAU Activity',
+# 'Sales Activity' all genuinely occur). BAU Activity and Sales Activity are
+# unambiguously non-client by name (internal overhead / pre-sales pursuit
+# work, not delivery) -- excluded here too, the same way Internal Project
+# already was. "Managed Services" is deliberately left counted as client --
+# it reads as a genuine billable ongoing service line, not overhead, and
+# excluding real client revenue on a guess is a worse mistake than under-
+# excluding, so that one's a judgment call left alone rather than assumed.
+NON_CLIENT_PROJECT_TYPES = {INTERNAL_PROJECT_TYPE, "BAU Activity", "Sales Activity"}
 
 ALLOCATIONS_CSV = TRANSFORMED_DIR / "03_Project_Allocation_clean.csv"
 PROJECTS_CSV = TRANSFORMED_DIR / "02_Project_Details_clean.csv"
@@ -287,9 +298,19 @@ def _hours_metrics(active: pd.DataFrame, timesheets: pd.DataFrame, today: pd.Tim
     merged["_time_in_window"] = merged["time"].where(in_window, 0.0)
     actual_hours = merged.groupby("_row_id")["_time_in_window"].sum().rename("actual_hours_logged")
 
-    begin = active["allocated_start_date"].values.astype("datetime64[D]")
-    end = (active["_window_end"] + pd.Timedelta(days=1)).values.astype("datetime64[D]")
-    working_days = np.maximum(np.busday_count(begin, end), 0)
+    # np.busday_count can't handle a NaT at all -- it errors out for the
+    # WHOLE batch, not just the offending row, so a single allocation with a
+    # missing/unparseable start or end date would otherwise 500 this entire
+    # endpoint. Real data can have gaps here that the local demo data never
+    # did; rows with no real date to compute from get 0 expected hours
+    # (unknown, not fabricated) instead of crashing everyone else's numbers.
+    has_valid_dates = active["allocated_start_date"].notna() & active["_window_end"].notna()
+    working_days = pd.Series(0, index=active.index, dtype="int64")
+    valid_idx = active.index[has_valid_dates]
+    if len(valid_idx) > 0:
+        begin = active.loc[valid_idx, "allocated_start_date"].values.astype("datetime64[D]")
+        end = (active.loc[valid_idx, "_window_end"] + pd.Timedelta(days=1)).values.astype("datetime64[D]")
+        working_days.loc[valid_idx] = np.maximum(np.busday_count(begin, end), 0)
     active["expected_hours"] = working_days * STANDARD_HOURS_PER_DAY * (active["allocation_by_percentage"] / 100)
 
     active = active.merge(actual_hours, left_on="_row_id", right_index=True, how="left")
@@ -403,7 +424,7 @@ def get_allocation_report() -> list[dict]:
     ].copy()
 
     active = active.merge(
-        projects[["project_code", "type_of_project", "tech_coe", "project_end_date", "extended_end_date", "extended_end_status"]]
+        projects[["project_code", "project_name", "type_of_project", "tech_coe", "project_end_date", "extended_end_date", "extended_end_status"]]
         .rename(columns={
             "project_code": "project_id",
             "extended_end_date": "project_extended_end_date",
@@ -415,7 +436,7 @@ def get_allocation_report() -> list[dict]:
     employee_total_pct = (
         active.groupby("employee_id")["allocation_by_percentage"].sum().rename("employee_total_allocation_pct")
     )
-    client_rows = active[active["type_of_project"] != INTERNAL_PROJECT_TYPE]
+    client_rows = active[~active["type_of_project"].isin(NON_CLIENT_PROJECT_TYPES)]
     employee_client_pct = (
         client_rows.groupby("employee_id")["allocation_by_percentage"].sum().rename("employee_client_allocation_pct")
     )
@@ -445,7 +466,7 @@ def get_allocation_report() -> list[dict]:
     active["ending_soon"] = active["days_to_end"].between(0, ENDING_SOON_DAYS)
 
     cols = [
-        "project_rolebased_user_id", "employee_id", "job_name", "department_name", "location", "project_id", "type_of_project",
+        "project_rolebased_user_id", "employee_id", "job_name", "department_name", "location", "project_id", "project_name", "type_of_project",
         "resourcing_status", "allocation_by_percentage", "allocated_start_date",
         "allocated_end_date", "extended_start_date", "extended_end_date", "extended_status", "project_end_date", "project_extended_end_date",
         "project_extended_end_status",
@@ -463,6 +484,7 @@ def get_allocation_report() -> list[dict]:
         out[nullable_date_col] = out[nullable_date_col].dt.strftime("%Y-%m-%d").where(out[nullable_date_col].notna(), None)
     out["hours_utilization_pct"] = out["hours_utilization_pct"].where(out["hours_utilization_pct"].notna(), None)
     out["type_of_project"] = out["type_of_project"].where(out["type_of_project"].notna(), None)
+    out["project_name"] = out["project_name"].where(out["project_name"].notna(), None)
     out["project_extended_end_status"] = out["project_extended_end_status"].where(out["project_extended_end_status"].notna(), None)
     out["extended_status"] = out["extended_status"].where(out["extended_status"].notna(), None)
     out = out.rename(columns={"project_rolebased_user_id": "allocation_id"})
@@ -508,7 +530,7 @@ def get_availability_as_of(as_of_date: pd.Timestamp | None = None) -> list[dict]
     )
 
     total_pct = covering.groupby("employee_id")["allocation_by_percentage"].sum().rename("total_allocated_pct")
-    client_rows = covering[covering["type_of_project"] != INTERNAL_PROJECT_TYPE]
+    client_rows = covering[~covering["type_of_project"].isin(NON_CLIENT_PROJECT_TYPES)]
     client_pct = client_rows.groupby("employee_id")["allocation_by_percentage"].sum().rename("client_allocated_pct")
 
     projects_by_employee: dict[str, list[dict]] = {}

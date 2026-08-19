@@ -22,6 +22,7 @@ from app.core.adapter import get_adapter
 from app.engines.pulse_engine import get_project_pulse_table
 from app.engines.role_mix_engine import build_role_mix_templates, canonical_project_coe, get_role_mix
 from app.engines.sentiment_engine import analyze_comment, summarize_project_sentiment
+from app.services.allocation_report_service import NON_CLIENT_PROJECT_TYPES
 from app.services.rate_card_service import get_hourly_rate
 from app.services.timesheet_insights_service import get_employee_overtime_risk, get_project_effort_spikes
 
@@ -320,7 +321,21 @@ def _compute_health_rows(active: pd.DataFrame, churn_p75_override: float | None 
 
     alloc_with_rate = allocations.merge(employees[["employee_id", "job_name"]], on="employee_id", how="left")
     alloc_with_rate["hourly_rate"] = alloc_with_rate["job_name"].apply(get_hourly_rate)
-    is_unbilled = alloc_with_rate["resourcing_status"].isin(["SHADOW", "UNBILLED"])
+    # A project's own type_of_project, not its code prefix, decides whether it
+    # can ever generate real client revenue -- confirmed real prefixes aren't
+    # reliable for this (e.g. JMG_267 is a real Client Project while JMG_196/
+    # 186/189/258/212/242/192 are genuinely Internal Project, all under the
+    # same "JMG_" prefix). Internal/BAU/Sales work was never going to be
+    # billed to a client, so counting its SHADOW/UNBILLED allocations as
+    # "revenue at risk" overstates real exposure with money that was never
+    # real revenue to begin with. Same NON_CLIENT_PROJECT_TYPES set already
+    # used for employee_client_allocation_pct in allocation_report_service.py.
+    alloc_with_rate = alloc_with_rate.merge(
+        active[["project_code", "type_of_project"]].rename(columns={"project_code": "project_id"}),
+        on="project_id", how="left",
+    )
+    is_client_project = ~alloc_with_rate["type_of_project"].isin(NON_CLIENT_PROJECT_TYPES)
+    is_unbilled = alloc_with_rate["resourcing_status"].isin(["SHADOW", "UNBILLED"]) & is_client_project
     alloc_with_rate["unbilled_monthly_value"] = (
         is_unbilled * (alloc_with_rate["allocation_by_percentage"] / 100) * alloc_with_rate["hourly_rate"].fillna(0) * STANDARD_MONTHLY_HOURS
     )
@@ -371,6 +386,9 @@ def _compute_health_rows(active: pd.DataFrame, churn_p75_override: float | None 
         (alloc_with_project_end["is_allocation_active"] == 1)
         & (alloc_with_project_end["allocated_end_date"] > alloc_with_project_end["project_end_date"])
         & (~alloc_with_project_end["resourcing_status"].isin(["SHADOW", "UNBILLED"]))
+        # Internal/BAU/Sales work has no real client SOW/end-date to overrun --
+        # same real-revenue gate as unbilled_monthly_value_usd above.
+        & (~alloc_with_project_end["type_of_project"].isin(NON_CLIENT_PROJECT_TYPES))
     )
     _today = pd.Timestamp.now().normalize()
     def _accrued_working_days(r):
@@ -401,6 +419,7 @@ def _compute_health_rows(active: pd.DataFrame, churn_p75_override: float | None 
     is_billable_active_row = (
         (alloc_with_project_end["is_allocation_active"] == 1)
         & (~alloc_with_project_end["resourcing_status"].isin(["SHADOW", "UNBILLED"]))
+        & (~alloc_with_project_end["type_of_project"].isin(NON_CLIENT_PROJECT_TYPES))
     )
     alloc_with_project_end["daily_extension_cost"] = (
         is_billable_active_row
@@ -595,6 +614,7 @@ def _compute_health_rows(active: pd.DataFrame, churn_p75_override: float | None 
         records.append(
             {
                 "project_code": project_code,
+                "project_name": row.get("project_name") if pd.notna(row.get("project_name")) else None,
                 "client_id": row.get("client_id"),
                 "type_of_project": row["type_of_project"],
                 "tech_coe": row["tech_coe"],

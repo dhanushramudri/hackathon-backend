@@ -11,6 +11,7 @@ from app.engines.revenue_engine import (
     DND_TEMPLATE,
     DND_TYPICAL_DURATION_WEEKS,
     compute_duration_buckets,
+    delivery_revenue_for_duration,
     dnd_revenue_range_for_duration,
     get_revenue_benchmarks_by_coe,
 )
@@ -40,11 +41,19 @@ DEFAULT_FORECAST_INCLUDE: dict[str, bool] = {
 
 def get_redeploy_candidates_as_of(designation: str, as_of_date: pd.Timestamp, employees: pd.DataFrame, allocations: pd.DataFrame) -> list[dict]:
     busy_pct = availability_as_of(allocations, as_of_date)
-    active_in_role = employees[(employees["account_status"] == 1) & (employees["job_name"] == designation)]
     # Same hold/doubt signal surfaced everywhere else a candidate is shown (see
     # app/engines/availability_hold.py) -- someone who looks free today may still
     # be tied to a project the Health monitor expects to run long.
     hold_flags = availability_hold.get_employee_hold_flags()
+    return _build_redeploy_candidates(designation, busy_pct, employees, hold_flags)
+
+def _build_redeploy_candidates(designation: str, busy_pct: pd.Series, employees: pd.DataFrame, hold_flags: dict) -> list[dict]:
+    # Split out from get_redeploy_candidates_as_of so a caller juggling several
+    # designations at once (the New Project wizard's per-role auto-suggestion)
+    # can compute the expensive part -- availability_as_of's full merge+groupby
+    # over every allocation row -- ONCE and reuse it, instead of paying for it
+    # again per designation even though the result doesn't depend on designation.
+    active_in_role = employees[(employees["account_status"] == 1) & (employees["job_name"] == designation)]
 
     candidates = []
     for _, emp in active_in_role.iterrows():
@@ -81,6 +90,31 @@ def get_top_candidates_for_role(designation: str, as_of_date: str, limit: int = 
         designation, pd.to_datetime(as_of_date), adapter.get_employees(), adapter.get_allocations()
     )
     return candidates[:limit]
+
+def get_top_candidates_for_roles(requests: list[dict], limit: int = 10) -> dict[str, list[dict]]:
+    """Batched get_top_candidates_for_role -- one call for several {designation,
+    as_of_date} pairs at once. The New Project wizard's auto-staffing used to
+    fire one HTTP request per budgeted role, each of which recomputed
+    availability_as_of's full merge+groupby over every allocation row from
+    scratch -- expensive, and wastefully repeated, since that computation
+    depends only on as_of_date, never on designation. Here it's computed once
+    per distinct as_of_date in the batch and reused across every designation
+    that shares it, which is what was actually making a multi-role budget save
+    slow on real data volume."""
+    adapter = get_adapter()
+    employees = adapter.get_employees()
+    allocations = adapter.get_allocations()
+    hold_flags = availability_hold.get_employee_hold_flags()
+    busy_pct_by_date: dict[str, pd.Series] = {}
+    result: dict[str, list[dict]] = {}
+    for req in requests:
+        designation = req["designation"]
+        as_of_date = req["as_of_date"]
+        if as_of_date not in busy_pct_by_date:
+            busy_pct_by_date[as_of_date] = availability_as_of(allocations, pd.to_datetime(as_of_date))
+        candidates = _build_redeploy_candidates(designation, busy_pct_by_date[as_of_date], employees, hold_flags)
+        result[designation] = candidates[:limit]
+    return result
 
 def _tag_coe(candidates: list[dict], employee_coe_map: dict[str, str]) -> None:
     for c in candidates:
@@ -291,19 +325,34 @@ def get_new_project_forecast(specs: list[dict], include: dict[str, bool] | None 
 
     # Designations sharing an adjacency relation (e.g. "Software Engineer" <->
     # "Senior Software Engineer") can otherwise each independently draw the same
-    # physical people as an adjacent-level fill for two different roles' shortfalls
-    # in the same forecast run -- silently double-counting real capacity when
-    # multiple specs need adjacent titles at the same date_key. Tracked per
-    # date_key (not globally) so a person claimed for a role starting today
-    # doesn't wrongly block a different role starting months later, when they'd
-    # be free again.
-    claimed_ids_by_date: dict[str, set[str]] = {}
+    # physical person for two different roles' shortfalls in the same forecast
+    # run -- silently double-counting real capacity. Tracked as real calendar
+    # WINDOWS per employee (start, start+duration), not exact date_key string
+    # equality -- a person claimed for an August project that runs 5 weeks into
+    # September must NOT also be countable for a separate September need (they're
+    # still committed); a person who's genuinely free again once that window
+    # ends (e.g. claimed for August, need is for the following January) still can
+    # be. Global across the whole run, not per date_key, so this catches overlap
+    # between calendar-distinct date_keys the way real project commitments would.
+    claimed_intervals: dict[str, list[tuple[pd.Timestamp, pd.Timestamp]]] = {}
+
+    def _batch_window(date_key: str) -> tuple[pd.Timestamp, pd.Timestamp]:
+        window_start = pd.to_datetime(date_key)
+        weeks = duration_weeks_by_date.get(date_key) or DELIVERY_TEMPLATE["duration_weeks"]
+        return window_start, window_start + pd.Timedelta(weeks=weeks)
+
+    def _is_claimed(employee_id: str, window: tuple[pd.Timestamp, pd.Timestamp]) -> bool:
+        w_start, w_end = window
+        return any(w_start < end and start < w_end for start, end in claimed_intervals.get(employee_id, []))
+
+    def _claim(employee_id: str, window: tuple[pd.Timestamp, pd.Timestamp]) -> None:
+        claimed_intervals.setdefault(employee_id, []).append(window)
 
     breakdown = []
     for (designation, date_key), needed_fte in sorted(total_need.items(), key=lambda x: -x[1]):
         needed_headcount = math.ceil(needed_fte)
         requested_tech_coes = list(tech_coes_by_key.get((designation, date_key), []))
-        claimed = claimed_ids_by_date.setdefault(date_key, set())
+        window = _batch_window(date_key)
 
         # Always availability-as-of the role's own needed_by date (same real
         # mechanism the main Recommendations engine uses) -- there used to be
@@ -325,7 +374,7 @@ def get_new_project_forecast(specs: list[dict], include: dict[str, bool] | None 
         candidates = []
         for title in same_level_titles:
             for c in get_redeploy_candidates_as_of(title, pd.to_datetime(date_key), emp_df, alloc_df):
-                if c["employee_id"] in claimed or c["employee_id"] in seen_ids:
+                if _is_claimed(c["employee_id"], window) or c["employee_id"] in seen_ids:
                     continue
                 seen_ids.add(c["employee_id"])
                 candidates.append(c)
@@ -361,7 +410,8 @@ def get_new_project_forecast(specs: list[dict], include: dict[str, bool] | None 
         # ones this designation's own need would actually draw on, so a sibling
         # designation's adjacent-level fallback below can't also count them.
         own_fill_count = min(len(qualifying_candidates), needed_headcount)
-        claimed.update(c["employee_id"] for c in qualifying_candidates[:own_fill_count])
+        for c in qualifying_candidates[:own_fill_count]:
+            _claim(c["employee_id"], window)
 
         shortfall_at_level = max(0, needed_headcount - len(qualifying_candidates))
         adjacent_level_candidates: list[dict] = []
@@ -371,7 +421,7 @@ def get_new_project_forecast(specs: list[dict], include: dict[str, bool] | None 
                 emp_df, alloc_df = _ensure_employee_tables()
                 pool = [
                     c for c in get_redeploy_candidates_as_of(adj_designation, pd.to_datetime(date_key), emp_df, alloc_df)
-                    if c["employee_id"] not in claimed
+                    if not _is_claimed(c["employee_id"], window)
                 ]
                 _score_candidates(
                     pool, all_required_skills, skill_index, competency_index, emp_embedding_index,
@@ -386,11 +436,13 @@ def get_new_project_forecast(specs: list[dict], include: dict[str, bool] | None 
             if skill_index is not None and designation not in LEADERSHIP_DESIGNATIONS:
                 qualifying = [c for c in adjacent_level_candidates if c.get("skill_score", 0) >= scoring.ELIGIBLE_THRESHOLD]
                 adjacent_fill_count = min(len(qualifying), shortfall_at_level)
-                claimed.update(c["employee_id"] for c in qualifying[:adjacent_fill_count])
+                for c in qualifying[:adjacent_fill_count]:
+                    _claim(c["employee_id"], window)
                 qualifying_adjacent_ids = {c["employee_id"] for c in qualifying}
             else:
                 adjacent_fill_count = min(len(adjacent_level_candidates), shortfall_at_level)
-                claimed.update(c["employee_id"] for c in adjacent_level_candidates[:adjacent_fill_count])
+                for c in adjacent_level_candidates[:adjacent_fill_count]:
+                    _claim(c["employee_id"], window)
                 qualifying_adjacent_ids = {c["employee_id"] for c in adjacent_level_candidates}
             # Same reasoning as the same-title tag above -- leadership
             # designations aren't skill-gated here either.
@@ -437,7 +489,7 @@ def get_new_project_forecast(specs: list[dict], include: dict[str, bool] | None 
             )
             ladder_ids = {c["employee_id"] for c in candidates} | {c["employee_id"] for c in adjacent_level_candidates}
             for c in cross_role_result["candidates"]:
-                if c["employee_id"] in claimed or c["employee_id"] in ladder_ids:
+                if _is_claimed(c["employee_id"], window) or c["employee_id"] in ladder_ids:
                     continue
                 if c["bucket"] == "eligible":
                     cross_role_candidates.append(c)
@@ -512,6 +564,75 @@ def _priority_weights(n: int) -> list[float]:
 # than reporting a nonsensical "0.1 projects".
 MIN_PROJECT_SHARE_FRACTION = 0.15
 
+def _real_pipeline_revenue_through(start_date: str | None, target_date: str) -> dict:
+    """Real HubSpot pipeline deals already expected to start anywhere from
+    start_date (or today, if not set) through target_date -- the WHOLE
+    runway, not just the target's own calendar month -- deduped by deal_id
+    (one real deal spans several role-request rows, ~5.2 on average, so
+    counting rows would inflate this 5-8x), priced at the same flat real
+    delivery-project template (revenue_engine.delivery_revenue_for_duration)
+    the rest of this tab already uses, same convention as
+    pipeline_outlook_service._enrich_pipeline. This is real pipeline demand
+    already in motion between now and the target date -- a real revenue
+    target should net against ALL of it before asking "how many NEW projects
+    do we need", not just the sliver that happens to fall in the target month."""
+    adapter = get_adapter()
+    pipeline = adapter.get_pipeline_forecast()[["deal_id", "client", "solution", "likely_start_date", "deal_stage_hubspot"]].copy()
+    pipeline["likely_start_date"] = pd.to_datetime(pipeline["likely_start_date"], errors="coerce")
+    pipeline = pipeline.dropna(subset=["likely_start_date", "deal_id"])
+    range_start = pd.to_datetime(start_date).normalize() if start_date else pd.Timestamp.now().normalize()
+    range_end = pd.to_datetime(target_date).normalize()
+    in_range = pipeline[(pipeline["likely_start_date"] >= range_start) & (pipeline["likely_start_date"] <= range_end)]
+    range_deals = in_range.drop_duplicates("deal_id").sort_values("likely_start_date")
+    deal_value = delivery_revenue_for_duration(None)
+    deals = [
+        {
+            "deal_id": int(r["deal_id"]),
+            "client": r.get("client") or "Unknown",
+            "solution": r.get("solution") if pd.notna(r.get("solution")) else None,
+            "likely_start_date": r["likely_start_date"].strftime("%Y-%m-%d"),
+            "deal_stage_hubspot": r.get("deal_stage_hubspot") if pd.notna(r.get("deal_stage_hubspot")) else None,
+            "value_usd": deal_value,
+        }
+        for _, r in range_deals.iterrows()
+    ]
+    return {
+        "range_start": range_start.strftime("%Y-%m-%d"),
+        "range_end": range_end.strftime("%Y-%m-%d"),
+        "deal_count": int(len(range_deals)),
+        "value_per_deal_usd": deal_value,
+        "total_value_usd": round(deal_value * len(range_deals), 0),
+        "deals": deals,
+        "deal_ids": sorted(int(d) for d in range_deals["deal_id"].dropna().unique()),
+        "clients": sorted({str(c) for c in range_deals["client"].dropna().unique()}),
+    }
+
+def _stagger_project_starts(project_count: int, start_date: str | None, target_date: str | None) -> list[tuple[str | None, int]]:
+    """Spreads a CoE's project_count evenly across monthly start-date batches
+    between start_date (or today) and target_date, instead of dumping every
+    single project onto one "needed today" snapshot. A big target with real
+    runway (e.g. $10M over the next 12 months) should draw on people whose
+    CURRENT allocation ends next month or three months from now, not just
+    whoever is free today -- treating every project as starting on day one is
+    exactly what makes the "to hire" headcount blow up unrealistically, since
+    get_redeploy_candidates_as_of only counts someone as a candidate for a
+    given batch if they're free by THAT batch's date. Without a target_date
+    (no runway signal), this is a no-op -- one batch, old behavior."""
+    if not target_date:
+        return [(start_date, project_count)]
+    start_ts = pd.to_datetime(start_date).normalize() if start_date else pd.Timestamp.now().normalize()
+    target_ts = pd.to_datetime(target_date).normalize()
+    months = max(1, (target_ts.year - start_ts.year) * 12 + (target_ts.month - start_ts.month) + 1)
+    base, remainder = divmod(project_count, months)
+    batches = []
+    for i in range(months):
+        count = base + (1 if i < remainder else 0)
+        if count <= 0:
+            continue
+        batch_date = (start_ts + pd.DateOffset(months=i)).strftime("%Y-%m-%d")
+        batches.append((batch_date, count))
+    return batches
+
 def get_revenue_target_forecast(
     target_revenue_usd: float,
     priority_coes: list[str] | None = None,
@@ -567,8 +688,11 @@ def get_revenue_target_forecast(
         return {
             "target_revenue_usd": target_revenue_usd,
             "priority_coes": [],
+            "pipeline_coverage": None,
+            "effective_target_revenue_usd": target_revenue_usd,
             "project_mix": [],
             "total_projected_revenue_usd": 0.0,
+            "total_covered_revenue_usd": 0.0,
             "revenue_gap_usd": target_revenue_usd,
             "pct_of_target_covered": 0.0,
             "forecast": None,
@@ -589,13 +713,23 @@ def get_revenue_target_forecast(
     # and >100% isn't a meaningful win rate.
     dnd_win_rate = max(1.0, min(100.0, dnd_win_rate_pct if dnd_win_rate_pct is not None else 100.0)) / 100.0
 
+    # Real pipeline deals already expected to start anywhere between now and
+    # the target date cover part of the target before we ask "how many NEW
+    # projects do we need" -- the WHOLE runway to the target date, not just
+    # deals landing in the target's own calendar month.
+    pipeline_coverage = None
+    effective_target_revenue_usd = target_revenue_usd
+    if target_date:
+        pipeline_coverage = _real_pipeline_revenue_through(start_date, target_date)
+        effective_target_revenue_usd = max(0.0, target_revenue_usd - pipeline_coverage["total_value_usd"])
+
     weights = _priority_weights(len(priority_coes))
     project_mix = []
     specs = []
     for coe, weight in zip(priority_coes, weights):
         b = benchmarks[coe]
         avg = b["avg_revenue_per_project"]
-        target_share = target_revenue_usd * weight
+        target_share = effective_target_revenue_usd * weight
         project_count = round(target_share / avg) if avg > 0 else 0
         if project_count <= 0 and avg > 0 and target_share >= avg * MIN_PROJECT_SHARE_FRACTION:
             project_count = 1
@@ -614,11 +748,11 @@ def get_revenue_target_forecast(
             "sample_size": b["sample_size"],
             "dnd_engagements_needed": dnd_engagements_needed,
         })
-        if project_count > 0:
+        for batch_start, batch_count in _stagger_project_starts(project_count, start_date, target_date):
             specs.append({
                 "coes": [coe],
-                "count": project_count,
-                "start_date": start_date,
+                "count": batch_count,
+                "start_date": batch_start,
                 "duration_weeks": duration_weeks or DELIVERY_TEMPLATE["duration_weeks"],
                 "type_of_project": type_of_project,
                 # Real delivery-team template (2 engineers + 1 Solutions
@@ -677,16 +811,18 @@ def get_revenue_target_forecast(
             "likely_fits": weeks_available >= duration_weeks,
         }
 
-    # Plain calendar estimate for "when do we actually see this revenue" --
-    # start_date_used (real user input, or today if not set) + the same
-    # effective_duration_weeks already used for the revenue math above,
-    # assuming every project in the mix starts together and runs in parallel
-    # (not sequentially -- a fully-staffed team works them concurrently, it
-    # doesn't queue them). This is NOT a hiring-lead-time projection: if
-    # forecast still shows a shortfall, the date is surfaced with an explicit
-    # "assumes_full_staffing" caveat rather than pushed out by a fabricated
-    # hire-by date (no real hiring-lead-time data exists in this org -- see
-    # the target_date param docstring above).
+    # Plain calendar estimate for "when do we actually see this revenue".
+    # Without a target_date, every project in the mix is assumed to start
+    # together on start_date and run in parallel (a fully-staffed team works
+    # them concurrently, not queued one after another). WITH a target_date,
+    # _stagger_project_starts already spread the projects across monthly
+    # batches ending in the target month, so the last batch (and thus the
+    # full target revenue) lands around target_date + duration instead.
+    # Either way this is NOT a hiring-lead-time projection: if forecast still
+    # shows a shortfall, the date carries an explicit "assumes gap filled"
+    # caveat rather than being pushed out by a fabricated hire-by date (no
+    # real hiring-lead-time data exists in this org -- see the target_date
+    # param docstring above).
     revenue_hit_estimate = None
     if total_delivery_projects > 0:
         # Same fallback the revenue math itself uses (delivery_revenue_for_duration)
@@ -694,7 +830,9 @@ def get_revenue_target_forecast(
         # $35k/5-week anchor, not a fresh assumption invented here.
         effective_weeks_for_date = duration_weeks if duration_weeks and duration_weeks > 0 else DELIVERY_TEMPLATE["duration_weeks"]
         start_ts = pd.to_datetime(start_date).normalize() if start_date else pd.Timestamp.now().normalize()
-        hit_date = start_ts + pd.Timedelta(weeks=effective_weeks_for_date)
+        is_staggered = bool(target_date)
+        last_batch_start = pd.to_datetime(target_date).normalize() if is_staggered else start_ts
+        hit_date = last_batch_start + pd.Timedelta(weeks=effective_weeks_for_date)
         shortfall = forecast.get("total_shortfall_headcount", 0) if forecast else 0
         revenue_hit_estimate = {
             "start_date_used": start_ts.strftime("%Y-%m-%d"),
@@ -703,15 +841,24 @@ def get_revenue_target_forecast(
             "project_count": total_delivery_projects,
             "has_staffing_gap": shortfall > 0,
             "shortfall_headcount": shortfall,
+            "is_staggered": is_staggered,
         }
+
+    # Total revenue actually covered = real pipeline already in motion for the
+    # target month (if a target_date was given) + the new-project mix priced
+    # above against whatever target was left after netting that pipeline out.
+    total_covered_revenue = total_projected_revenue + (pipeline_coverage["total_value_usd"] if pipeline_coverage else 0)
 
     return {
         "target_revenue_usd": target_revenue_usd,
         "priority_coes": priority_coes,
+        "pipeline_coverage": pipeline_coverage,
+        "effective_target_revenue_usd": round(effective_target_revenue_usd, 0),
         "project_mix": project_mix,
         "total_projected_revenue_usd": total_projected_revenue,
-        "revenue_gap_usd": round(target_revenue_usd - total_projected_revenue, 0),
-        "pct_of_target_covered": round(100 * total_projected_revenue / target_revenue_usd, 1) if target_revenue_usd > 0 else None,
+        "total_covered_revenue_usd": total_covered_revenue,
+        "revenue_gap_usd": round(target_revenue_usd - total_covered_revenue, 0),
+        "pct_of_target_covered": round(100 * total_covered_revenue / target_revenue_usd, 1) if target_revenue_usd > 0 else None,
         "forecast": forecast,
         "design_and_discovery": design_and_discovery,
         "effective_duration_weeks": round(duration_weeks, 1) if duration_weeks else None,

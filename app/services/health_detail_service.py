@@ -4,6 +4,7 @@ from app.core.adapter import get_adapter
 from app.engines import embedding_engine, experience_engine, scoring
 from app.engines.pulse_engine import get_project_pulse_detail
 from app.engines.coe_skill_engine import GENERIC_SKILL_COES, derive_skills_for_coes
+from app.engines.role_hierarchy import adjacent_designations, same_level_peers
 from app.engines.role_mix_engine import canonical_project_coe, get_role_mix
 from app.services.free_pool_service import get_free_pool
 from app.services.recommendation_service import (
@@ -62,6 +63,58 @@ class ProjectNotFound(Exception):
 
 def _date_str(value) -> str | None:
     return value.strftime("%Y-%m-%d") if pd.notna(value) else None
+
+
+def _compute_flexible_shortfall(
+    expected_roles: list[dict], actual_headcount_by_role: dict[str, int], ratio_threshold: float,
+) -> dict[str, dict]:
+    """A role isn't really "short" if someone one seniority level up or down
+    (or the equivalent title in the other UK/India naming family, same
+    level -- see role_hierarchy.py) is already on this project with spare
+    capacity: real RMs flex people like that rather than treating every
+    designation as its own silo. Only genuine SURPLUS is ever borrowed --
+    headcount a role already needs to meet its own expected quota is never
+    double-counted toward a neighboring role's gap -- and each person can
+    only be borrowed once (a shared pool decremented as it's spent), so two
+    short roles can't both claim credit for the same one surplus hire."""
+    expected_by_designation = {r["designation"]: r for r in expected_roles if r.get("common")}
+    all_designations = set(expected_by_designation) | set(actual_headcount_by_role)
+
+    surplus_pool: dict[str, float] = {}
+    for designation in all_designations:
+        expected = expected_by_designation.get(designation, {}).get("headcount", 0)
+        actual = actual_headcount_by_role.get(designation, 0)
+        surplus_pool[designation] = max(0.0, actual - expected)
+
+    result: dict[str, dict] = {}
+    for designation, row in expected_by_designation.items():
+        expected = row["headcount"]
+        actual = actual_headcount_by_role.get(designation, 0)
+        gap = max(0.0, expected - actual)
+        borrowed = 0.0
+        borrowed_from: list[str] = []
+        if gap > 0:
+            # One level up, one level down, then the same-level naming-family
+            # equivalent -- checked in that order since a genuine seniority
+            # neighbor is a closer substitute than a same-level title swap.
+            candidates = [d for d, _ in adjacent_designations(designation, max_levels=1)] + same_level_peers(designation)
+            for source in candidates:
+                if borrowed >= gap:
+                    break
+                available = surplus_pool.get(source, 0.0)
+                if available <= 0:
+                    continue
+                take = min(available, gap - borrowed)
+                surplus_pool[source] -= take
+                borrowed += take
+                borrowed_from.append(source)
+        covered_actual = actual + borrowed
+        result[designation] = {
+            "is_short": covered_actual < expected * ratio_threshold,
+            "borrowed_headcount": round(borrowed, 2),
+            "borrowed_from": borrowed_from,
+        }
+    return result
 
 def get_project_health_detail(project_code: str) -> dict:
     summary = get_project_summary_row(project_code)
@@ -242,17 +295,39 @@ def get_project_health_detail(project_code: str) -> dict:
         k: round(float(v) / 100, 2)
         for k, v in active_allocs.dropna(subset=["job_name"]).groupby("job_name")["allocation_by_percentage"].sum().to_dict().items()
     }
+    # Real names/emails are never in this app's data model (see
+    # jdwh_table_mapping.py -- deliberately not mapped from the JDWH source),
+    # so employee_id is the only real identifier available anywhere in this
+    # app; consistent with every other page (Employees, Allocations), not a
+    # placeholder. Grouped per role so the Staffing tab can show WHO is
+    # actually filling each role, not just a bare headcount -- deduplicated
+    # per employee within a role (someone with two allocation rows for the
+    # same project/role shouldn't double-list), percentages summed across
+    # their own rows for that role.
+    active_by_role: dict[str, list[dict]] = {}
+    for job_name, group in active_allocs.dropna(subset=["job_name"]).groupby("job_name"):
+        per_employee = group.groupby("employee_id")["allocation_by_percentage"].sum()
+        active_by_role[job_name] = [
+            {"employee_id": emp_id, "allocation_by_percentage": float(pct)}
+            for emp_id, pct in per_employee.sort_values(ascending=False).items()
+        ]
+    flexible_shortfall_by_role = _compute_flexible_shortfall(
+        role_mix.get("roles", []), headcount_active_now_by_role, UNDERSTAFFED_RATIO_THRESHOLD,
+    )
     understaffed_proof = {
         "fired": "understaffed" in root_causes,
         "ratio_threshold": UNDERSTAFFED_RATIO_THRESHOLD,
         "actual_headcount_all_time": summary["n_employees"],
+        "actual_headcount_active_now": int(active_allocs["employee_id"].nunique()),
         "expected_headcount": summary["expected_headcount"],
         "role_mix_source": role_mix["source"],
         "role_mix_sample_size": role_mix["sample_size"],
         "expected_roles": role_mix.get("roles", []),
         "expected_role_mix": role_mix["role_mix"],
+        "flexible_shortfall_by_role": flexible_shortfall_by_role,
         "actual_headcount_active_now_by_role": headcount_active_now_by_role,
         "actual_fte_active_now_by_role": fte_active_now_by_role,
+        "active_employees_by_role": active_by_role,
         "headcount_all_time_by_role": headcount_all_time_by_role,
     }
 
@@ -391,6 +466,7 @@ def get_project_health_detail(project_code: str) -> dict:
 
     return {
         "project_code": project_code,
+        "project_name": summary.get("project_name"),
         "is_health_tracked": is_health_tracked,
         "project_status": project_row.get("project_status") if pd.notna(project_row.get("project_status")) else None,
         "client_id": summary["client_id"],

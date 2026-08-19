@@ -9,6 +9,7 @@ from app.engines.role_mix_engine import get_role_mix_by_coes
 from app.engines.simple_forecast_engine import get_prediction_forecast
 from app.services.demand_forecast_service import (
     get_new_project_forecast, get_revenue_target_forecast, get_top_candidates_for_role,
+    get_top_candidates_for_roles,
 )
 from app.services.pipeline_outlook_service import OUTLOOK_MONTHS, get_pipeline_outlook, get_pipeline_outlook_drilldown
 
@@ -77,6 +78,18 @@ def revenue_benchmarks() -> dict:
 @router.get("/top-candidates-for-role")
 def top_candidates_for_role(designation: str, as_of_date: str, limit: int = Query(default=10, ge=1, le=50)) -> list[dict]:
     return get_top_candidates_for_role(designation, as_of_date, limit)
+
+class RoleCandidateRequest(BaseModel):
+    designation: str
+    as_of_date: str
+
+class TopCandidatesBatchRequest(BaseModel):
+    requests: list[RoleCandidateRequest]
+    limit: int = 20
+
+@router.post("/top-candidates-for-roles")
+def top_candidates_for_roles_batch(body: TopCandidatesBatchRequest) -> dict:
+    return get_top_candidates_for_roles([r.model_dump() for r in body.requests], body.limit)
 
 @router.post("/revenue-target")
 def revenue_target(body: RevenueTargetRequest) -> dict:

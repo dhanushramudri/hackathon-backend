@@ -1,3 +1,5 @@
+import re
+
 import pandas as pd
 
 from app.core.adapter import get_adapter
@@ -15,6 +17,35 @@ from app.services.timesheet_insights_service import (
 )
 
 _SKILL_SOURCE_RANK = {"observed": 0, "imputed_peer": 1, "imputed_default": 2}
+
+# employee_id's own letter prefix is the only real signal this data carries
+# for "which region/entity/employment-type this person belongs to" -- JMD/
+# JMG/JML/JMU are real distinct organizational groups (all genuine
+# employees, per the Resource Manager -- JMD alone is the ~600-700 headcount
+# figure they expect, JMG/JML/JMU are other real regions/entities); INT/TRN/
+# EXT are employment-TYPE categories, not permanent entities (confirmed:
+# interns (INT) convert to JMD in Chennai once they go full-time -- this is a
+# transitional label, not another office). Shown as a filter, not used to
+# exclude anyone from the Total count -- every real prefix here is a real
+# employee somewhere in the org.
+_EMPLOYEE_GROUP_LABELS = {
+    "JMD": "JMD", "JMG": "JMG", "JML": "JML", "JMU": "JMU",
+    "INT": "Intern (pre-conversion)", "TRN": "Trainee", "EXT": "External/Contractor",
+    "CRN": "CRN",
+}
+_EMPLOYEE_ID_PREFIX_RE = re.compile(r"^([A-Za-z]+)")
+
+def _employee_group(employee_id: str | None) -> str:
+    if not employee_id:
+        return "Other"
+    match = _EMPLOYEE_ID_PREFIX_RE.match(employee_id)
+    prefix = match.group(1) if match else None
+    return _EMPLOYEE_GROUP_LABELS.get(prefix, prefix or "Other")
+
+def list_employee_groups() -> list[str]:
+    employees = get_adapter().get_employees()
+    groups = employees["employee_id"].map(_employee_group)
+    return sorted(groups.unique().tolist())
 
 class EmployeeNotFound(Exception):
 
@@ -51,13 +82,23 @@ def list_employees() -> list[dict]:
     employees = get_adapter().get_employees()
     today = pd.Timestamp.now().normalize()
     coe_map = get_employee_primary_coe_map()
-    alloc_pct_by_emp = {r["employee_id"]: r["employee_total_allocation_pct"] for r in get_allocation_report()}
+    # Client-project allocation only, not the raw total -- someone can be
+    # legitimately, simultaneously attached to many internal/BAU overhead
+    # buckets (confirmed against real data: one real employee had 13 such
+    # concurrent 100% internal allocations), which would make this look like
+    # a nonsensical >1000% workload if summed in with real client staffing.
+    alloc_pct_by_emp = {r["employee_id"]: r["employee_client_allocation_pct"] for r in get_allocation_report()}
     hold_flags = availability_hold.get_employee_hold_flags()
 
-    active_employees = employees[employees["account_status"] == 1]
-
+    # No account_status filter here -- this endpoint's own job is to show
+    # everyone "ever on roster" and categorize each into active/notice_period/
+    # departed from date_of_resignation. account_status now mirrors that same
+    # resignation-based signal (see adapter.get_employees()), so filtering on
+    # it here would drop every departed row before the loop below ever gets a
+    # chance to label it "departed" -- confirmed this was silently zeroing out
+    # the Departed count entirely despite real resignation data existing.
     out = []
-    for _, r in active_employees.iterrows():
+    for _, r in employees.iterrows():
         resignation = r.get("date_of_resignation")
         if pd.notna(resignation) and resignation <= today:
             status = "departed"
@@ -69,6 +110,7 @@ def list_employees() -> list[dict]:
         out.append(
             {
                 "employee_id": emp_id,
+                "employee_full_name": r.get("employee_full_name") if pd.notna(r.get("employee_full_name")) else None,
                 "job_name": r.get("job_name") if pd.notna(r.get("job_name")) else None,
                 "department_name": r.get("department_name") if pd.notna(r.get("department_name")) else None,
                 "location": r.get("location") if pd.notna(r.get("location")) else None,
@@ -77,6 +119,7 @@ def list_employees() -> list[dict]:
                 "date_of_resignation": r["date_of_resignation"].strftime("%Y-%m-%d") if pd.notna(r.get("date_of_resignation")) else None,
                 "status": status,
                 "coe": coe_map.get(emp_id),
+                "employee_group": _employee_group(emp_id),
                 "current_allocation_pct": alloc_pct_by_emp.get(emp_id),
                 "on_hold": emp_id in hold_flags,
                 "hold_projects": hold_flags.get(emp_id, {}).get("projects", []),
@@ -88,15 +131,15 @@ def get_employee_headcount_summary() -> dict:
     employees = get_adapter().get_employees()
     today = pd.Timestamp.now().normalize()
 
-    on_books = employees[employees["account_status"] == 1]
-    resignation = on_books["date_of_resignation"]
+    # Everyone ever on roster, not just account_status==1 -- account_status is
+    # now itself derived from date_of_resignation (see adapter.get_employees()),
+    # so pre-filtering on it here would exclude every departed row before
+    # already_departed/in_notice_period below ever get a chance to count them.
+    resignation = employees["date_of_resignation"]
     already_departed = resignation.notna() & (resignation <= today)
     in_notice_period = resignation.notna() & (resignation > today)
 
-    delivery_mask = (
-        (employees["account_status"] == 1)
-        & (~employees["job_name"].isin(NON_DELIVERY_ROLES))
-    )
+    delivery_mask = ~employees["job_name"].isin(NON_DELIVERY_ROLES)
     delivery_employees = employees[delivery_mask]
     delivery_departed = (
         delivery_employees["date_of_resignation"].notna()
@@ -104,10 +147,14 @@ def get_employee_headcount_summary() -> dict:
     )
     delivery_active = int((~delivery_departed).sum())
 
-    ghost_rows = int(((employees["account_status"] == 0) & employees["job_name"].isna()).sum())
+    # Simple "no job title on record" tally -- the old account_status==0-based
+    # ghost-row heuristic no longer applies now that account_status is purely
+    # resignation-derived; real junk/placeholder rows are already dropped
+    # upstream in jdwh_table_mapping.map_employee_table.
+    ghost_rows = int(employees["job_name"].isna().sum())
 
     return {
-        "total_ever": int(len(on_books)),
+        "total_ever": int(len(employees)),
         "currently_active": int((~already_departed & ~in_notice_period).sum()),
         "delivery_active": delivery_active,
         "already_departed": int(already_departed.sum()),
@@ -254,6 +301,7 @@ def get_employee_profile(employee_id: str) -> dict:
 
     return {
         "employee_id": employee_id,
+        "employee_full_name": employee_row.get("employee_full_name") if pd.notna(employee_row.get("employee_full_name")) else None,
         "job_name": employee_row.get("job_name") if pd.notna(employee_row.get("job_name")) else None,
         "department_name": employee_row.get("department_name") if pd.notna(employee_row.get("department_name")) else None,
         "location": employee_row.get("location") if pd.notna(employee_row.get("location")) else None,

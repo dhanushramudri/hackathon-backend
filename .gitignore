@@ -16,3 +16,22 @@ Thumbs.db
 
 # Scratch/debug output
 *.log
+
+# Real/large runtime data (loaded via JDWH connect or manual upload post-deploy)
+data/Transformed/*.csv
+data/Transformed/*.xlsx
+data/AppState/jdwh_load_backups/
+data/AppState/upload_backups/
+data/AppState/resumes/
+data/AppState/sow_uploads/
+data/AppState/sow_converted_pdfs/
+data/AppState/sow_extractions.json
+data/AppState/document_imports.json
+
+# Real source exports / real client documents at repo root
+*.xlsx
+*.ods
+*.pdf
+*.docx
+*.pptx
+Copy of Skills Matrix_(Sheet1).csv

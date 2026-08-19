@@ -1,0 +1,10 @@
+{
+  "profile_name": "jin prod",
+  "server": "msql-jdwh-prod-southuk-01.database.windows.net",
+  "port": 1433,
+  "database": "sqldb-jdwh-prod-southuk-01",
+  "auth_type": "Microsoft Entra ID - Universal with MFA support",
+  "account": "dhanush.r@jmangroup.com",
+  "encrypt": "Mandatory",
+  "trust_server_certificate": false
+}

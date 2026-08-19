@@ -106,7 +106,16 @@ def _aggregate_role_mix_detailed(group: pd.DataFrame) -> dict:
     for designation, rows in group.groupby("job_name"):
         n_projects_with_role = rows["project_code"].nunique()
         prevalence_pct = round(100 * n_projects_with_role / n_projects, 0)
-        typical_pct = float(rows["allocation_by_percentage"].mode().iat[0])
+        # .mode() drops NaN and can come back empty if every real allocation
+        # row for this designation has no percentage at all (a genuine gap in
+        # some real data sources, not just a bad row here or there --
+        # confirmed against the real JIN Data Warehouse's own
+        # allocation_by_percentage column, which came through entirely
+        # unpopulated) -- 100% (full-time) is the most common real-world
+        # allocation by far, so it's the honest default when there's truly no
+        # percentage data to summarize, rather than crashing outright.
+        pct_mode = rows["allocation_by_percentage"].mode()
+        typical_pct = float(pct_mode.iat[0]) if not pct_mode.empty else 100.0
         heads_per_project = rows.groupby("project_code")["employee_id"].nunique()
         headcount = max(1, round(heads_per_project.mean()))
         roles.append(

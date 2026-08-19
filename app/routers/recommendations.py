@@ -66,6 +66,7 @@ def for_pipeline_row(
     include_cost_efficiency: bool = Query(default=False),
     include_below_capacity: bool = Query(default=False),
     near_capacity_tolerance_pct: float = Query(default=25.0, ge=0, le=100),
+    include_resume_linkedin: bool = Query(default=True),
 
 ) -> dict:
     try:
@@ -77,6 +78,7 @@ def for_pipeline_row(
             include_cost_efficiency=include_cost_efficiency,
             include_below_capacity=include_below_capacity,
             near_capacity_tolerance_pct=near_capacity_tolerance_pct,
+            include_resume_linkedin=include_resume_linkedin,
         )
     except RowIndexOutOfRange as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -104,6 +106,7 @@ def backfill(
     include_cost_efficiency: bool = Query(default=False),
     include_below_capacity: bool = Query(default=False),
     near_capacity_tolerance_pct: float = Query(default=25.0, ge=0, le=100),
+    include_resume_linkedin: bool = Query(default=True),
 ) -> dict:
     """Find replacement candidates if an employee is pulled from a project."""
     return get_backfill_candidates(
@@ -114,6 +117,7 @@ def backfill(
         include_cost_efficiency=include_cost_efficiency,
         include_below_capacity=include_below_capacity,
         near_capacity_tolerance_pct=near_capacity_tolerance_pct,
+        include_resume_linkedin=include_resume_linkedin,
     )
 
 @router.get("/search")

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -9,7 +9,10 @@ from app.services.project_kickoff_service import get_kickoff, save_kickoff
 from app.services.project_service import (
     create_project, list_client_ids, project_code_exists, suggest_project_code, update_project,
 )
+from app.services.docx_conversion_service import DocxConversionError, get_or_convert_pdf
 from app.services.project_sow_service import get_sow_file_path, list_sow_files, save_sow_file
+from app.services.sow_chat_service import SowChatError, ask_sow_question
+from app.services.sow_extraction_service import SowExtractionError, extract_sow_requirements, get_cached_extraction
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -114,6 +117,64 @@ def sow_download(project_code: str, filename: str) -> FileResponse:
     if path is None:
         raise HTTPException(status_code=404, detail="File not found")
     return FileResponse(path, filename=filename)
+
+@router.get("/{project_code}/sow/{filename}/view")
+def sow_view(project_code: str, filename: str) -> Response:
+    """Same file, served inline (not as a forced download) -- for an <iframe>
+    PDF preview (with a #page=N jump) or a client-side docx-to-HTML render."""
+    path = get_sow_file_path(project_code, filename)
+    if path is None:
+        raise HTTPException(status_code=404, detail="File not found")
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    content_type = {"pdf": "application/pdf", "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}.get(ext, "application/octet-stream")
+    return Response(content=path.read_bytes(), media_type=content_type, headers={"Content-Disposition": f'inline; filename="{filename}"'})
+
+@router.get("/{project_code}/sow/{filename}/preview-pdf")
+def sow_preview_pdf(project_code: str, filename: str) -> Response:
+    """A real PDF for this SOW, pixel-perfect -- the original file if it's
+    already a PDF, or a real LibreOffice-rendered conversion (cached) if it's
+    a .docx. 503 if conversion is needed but unavailable on this machine, so
+    the frontend can fall back to the lower-fidelity HTML preview."""
+    try:
+        pdf_path = get_or_convert_pdf(project_code, filename)
+    except DocxConversionError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    return Response(content=pdf_path.read_bytes(), media_type="application/pdf", headers={"Content-Disposition": f'inline; filename="{filename}.pdf"'})
+
+@router.get("/{project_code}/sow/{filename}/extract")
+def sow_extraction_get(project_code: str, filename: str) -> dict:
+    """Cached extraction result if this SOW has already been extracted --
+    lets the UI show prior results without re-calling the AI on every visit."""
+    cached = get_cached_extraction(project_code, filename)
+    return cached or {"available": False}
+
+@router.post("/{project_code}/sow/{filename}/extract")
+def sow_extraction_run(project_code: str, filename: str) -> dict:
+    """Run AI extraction on an already-uploaded SOW: roles, skills, and
+    competency areas required, grounded strictly in the document's own text.
+    On-demand only -- never runs automatically on upload."""
+    try:
+        return extract_sow_requirements(project_code, filename)
+    except SowExtractionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+class SowChatMessage(BaseModel):
+    role: str
+    content: str
+
+class SowChatRequest(BaseModel):
+    message: str
+    history: list[SowChatMessage] = []
+
+@router.post("/{project_code}/sow/{filename}/chat")
+def sow_chat(project_code: str, filename: str, body: SowChatRequest) -> dict:
+    """Ask a question scoped strictly to this one SOW document -- every
+    citation returned is verified to be a real, exact quote from the
+    document before being shown."""
+    try:
+        return ask_sow_question(project_code, filename, body.message, [m.model_dump() for m in body.history])
+    except SowChatError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 # ── Project Kickoff (wizard step 6) ─────────────────────────────────────────
 

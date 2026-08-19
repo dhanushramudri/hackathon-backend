@@ -18,6 +18,24 @@ TRAINABLE_THRESHOLD = 0.3
 IMPUTED_SKILL_DISCOUNT = 0.6
 MAX_SUBSKILL_WORDS = 4
 
+# Skill/competency rows added via resume_skill_service.py -- self-reported off a
+# document an RM uploaded, not a project-verified record. Always discounted
+# below "observed" like any other imputed source (see IMPUTED_SKILL_DISCOUNT/
+# IMPUTED_COMPETENCY_DISCOUNT below), but an RM can also exclude them from
+# candidate matching entirely via the two filter functions below, e.g. to rank
+# a role purely on the org's own verified skill/competency matrix.
+RESUME_LINKEDIN_SOURCES = frozenset({"resume_extracted", "linkedin_extracted"})
+
+def filter_resume_linkedin_skills(skills_df: pd.DataFrame, include_resume_linkedin: bool) -> pd.DataFrame:
+    if include_resume_linkedin:
+        return skills_df
+    return skills_df[~skills_df["skill_source"].isin(RESUME_LINKEDIN_SOURCES)]
+
+def filter_resume_linkedin_competencies(competencies_df: pd.DataFrame, include_resume_linkedin: bool) -> pd.DataFrame:
+    if include_resume_linkedin:
+        return competencies_df
+    return competencies_df[~competencies_df["competency_source"].isin(RESUME_LINKEDIN_SOURCES)]
+
 # Generic connector words can coincidentally appear inside some unrelated skill's
 # catalog text (e.g. "for" inside a long subskill description). Without excluding
 # them, a phrase like "SQL Proficiency -- Ability to write queries for performance"

@@ -14,6 +14,7 @@ _DATE_COLUMNS = {
     "timesheets": ["date", "created_at", "updated_at"],
     "wsr_reports": ["week_start_date", "week_end_date"],
     "hr_feedback": ["feedback_date"],
+    "performance_cycles": ["published_on", "form_end_date"],
 }
 
 _EXPLICIT_FORMAT_DATE_COLUMNS = {
@@ -38,6 +39,12 @@ _CSV_TABLES = {
     # app/scripts/generate_hr_feedback_data.py) purely for manual RM review/proof,
     # never wired into recommendation scoring.
     "hr_feedback": "11_HR_Feedback_dummy.csv",
+    # No real export of JMAN's internal KRA/Performance Edge appraisal tool
+    # exists in this repo -- generated synthetic set grounded in real
+    # employee/manager pairs (see app/scripts/generate_kra_performance_data.py),
+    # same posture as hr_feedback above.
+    "performance_cycles": "12_Performance_Cycles_dummy.csv",
+    "performance_kra_items": "13_Performance_KRA_Items_dummy.csv",
 }
 
 _PIPELINE_SHEETS = {

@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import CORS_ORIGINS
 from app.core.db import get_connection, table_counts
 from app.core.safe_json import SafeJSONResponse
-from app.routers import allocations, buddy, digest, employees, forecast, free_pool, leave, pipeline, projects, recommendations, revenue, role_mix, wellbeing
+from app.routers import admin, allocations, buddy, digest, employees, feedback, forecast, free_pool, governance, leave, pipeline, projects, recommendations, revenue, role_mix, wellbeing
 from app.routers import health as health_monitor_router
 from app.services.digest_service import build_digest
 from app.services.email_service import render_digest_html, send_email
@@ -123,3 +123,6 @@ app.include_router(employees.router)
 app.include_router(digest.router)
 app.include_router(wellbeing.router)
 app.include_router(projects.router)
+app.include_router(admin.router)
+app.include_router(feedback.router)
+app.include_router(governance.router)
